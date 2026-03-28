@@ -246,14 +246,13 @@ read V;
   cons P V <= V;
   cons PI PBody <= P;
   cons Ptag I' <= PI;
-  Ptag ^= Ptag;
+  Ptag ^= 'var;
   cons Cd PJ <= PBody;
   cons Ptag J' <= PJ;
-  Ptag ^= Ptag;
+  Ptag ^= 'var;
   Vl ^= (nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.nil))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))));
   DynIdx ^= I';
-  DynVal ^= V;
-  V ^= V;
+  DynVal <= V;
   Cd <= cons Cd nil;
   from  (=? Cd' nil)
   loop  STEP(Cd,Cd')

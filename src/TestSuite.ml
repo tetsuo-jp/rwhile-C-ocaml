@@ -615,6 +615,23 @@ let test_ri_rle () =
   let direct = EvalRwhile.evalProgram prog input in
   check_ri "rle" input direct
 
+let test_ri_ri_id () =
+  (* [rint]((rint . (id . 'a))) = (rint . [rint]((id . 'a))) = (rint . (id . 'a)) *)
+  let ri = parse_file_program (examples_dir ^ "/ri.rwhile") in
+  let ri_data = Program2DataRwhile.program2data ri in
+  let id_data = Program2DataRwhile.program2data
+    (parse_file_program (examples_dir ^ "/id.rwhile")) in
+  (* inner: [rint]((id . 'a)) = (id . 'a) *)
+  let inner_input = VCons (id_data, atom "'a") in
+  let inner_result = EvalRwhile.evalProgram ri inner_input in
+  (* outer: [rint]((rint . (id . 'a))) = (rint . inner_result) *)
+  let outer_input = VCons (ri_data, inner_input) in
+  let outer_result = EvalRwhile.evalProgram ri outer_input in
+  let expected = VCons (ri_data, inner_result) in
+  Alcotest.(check valT_testable)
+    "[rint]((rint.(id.'a))) = (rint.(id.'a))"
+    expected outer_result
+
 let test_file_lookup () =
   let prog = parse_file_program (examples_dir ^ "/lookup.rwhile") in
   let data = parse_file_val (examples_dir ^ "/nil.val") in
@@ -1009,6 +1026,7 @@ let () =
       Alcotest.test_case "[rint]((length.[a,b,c]))=(length.[length]([a,b,c]))" `Quick test_ri_length;
       Alcotest.test_case "[rint]((compare.(1.2)))=(compare.[compare]((1.2)))" `Quick test_ri_compare;
       Alcotest.test_case "[rint]((rle.input))=(rle.[rle](input))" `Slow test_ri_rle;
+      Alcotest.test_case "[rint]((rint.(id.'a)))=(rint.(id.'a))" `Slow test_ri_ri_id;
     ];
     "spec", [
       Alcotest.test_case "spec(id,nil) runs" `Quick test_spec_id_nil_runs;
