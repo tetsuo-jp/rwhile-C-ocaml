@@ -13,6 +13,25 @@ macro UPDATE(Vl,J,X)
   Y ^= X;
   INV-AUX(Vl,J,Y)   (* clear T *)
 
+(* Dynamic-aware LOOKUP/UPDATE: check DynIdx first, fallback to Vl *)
+macro DLOOKUP(Vl,J,X)
+  IsDynLU ^= =? J DynIdx;
+  if IsDynLU then
+    X ^= DynVal
+  else
+    LOOKUP(Vl, J, X)
+  fi IsDynLU;
+  IsDynLU ^= =? J DynIdx
+
+macro DUPDATE(Vl,J,X)
+  IsDynUP ^= =? J DynIdx;
+  if IsDynUP then
+    DynVal ^= X
+  else
+    UPDATE(Vl, J, X)
+  fi IsDynUP;
+  IsDynUP ^= =? J DynIdx
+
 macro AUX(Vl,J,X)
   from (=? JJ nil) loop
     cons U Vl <= Vl;
@@ -24,7 +43,7 @@ macro AUX(Vl,J,X)
 macro EVAL-EXP-STEP(Cd,Cd',St,H)
 cons (cons ETag EArg) Cd <= Cd;
 if =? ETag 'var then
- LOOKUP(Vl,EArg,V); St <= cons V St
+ DLOOKUP(Vl,EArg,V); St <= cons V St
 else
  if =? ETag 'val then
   V ^= EArg; St <= cons V St
@@ -88,7 +107,7 @@ cons R nil <= R'
 macro EVAL-PAT-STEP(R,R',St)
 cons (cons RTag RArg) R <= R;
 if =? RTag 'var then
- LOOKUP(Vl,RArg,V); UPDATE(Vl,RArg,V); St <= cons V St
+ DLOOKUP(Vl,RArg,V); DUPDATE(Vl,RArg,V); St <= cons V St
 else
  if =? RTag 'val then
   V ^= RArg; St <= cons V St
@@ -115,7 +134,7 @@ cons (cons Tag Arg) Cd <= Cd;
 if =? Tag 'ass then
   cons (cons 'var K) E <= Arg;
   EVAL-EXP(E,V,H);     (* Set the value of E to V, the garbage values to H *)
-  UPDATE(Vl,K,V);         (* Reversible update of K-th elements of Vl by V *)
+  DUPDATE(Vl,K,V);        (* Reversible update of K-th elements of Vl (or DynVal) by V *)
   INV-EVAL-EXP(E,V,H); (* Clear V and H *)
   Arg <= cons (cons 'var K) E
 else
@@ -232,13 +251,16 @@ read V;
   cons Ptag J' <= PJ;
   Ptag ^= Ptag;
   Vl ^= (nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.nil))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))));
-  UPDATE(Vl,I',V); LOOKUP(Vl,I',V);
+  DynIdx ^= I';
+  DynVal ^= V;
+  V ^= V;
   Cd <= cons Cd nil;
   from  (=? Cd' nil)
   loop  STEP(Cd,Cd')
   until (=? Cd nil);
   cons Cd' nil <= Cd';
-  LOOKUP(Vl,J',V); UPDATE(Vl,J',V);
+  DLOOKUP(Vl,J',V); DUPDATE(Vl,J',V);
+  DynIdx ^= I';
   Vl ^= (nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.nil))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))));
   Ptag ^= 'var;
   PJ <= cons Ptag J';
