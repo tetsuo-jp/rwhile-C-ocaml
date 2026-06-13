@@ -493,9 +493,17 @@ macro SPEC-STEP(Cd, Cd')
           CValT ^= CValT;
           AnnT ^= (nil.nil)
         else
-          (* Dynamic test: residualize the whole conditional *)
+          (* Dynamic test: residualize the whole conditional, but keep the
+           * original command in the shell (Cd').  Copy Arg into CDcopy for the
+           * residual (CRep clears the RHS pattern var), leaving Arg intact so
+           * that Arg is non-nil at exit.  Tag stays 'condB here (required by the
+           * 'fi =? Tag 'condB' assertion); the post-if fixup converts the marker
+           * 'condB -> 'cond for the dynamic case (Arg non-nil) so line 654 pushes
+           * (cond . Arg) — the original node — onto Cd'.  The static case leaves
+           * Arg = nil and keeps 'condB for condCleanS to pop. *)
           Arg <= cons E (cons C (cons D (cons F nil)));
-          RCode <= cons (cons 'cond Arg) RCode;
+          CDcopy ^= Arg;
+          RCode <= cons (cons 'cond CDcopy) RCode;
           ValT ^= ValT
         fi CAnnT;
         CAnnT ^= CAnnT
@@ -625,6 +633,18 @@ macro SPEC-STEP(Cd, Cd')
     fi =? Tag 'seqB
    fi =? Tag 'rep
   fi =? Tag 'ass;
+ (* Fix-up: a dynamic 'cond left Tag='condB with Arg non-nil (the original
+  * cond arg, kept for the shell).  Convert the marker back to 'cond so that
+  * line 'Cd' <= cons (cons Tag Arg) Cd'' pushes the original (cond . Arg).
+  * A static 'cond left Arg=nil and keeps 'condB for condCleanS to pop later,
+  * so only convert when Arg is non-nil. *)
+ CCondB ^= =? Tag 'condB;
+ if =? Tag 'condB then
+   if =? Arg nil else
+     Tag ^= 'condB; Tag ^= 'cond
+   fi =? Arg nil
+ fi CCondB;
+ CCondB ^= CCondB;
  (* Fix-up: if l1E took the dynamic-entry path, it set Tag='l2B with a
   * 5-element sentinel Arg=(vtrue . loop_args).  The static-entry path
   * leaves a 4-element Arg=(E.C.D.F.nil).  Distinguish by checking
@@ -806,27 +826,13 @@ read V;
   WAnn ^= WAnn;
   WVal ^= WVal;
 
-  (* Cleanup Vl[I']: clear static value, restore to dynamic *)
-  LOOKUP(Vl, I', SV);
-  UPDATE(Vl, I', SV);
-  SV ^= SV;
-  SV ^= (nil.nil);
-  UPDATE(Vl, I', SV);
-  SV ^= (nil.nil);
-
-  (* Cleanup Vl[J']: only if I' ≠ J'; if same, I' cleanup already handled it. *)
-  if =? I' J' else
-    LOOKUP(Vl, J', SV);
-    UPDATE(Vl, J', SV);
-    SV ^= SV;
-    SV ^= (nil.nil);
-    UPDATE(Vl, J', SV);
-    SV ^= (nil.nil)
-  fi =? I' J';
-
-  (* Clear all Vl entries (now all are (nil.nil) = dynamic) *)
-  Vl ^= ((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).nil))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
-  ;
+  (* Clear the whole partial store generically.  Self-XOR collapses Vl back
+   * to nil regardless of its current contents (rupdate maps vx=vy to nil),
+   * so any leftover static / residual slots an interpreted program such as
+   * ri.rwhile may have left behind are cleared without assuming every slot
+   * is already (nil.nil).  This replaces the former blanket XOR against a
+   * fixed all-(nil.nil) literal, which failed whenever a slot was non-dynamic. *)
+  Vl ^= Vl;
 
   (* Reconstruct original Cmd (shell=original so Cd' XOR cancels to nil) *)
   Cd' ^= Cmd;

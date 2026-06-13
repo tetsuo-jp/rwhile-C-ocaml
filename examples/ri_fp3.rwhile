@@ -1,0 +1,301 @@
+(*
+ * ri_fp3.rwhile — A self-interpreter for R-WHILE (up to 3 program variables).
+ *
+ * Like ri.rwhile but uses named variables V0, V1, V2 instead of a Vl array.
+ * This allows spec.rwhile to track each variable statically when the program
+ * code is known at specialization time (First Futamura Projection).
+ *
+ * Input:  V0 = (ProgramData . DynamicInput)
+ *   ProgramData = p2d-encoded source program (known at spec time)
+ *   DynamicInput = dynamic input for the program's read variable
+ *
+ * Output: V0 = (ProgramData . Result)
+ *   Result = output value after running the program
+ *
+ * Variable mapping (matches p2d indices for 3-variable programs like reverse):
+ *   V0 = program variable 0 (read var, e.g. Y in reverse)
+ *   V1 = program variable 1 (intermediate, e.g. Z in reverse)
+ *   V2 = program variable 2 (write var, e.g. X in reverse)
+ *)
+
+(* ===== Store access: named variable dispatch ===== *)
+
+(* LOOKUP-FP3(J, X): X ^= V[J], non-destructive read *)
+macro LOOKUP-FP3(J, X)
+  if =? J nil then
+    X ^= V0
+  else
+    if =? J (nil.nil) then
+      X ^= V1
+    else
+      X ^= V2
+    fi =? J (nil.nil)
+  fi =? J nil
+
+(* UPDATE-FP3(J, X): V[J] ^= X, reversible update *)
+macro UPDATE-FP3(J, X)
+  if =? J nil then
+    V0 ^= X
+  else
+    if =? J (nil.nil) then
+      V1 ^= X
+    else
+      V2 ^= X
+    fi =? J (nil.nil)
+  fi =? J nil
+
+(* ===== Expression evaluation (same as ri.rwhile, using LOOKUP-FP3/UPDATE-FP3) ===== *)
+
+macro EVAL-EXP-STEP-FP3(Cd,Cd',St,H)
+cons (cons ETag EArg) Cd <= Cd;
+if =? ETag 'var then
+ LOOKUP-FP3(EArg,V); St <= cons V St
+else
+ if =? ETag 'val then
+  V ^= EArg; St <= cons V St
+ else
+  if =? ETag 'cons then
+   ETag ^= 'cons; ETag ^= 'consB; cons E1 E2 <= EArg;  Cd <= cons E1 (cons E2 (cons ('consE.nil) Cd))
+  else
+   if =? ETag 'consE then
+    ETag ^= 'consE; ETag ^= 'cons;  cons E2 (cons E1 (cons ('consB.nil) Cd')) <= Cd';  cons V2e (cons V1e St) <= St;
+    St <= cons (cons V1e V2e) St; EArg <= cons E1 E2
+   else
+    if =? ETag 'hd then
+     ETag ^= 'hd; ETag ^= 'hdB; Cd <= cons EArg (cons ('hdE.nil) Cd)
+    else
+     if =? ETag 'hdE then
+      ETag ^= 'hdE; ETag ^= 'hd;  cons EArg (cons ('hdB.nil) Cd') <= Cd';  cons (cons V1e V2e) St <= St;
+      St <= cons V1e St; H <= cons V2e H
+     else
+      if =? ETag 'tl then
+       ETag ^= 'tl; ETag ^= 'tlB;  Cd <= cons EArg (cons ('tlE.nil) Cd)
+      else
+       if =? ETag 'tlE then
+        ETag ^= 'tlE; ETag ^= 'tl;  cons EArg (cons ('tlB.nil) Cd') <= Cd';  cons (cons V1e V2e) St <= St;
+        St <= cons V2e St; H <= cons V1e H
+       else
+        if =? ETag 'eq then
+         ETag ^= 'eq; ETag ^= 'eqB;  cons E1 E2 <= EArg;  Cd <= cons E1 (cons E2 (cons ('eqE.nil) Cd))
+        else
+         if =? ETag 'eqE then
+          ETag ^= 'eqE; ETag ^= 'eq;  cons E2 (cons E1 (cons ('eqB.nil) Cd')) <= Cd';  cons V2e (cons V1e St) <= St;
+          EArg <= cons E1 E2; V ^= =? V1e V2e; St <= cons V St; H <= cons V1e (cons V2e H)
+         else
+	  'error <= '0
+         fi =? ETag 'eq
+        fi =? ETag 'eqB
+       fi =? ETag 'tl
+      fi =? ETag 'tlB
+     fi =? ETag 'hd
+    fi =? ETag 'hdB
+   fi =? ETag 'cons
+  fi =? ETag 'consB
+ fi =? ETag 'val
+fi =? ETag 'var;
+Cd' <= cons (cons ETag EArg) Cd'
+
+macro EVAL-EXP-FP3(E,V,H)
+E <= cons E nil;
+from  =? E' nil loop
+  EVAL-EXP-STEP-FP3(E,E',St,H)
+until =? E  nil;
+cons E nil <= E';
+cons V nil <= St
+
+macro EVAL-PAT-STEP-FP3(R,R',St)
+cons (cons RTag RArg) R <= R;
+if =? RTag 'var then
+ LOOKUP-FP3(RArg,V); UPDATE-FP3(RArg,V); St <= cons V St
+else
+ if =? RTag 'val then
+  V ^= RArg; St <= cons V St
+ else
+  if =? RTag 'cons then
+   RTag ^= 'cons; RTag ^= 'consB;
+   cons E1 E2 <= RArg; R <= cons E1 (cons E2 (cons ('consE.nil) R))
+  else
+   if =? RTag 'consE then
+    RTag ^= 'consE; RTag ^= 'cons;
+    cons E2 (cons E1 (cons (cons 'consB nil) R')) <= R'; cons V2e (cons V1e St) <= St;
+    RArg <= cons E1 E2; St <= cons (cons V1e V2e) St
+   else
+    'error <= '1
+   fi =? RTag 'cons
+  fi =? RTag 'consB
+ fi =? RTag 'val
+fi =? RTag 'var;
+R' <= cons (cons RTag RArg) R'
+
+macro EVAL-PAT-FP3(R,St)
+R <= cons R nil;
+from  (=? R' nil) loop
+  EVAL-PAT-STEP-FP3(R,R',St)
+until (=? R nil);
+cons R nil <= R'
+
+(* ===== Interpreter step (same as ri.rwhile STEP, using FP3 macros) ===== *)
+
+macro STEP-FP3(Cd,Cd')
+cons (cons Tag Arg) Cd <= Cd;
+(* Assignment *)
+if =? Tag 'ass then
+  cons (cons 'var K) E <= Arg;
+  EVAL-EXP-FP3(E,Ve,H);
+  UPDATE-FP3(K,Ve);
+  INV-EVAL-EXP-FP3(E,Ve,H);
+  Arg <= cons (cons 'var K) E
+else
+ (* Replacement *)
+ if =? Tag 'rep then
+  cons Q R <= Arg;
+  EVAL-PAT-FP3(R,St);
+  INV-EVAL-PAT-FP3(Q,St);
+  Arg <= cons Q R
+ else
+  (* Sequence *)
+  if =? Tag 'seq then
+   Tag ^= 'seq; Tag ^= 'seqB; cons C D <= Arg;
+   Cd <= cons C (cons D (cons (cons 'seqE nil) Cd))
+  else
+   if =? Tag 'seqE then
+    Tag ^= 'seqE; Tag ^= 'seq; cons D (cons C (cons ('seqB.nil) Cd')) <= Cd';
+    Arg <= cons C D
+   else
+    (* Conditional *)
+    if =? Tag 'cond then
+     Tag ^= 'cond; Tag ^= 'condB;
+     cons E (cons C (cons D (cons F nil))) <= Arg;
+     EVAL-EXP-FP3(E,Ve,H);
+     W ^= Ve;
+     INV-EVAL-EXP-FP3(E,Ve,H);
+     if W then Cd1 ^= C else Cd1 ^= D fi W;
+     Arg <= cons E (cons C (cons D (cons F nil)));
+     Cd <= cons Cd1 (cons (cons 'condE W) Cd)
+    else
+     if =? Tag 'condE then
+      Tag ^= 'condE; Tag ^= 'cond; cons Cd1 (cons (cons 'condB C') Cd') <= Cd';
+      cons E (cons C (cons D (cons F nil))) <= C';
+      if Arg then Cd1 ^= C else Cd1 ^= D fi Arg;
+      C' <= cons E (cons C (cons D (cons F nil)));
+      cons E (cons C (cons D (cons F nil))) <= C';
+      EVAL-EXP-FP3(F,Ve,H);
+      Arg ^= Ve;
+      INV-EVAL-EXP-FP3(F,Ve,H);
+      Arg <= cons E (cons C (cons D (cons F nil)))
+     else
+      (* Loop *)
+      if =? Tag 'l1E then
+       Tag ^= 'l1E; Tag ^= 'l2B;  cons W C' <= Arg; cons (cons 'l1B nil) Cd' <= Cd';
+       cons E (cons C (cons D (cons F nil))) <= C';
+       EVAL-EXP-FP3(E,Ve,H);
+       W ^= Ve;
+       INV-EVAL-EXP-FP3(E,Ve,H);
+       CC ^= C;
+       Arg <= cons E (cons C (cons D (cons F nil)));
+       Cd <= cons CC (cons (cons 'l2E W) Cd)
+      else
+       if =? Tag 'l2E then
+        Tag ^= 'l2E; Tag ^= 'l3B;  W <= Arg; cons CC (cons (cons 'l2B C') Cd') <= Cd';
+        cons E (cons C (cons D (cons F nil))) <= C';
+        CC ^= C;
+        EVAL-EXP-FP3(F,Ve,H);
+        W ^= Ve;
+        INV-EVAL-EXP-FP3(F,Ve,H);
+        C' <= cons E (cons C (cons D (cons F nil)));
+        Cd <= cons (cons 'l3E (cons W C')) Cd
+       else
+        Flag ^= =? Tag 'l4E; Flag ^= =? Tag 'loop;
+        if Flag then
+         Flag ^= (nil.nil);
+         if =? Tag 'l4E then
+          Tag ^= 'l4E; Tag ^= 'l1B;  cons DD (cons ('l4B.nil) Cd') <= Cd';
+	  cons E (cons C (cons D (cons F nil))) <= Arg;
+	  DD ^= D;
+          Arg <= cons E (cons C (cons D (cons F nil)));
+	  Flag ^= nil
+	 else
+          if =? Tag 'loop then
+           Tag ^= 'loop; Tag ^= 'l1B;
+	   Flag ^= (nil.nil)
+          else
+	   'error <= '3
+	  fi =? Tag 'l1B
+         fi =? Flag nil;
+         Cd <= cons (cons 'l1E (cons Flag Arg)) Cd
+        else
+         if =? Tag 'l3E then
+          Tag ^= 'l3E;  cons Flag C' <= Arg; cons ('l3B.nil) Cd' <= Cd';
+	  if Flag then
+	   Flag ^= (nil.nil); Tag ^= 'loop; Arg <= C'
+	  else
+	   Tag ^= 'l4B;
+	   cons E (cons C (cons D (cons F nil))) <= C';
+	   DD ^= D;
+           C' <= cons E (cons C (cons D (cons F nil)));
+	   Cd <= cons DD (cons (cons 'l4E C') Cd)
+	  fi =? Tag 'loop
+         else
+	  'error <= '4
+         fi =? nil nil
+        fi =? Tag 'l1B
+       fi =? Tag 'l3B
+      fi =? Tag 'l2B
+     fi =? Tag 'cond
+    fi =? Tag 'condB
+   fi =? Tag 'seq
+  fi =? Tag 'seqB
+ fi =? Tag 'rep
+fi =? Tag 'ass;
+Cd' <= cons (cons Tag Arg) Cd'
+
+
+read V0;
+  (* Decompose input V0 = (Prog . Data).  Destructure into V1/V2 FIRST so that
+   * (a) V1,V2 get low p2d indices 1,2 (matching the named-variable dispatch), and
+   * (b) the very first command is a 'rep destructuring the read variable.  The
+   * latter lets spec.rwhile's 'partial mode peel this rep and set Prog=static /
+   * Data=dynamic for the first Futamura projection.  We then move the halves into
+   * Prog/Data and clear V1,V2 (which the interpreted program may reuse).
+   * Net effect is identical to 'V1^=V1; V2^=V2; cons Prog Data <= V0'. *)
+  cons V1 V2 <= V0;
+  Prog ^= V1;
+  V1 ^= V1;
+  Data ^= V2;
+  V2 ^= V2;
+
+  (* Decompose Prog = (('var.I') . (Cd . ('var.J'))) *)
+  cons PRead PTail <= Prog;
+  cons AtVarI I' <= PRead;
+  AtVarI ^= 'var;
+  cons Cd PWrite <= PTail;
+  cons AtVarJ J' <= PWrite;
+  AtVarJ ^= 'var;
+
+  (* Initialize read variable to Data *)
+  UPDATE-FP3(I', Data);
+  LOOKUP-FP3(I', Data);    (* Data ^= V[I'] to clear Data *)
+
+  (* Run the program *)
+  Cd <= cons Cd nil;
+  from  (=? Cd' nil)
+  loop  STEP-FP3(Cd,Cd')
+  until (=? Cd nil);
+  cons Cd' nil <= Cd';
+
+  (* Extract result from write variable *)
+  LOOKUP-FP3(J', Result);
+  UPDATE-FP3(J', Result);  (* clear V[J'] *)
+
+  (* Reconstruct Prog from parts using Cd' (= processed/original program body) *)
+  AtVarJ ^= 'var;
+  PWrite <= cons AtVarJ J';
+  AtVarI ^= 'var;
+  PRead <= cons AtVarI I';
+  PTail <= cons Cd' PWrite;
+  Prog <= cons PRead PTail;
+
+  (* Reconstruct V0 = (Prog . Result) *)
+  V0 <= cons Prog Result;
+
+write V0
