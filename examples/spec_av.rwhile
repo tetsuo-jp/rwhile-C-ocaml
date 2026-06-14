@@ -464,32 +464,66 @@ macro SPEC-STEP-AV(Cd, Cd', RCode)
      RpStat ^= RpStat;
      Arg <= cons RpQ RpR
    else
-    if =? Tag 'seq then
-      Tag ^= 'seq; Tag ^= 'seqB;
-      cons C D <= Arg;
-      Cd <= cons C (cons D (cons ('seqE . nil) Cd));
-      C ^= C; D ^= D
+    if =? Tag 'cond then
+      cons E (cons C (cons D (cons F nil))) <= Arg;   (* Arg -> E,C,D,F *)
+      SPEC-EXP-AV(E, RE);                              (* E preserved; RE = test AV *)
+      cons TT VT <= RE;
+      AnnT ^= =? TT 'S;
+      if AnnT then
+        (* static test: VT is the boolean; take one branch, drop the other *)
+        CVT ^= VT;
+        if VT then
+          Cd <= cons C Cd;
+          D ^= D
+        else
+          Cd <= cons D Cd;
+          C ^= C
+        fi CVT;
+        CVT ^= CVT;
+        VT ^= VT; TT ^= 'S;
+        E ^= E; F ^= F
+      else
+        (* dynamic test: residualize the whole conditional with lifted test *)
+        RE <= cons TT VT;
+        AV-LIFT(RE, LE);
+        RE ^= RE;
+        E ^= E;
+        Arg <= cons LE (cons C (cons D (cons F nil)));
+        Ccond ^= Arg;
+        RCode <= cons (cons 'cond Ccond) RCode;
+        Arg ^= Arg
+      fi AnnT;
+      AnnT ^= AnnT
     else
-     if =? Tag 'seqE then
-       Tag ^= 'seqE; Tag ^= 'seq;
-       cons D (cons C (cons ('seqB . nil) Cd')) <= Cd';
-       Arg <= cons C D
+     if =? Tag 'seq then
+       Tag ^= 'seq; Tag ^= 'seqB;
+       cons C D <= Arg;
+       Cd <= cons C (cons D (cons ('seqE . nil) Cd));
+       C ^= C; D ^= D
      else
-       'error <= '1
-     fi =? Tag 'seq
-    fi =? Tag 'seqB
+      if =? Tag 'seqE then
+        Tag ^= 'seqE; Tag ^= 'seq;
+        cons D (cons C (cons ('seqB . nil) Cd')) <= Cd';
+        Arg <= cons C D
+      else
+        'error <= '1
+      fi =? Tag 'seq
+     fi =? Tag 'seqB
+    fi =? Tag 'cond
    fi =? Tag 'rep
   fi =? Tag 'ass;
   Cd' <= cons (cons Tag Arg) Cd'
 
-(* SPEC-CMD-AV(Cmd): run SPEC-STEP-AV over Cmd; residual left in RCode; Cmd is
- * consumed into the work stack and reconstructed from the shell at the end. *)
+(* SPEC-CMD-AV(Cmd): run SPEC-STEP-AV over Cmd; the residual program accumulates
+ * in RCode (reverse order).  Cmd is consumed into the work stack; the shell
+ * (Cd') is discarded (we do not reconstruct the source command — the residual is
+ * what matters).  Note: injectivity embedding of the source is a Stage-C concern. *)
 macro SPEC-CMD-AV(Cmd)
   Cd <= cons Cmd nil;
   from (=? Cd' nil) loop
     SPEC-STEP-AV(Cd, Cd', RCode)
   until (=? Cd nil);
-  cons Cmd nil <= Cd'
+  Cd' ^= Cd'
 
 (* ===== Main program ===== *)
 (* Default main: a test harness for SPEC-EXP-AV; input (Vl . E), output

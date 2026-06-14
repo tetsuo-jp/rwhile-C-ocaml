@@ -151,8 +151,15 @@ PAT-CLR-SIMPLE と各 LEAF 版）を AV へ移植（静的タグ判定 `=? (hd s
 注（既知の限界、spec.rwhile と同じ）: 'rep/'ass の残余化経路は静的変数が動的化されるとき値の
 materialize をしない（部分静的 rep の最適化は未）。faithful port のため許容。
 
+### ステップ3 続き（2026-06-14）: 'cond 完成 ✅
+SPEC-CMD-AV をシェル破棄方式に簡素化（出力 `(Vl . RCode)`。Cmd 再構成＝injectivity 用の符号埋め込みは
+Stage C の課題として後回し。これにより condCleanS の難しいシェル再構成機構が不要に）。
+'cond を追加：静的テスト（RE='S）→選択枝を work stack に積んで処理・他枝破棄＝**残余から cond が消える**、
+動的テスト→test を AV-LIFT して whole-cond を残余化。`spec-av-step` 群10件 green（cond static-true/false/dynamic 含む）。
+これが fp1 のディスパッチ解決（`=? Tag 'ass` 系の静的 cond が枝に解決）の核心。
+
 ### 次の一手
-ステップ3 残り: 'cond（テスト AV が 'S なら分岐確定、'D なら whole-cond 残余化）、'loop（静的展開／動的残余化）。
+ステップ3 残り: 'loop（静的展開／動的残余化）。これが最も複雑（spec.rwhile の l1E/l2E... 状態機械）。
 揃ったら Stage C（fp1: `[spec_av]((ri_fp3 . src))`）へ。まず `av.rwhile` の AV 演算を
 spec.rwhile に取り込み、SPEC-EXP の var/val/cons/hd/tl/eq を AV 規則へ。LIFT と eq の全静的判定は
 再帰が要るためスタックマシン化（既存 SPEC-EXP の B/E マーカー方式を踏襲）。spec-partial(swap) を

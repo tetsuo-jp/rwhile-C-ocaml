@@ -1152,69 +1152,86 @@ let test_se_av_eq_static_resolves () =
   check_spec_exp_av "eq static var/literal -> static true"
     "('eq . (('var . nil) . ('val . 'a)))" "('S . (nil . nil))"
 
-(* ===== AV-based SPEC-STEP (Stage B step 3: 'seq, 'ass) =====
- * Harness: input (Vl . Cmd), output (Vl' . (Cmd . RCode)). *)
+(* ===== AV-based SPEC-STEP (Stage B step 3: 'seq, 'ass, 'rep, 'cond) =====
+ * Harness: input (Vl . Cmd), output (Vl' . RCode) (residual, reverse order). *)
 let check_spec_step_av name vl_str cmd_str expected_str =
   let prog = parse_macro_harness (examples_dir ^ "/spec_av.rwhile")
-    "read In; cons Vl Cmd <= In; SPEC-CMD-AV(Cmd); Out <= cons Vl (cons Cmd RCode); write Out" in
+    "read In; cons Vl Cmd <= In; SPEC-CMD-AV(Cmd); Out <= cons Vl RCode; write Out" in
   let out = EvalRwhile.evalProgram prog (pair (parse_val vl_str) (parse_val cmd_str)) in
   Alcotest.(check valT_testable) name (parse_val expected_str) out
 
 let test_ss_av_ass_static_exec () =
-  (* var0 static-nil, "var0 ^= 'a" -> executed statically, slot becomes ('S.'a),
-   * no residual *)
+  (* var0 static-nil, "var0 ^= 'a" -> executed statically, slot ('S.'a), no residual *)
   check_spec_step_av "ass static execution"
     "(('S . nil) . nil)"
     "('ass . (('var . nil) . ('val . 'a)))"
-    "((('S . 'a) . nil) . (('ass . (('var . nil) . ('val . 'a))) . nil))"
+    "((('S . 'a) . nil) . nil)"
 
 let test_ss_av_ass_residualize () =
   (* var0 dynamic, "var0 ^= 'a" -> residualized as var0 ^= (val 'a) *)
   check_spec_step_av "ass residualize (dynamic var)"
     "(('D . ('var . nil)) . nil)"
     "('ass . (('var . nil) . ('val . 'a)))"
-    "((('D . ('var . nil)) . nil) . (('ass . (('var . nil) . ('val . 'a))) . (('ass . (('var . nil) . ('val . 'a))) . nil)))"
+    "((('D . ('var . nil)) . nil) . (('ass . (('var . nil) . ('val . 'a))) . nil))"
 
 let test_ss_av_ass_dynamic_expr () =
-  (* var0 static-nil, "var0 ^= var1" with var1 dynamic -> residualized and var0
-   * promoted to dynamic *)
+  (* var0 static-nil, "var0 ^= var1" with var1 dynamic -> residualized, var0 -> dynamic *)
   check_spec_step_av "ass dynamic expr promotes var"
     "(('S . nil) . (('D . ('var . (nil . nil))) . nil))"
     "('ass . (('var . nil) . ('var . (nil . nil))))"
-    "((('D . ('var . nil)) . (('D . ('var . (nil . nil))) . nil)) . (('ass . (('var . nil) . ('var . (nil . nil)))) . (('ass . (('var . nil) . ('var . (nil . nil)))) . nil)))"
+    "((('D . ('var . nil)) . (('D . ('var . (nil . nil))) . nil)) . (('ass . (('var . nil) . ('var . (nil . nil)))) . nil))"
 
 let test_ss_av_seq_static () =
   (* seq of two static assignments, both executed statically (no residual) *)
   check_spec_step_av "seq static execution"
     "(('S . nil) . nil)"
     "('seq . (('ass . (('var . nil) . ('val . 'a))) . ('ass . (('var . nil) . ('var . nil)))))"
-    "((('S . nil) . nil) . (('seq . (('ass . (('var . nil) . ('val . 'a))) . ('ass . (('var . nil) . ('var . nil))))) . nil))"
+    "((('S . nil) . nil) . nil)"
+
+(* a conditional: if =? var0 'a then var1^='x else var1^='y fi ('val.nil) *)
+let cond_cmd =
+  "('cond . (('eq . (('var . nil) . ('val . 'a))) . (('ass . (('var . (nil . nil)) . ('val . 'x))) . (('ass . (('var . (nil . nil)) . ('val . 'y))) . (('val . nil) . nil)))))"
+let test_ss_av_cond_static_true () =
+  (* static test true: take then-branch statically, no residual cond *)
+  check_spec_step_av "cond static true takes then"
+    "(('S . 'a) . (('S . nil) . nil))" cond_cmd
+    "((('S . 'a) . (('S . 'x) . nil)) . nil)"
+let test_ss_av_cond_static_false () =
+  check_spec_step_av "cond static false takes else"
+    "(('S . 'b) . (('S . nil) . nil))" cond_cmd
+    "((('S . 'b) . (('S . 'y) . nil)) . nil)"
+let test_ss_av_cond_dynamic () =
+  (* dynamic test: residualize whole cond (test lifted) *)
+  check_spec_step_av "cond dynamic test residualized"
+    "(('D . ('var . nil)) . (('S . nil) . nil))" cond_cmd
+    ("((('D . ('var . nil)) . (('S . nil) . nil)) . (" ^ cond_cmd ^ " . nil))")
 
 (* var indices: X=0=nil, Y=1=(nil.nil), Z=2=(nil.(nil.nil)) *)
 let rep_yzx = "('rep . (('cons . (('var . (nil . nil)) . ('var . (nil . (nil . nil))))) . ('var . nil)))"
 let swap_cmd =
   "('seq . (('rep . (('cons . (('var . (nil . nil)) . ('var . (nil . (nil . nil))))) . ('var . nil))) . ('rep . (('var . nil) . ('cons . (('var . (nil . (nil . nil))) . ('var . (nil . nil))))))))"
 
+let rep_xzy = "('rep . (('var . nil) . ('cons . (('var . (nil . (nil . nil))) . ('var . (nil . nil))))))"
 let test_ss_av_rep_static () =
   (* cons Y Z <= X with X static ('a.'b): split statically, X consumed, no residual *)
   check_spec_step_av "rep static split"
     "(('S . ('a . 'b)) . (('S . nil) . (('S . nil) . nil)))"
     rep_yzx
-    ("((('D . ('var . nil)) . (('S . 'a) . (('S . 'b) . nil))) . (" ^ rep_yzx ^ " . nil))")
+    "((('D . ('var . nil)) . (('S . 'a) . (('S . 'b) . nil))) . nil)"
 
 let test_ss_av_swap_static () =
   (* full swap of a static (a.b) -> static (b.a), fully executed, no residual *)
   check_spec_step_av "swap static fully executed"
     "(('S . ('a . 'b)) . (('S . nil) . (('S . nil) . nil)))"
     swap_cmd
-    ("((('S . ('b . 'a)) . (('D . ('var . (nil . nil))) . (('D . ('var . (nil . (nil . nil)))) . nil))) . (" ^ swap_cmd ^ " . nil))")
+    "((('S . ('b . 'a)) . (('D . ('var . (nil . nil))) . (('D . ('var . (nil . (nil . nil)))) . nil))) . nil)"
 
 let test_ss_av_swap_dynamic () =
   (* full swap of a dynamic X: both reps residualized (residual = swap itself) *)
   check_spec_step_av "swap dynamic residualized"
     "(('D . ('var . nil)) . (('S . nil) . (('S . nil) . nil)))"
     swap_cmd
-    ("((('D . ('var . nil)) . (('D . ('var . (nil . nil))) . (('D . ('var . (nil . (nil . nil)))) . nil))) . (" ^ swap_cmd ^ " . (('rep . (('var . nil) . ('cons . (('var . (nil . (nil . nil))) . ('var . (nil . nil)))))) . (('rep . (('cons . (('var . (nil . nil)) . ('var . (nil . (nil . nil))))) . ('var . nil))) . nil))))")
+    ("((('D . ('var . nil)) . (('D . ('var . (nil . nil))) . (('D . ('var . (nil . (nil . nil)))) . nil))) . (" ^ rep_xzy ^ " . (" ^ rep_yzx ^ " . nil)))")
 
 (* ===== Test runner ===== *)
 
@@ -1303,6 +1320,9 @@ let () =
       Alcotest.test_case "rep static split" `Quick test_ss_av_rep_static;
       Alcotest.test_case "swap static fully executed" `Quick test_ss_av_swap_static;
       Alcotest.test_case "swap dynamic residualized" `Quick test_ss_av_swap_dynamic;
+      Alcotest.test_case "cond static true" `Quick test_ss_av_cond_static_true;
+      Alcotest.test_case "cond static false" `Quick test_ss_av_cond_static_false;
+      Alcotest.test_case "cond dynamic" `Quick test_ss_av_cond_dynamic;
     ];
     "spec-av-exp", [
       Alcotest.test_case "var static" `Quick test_se_av_var_static;
