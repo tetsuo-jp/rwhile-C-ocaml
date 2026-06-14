@@ -1114,6 +1114,44 @@ let test_stats_spec_partial_residual () =
     (VCons (swap_data, VCons (atom "'partial", atom "'a"))) in
   assert_size_at_most "spec-partial(swap) residual" 200 residual
 
+(* ===== AV-based SPEC-EXP (Stage B step 2) =====
+ * spec_av.rwhile's main is a harness: input (Vl . E), output (Vl . (E . RE)).
+ * Store Vl below: slot0 = ('S.'a) static, slot1 = ('D.('var.(nil.nil))) dynamic. *)
+let av_store = "(('S . 'a) . (('D . ('var . (nil . nil))) . nil))"
+
+let check_spec_exp_av name e_str expected_re_str =
+  let prog = parse_file_program (examples_dir ^ "/spec_av.rwhile") in
+  let input = pair (parse_val av_store) (parse_val e_str) in
+  match EvalRwhile.evalProgram prog input with
+  | VCons (_, VCons (_, re)) ->
+     Alcotest.(check valT_testable) name (parse_val expected_re_str) re
+  | _ -> Alcotest.failf "%s: unexpected output shape" name
+
+let test_se_av_var_static () =
+  check_spec_exp_av "var static" "('var . nil)" "('S . 'a)"
+let test_se_av_var_dynamic () =
+  check_spec_exp_av "var dynamic" "('var . (nil . nil))" "('D . ('var . (nil . nil)))"
+let test_se_av_val () =
+  check_spec_exp_av "val literal static" "('val . 'z)" "('S . 'z)"
+let test_se_av_cons_partial () =
+  (* CRUX: cons(static var, dynamic var) stays partially static (not collapsed) *)
+  check_spec_exp_av "cons static/dynamic -> partial-static"
+    "('cons . (('var . nil) . ('var . (nil . nil))))"
+    "('C . (('S . 'a) . ('D . ('var . (nil . nil)))))"
+let test_se_av_hd_recovers_static () =
+  (* hd(cons static dynamic) recovers the static head — old SPEC-EXP could not *)
+  check_spec_exp_av "hd of partial cons recovers static"
+    "('hd . ('cons . (('var . nil) . ('var . (nil . nil)))))"
+    "('S . 'a)"
+let test_se_av_hd_dynamic () =
+  check_spec_exp_av "hd of dynamic var stays dynamic"
+    "('hd . ('var . (nil . nil)))" "('D . ('hd . ('var . (nil . nil))))"
+let test_se_av_eq_static_resolves () =
+  (* eq(static var, static literal) resolves to a static boolean (=> dispatch
+   * like '=? Tag ...' specializes away) *)
+  check_spec_exp_av "eq static var/literal -> static true"
+    "('eq . (('var . nil) . ('val . 'a)))" "('S . (nil . nil))"
+
 (* ===== Test runner ===== *)
 
 let () =
@@ -1192,6 +1230,15 @@ let () =
     "stats", [
       Alcotest.test_case "count_nodes" `Quick test_count_nodes;
       Alcotest.test_case "spec-partial residual size" `Quick test_stats_spec_partial_residual;
+    ];
+    "spec-av-exp", [
+      Alcotest.test_case "var static" `Quick test_se_av_var_static;
+      Alcotest.test_case "var dynamic" `Quick test_se_av_var_dynamic;
+      Alcotest.test_case "val literal" `Quick test_se_av_val;
+      Alcotest.test_case "cons -> partial-static" `Quick test_se_av_cons_partial;
+      Alcotest.test_case "hd recovers static" `Quick test_se_av_hd_recovers_static;
+      Alcotest.test_case "hd dynamic" `Quick test_se_av_hd_dynamic;
+      Alcotest.test_case "eq static resolves" `Quick test_se_av_eq_static_resolves;
     ];
     "av-algebra", [
       Alcotest.test_case "hd static" `Quick test_av_hd_static;

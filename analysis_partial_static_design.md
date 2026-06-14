@@ -116,8 +116,23 @@ AV ::= ('S . v)            -- 完全静的。v は素の値（さらに AV を�
 （AV-EQ→AV-LIFT）で局所名が衝突する。AV-LIFT-STEP の内部局所を一意名(LfX/LfY/LfP/LfQ)に改名して解消。
 また AV-LIFT は入力を**保存**する（SPEC-EXP 流の `cons A nil <= A'`）ので呼び出し側でクリアが必要。
 
+### ステップ2 完了（2026-06-14）: AV 版 SPEC-EXP 実装・検証 ✅
+`examples/spec_av.rwhile`（spec.rwhile の並行版）に、ストア演算＋AV代数＋**SPEC-EXP-AV** を実装。
+SPEC-EXP-AV は SPEC-EXP と同型のスタックマシンで、各結合を AV 演算（AV-CONS/HD/TL/EQ）に委譲する。
+ストア slot は AV（動的 slot = `('D.('var.k))`）。`spec-av-exp` 群7件 green。実証された特殊化：
+
+| 式 | 旧 SPEC-EXP | AV 版 SPEC-EXP-AV |
+|---|---|---|
+| `cons var0(静) var1(動)` | 完全 dynamic 化 | **`('C.(('S.'a).('D...)))` 部分静的** |
+| `hd(cons var0 var1)` | 動的（hd コード） | **`('S.'a)` 静的復元** |
+| `eq var0 ('val 'a)` | 動的 eq | **`('S.(nil.nil))` 静的真** |
+
+最後の例が重要：`=? Tag 'ass` 系のディスパッチが静的に解決されることを意味し、ri_fp3 の過剰残余化が
+解ける見込み。
+
 ### 次の一手
-ステップ2: `SPEC-EXP`（spec.rwhile 49–216）を、揃った AV 演算を呼ぶ形に置換（spec_av.rwhile で並行開発）。まず `av.rwhile` の AV 演算を
+ステップ3: `SPEC-STEP`（コマンド: ass/rep/cond/loop）を AV 対応に。cond/loop のテスト AV が `'S` なら
+分岐確定、`'D` なら residual。`spec_av.rwhile` を育て、spec-partial 相当（swap）が AV 版で通ることを確認。まず `av.rwhile` の AV 演算を
 spec.rwhile に取り込み、SPEC-EXP の var/val/cons/hd/tl/eq を AV 規則へ。LIFT と eq の全静的判定は
 再帰が要るためスタックマシン化（既存 SPEC-EXP の B/E マーカー方式を踏襲）。spec-partial(swap) を
 壊さないこと。

@@ -1,0 +1,263 @@
+(*
+ * spec_av.rwhile - WIP: AV-based (partially-static) specializer for R-WHILE.
+ *
+ * Developed in parallel with spec.rwhile (the working baseline) so the rewrite
+ * to partially-static values does not break it.  See
+ * analysis_partial_static_design.md.  This file currently contains:
+ *   - the partial store ops (AUX / LOOKUP / UPDATE), same as spec.rwhile
+ *   - the AV algebra (AV-CONS/HD/TL/LIFT/EQ), same as av.rwhile
+ *   - SPEC-EXP-AV: an AV-based expression specializer (the step-2 deliverable)
+ *
+ * Annotated value (AV):
+ *   ('S . v)            static value v
+ *   ('D . code)         dynamic, residual expression code
+ *   ('C . (av1 . av2))  partially-static cons
+ * Store slot Vl[k] holds an AV (dynamic slots are ('D . ('var . k))).
+ *)
+
+(* ===== Partial store ops (identical to spec.rwhile) ===== *)
+
+macro LOOKUP(Vl,J,X)
+  AUX(Vl,J,Y);
+  X ^= Y;
+  INV-AUX(Vl,J,Y)
+
+macro UPDATE(Vl,J,X)
+  AUX(Vl,J,Y);
+  Y ^= X;
+  INV-AUX(Vl,J,Y)
+
+macro AUX(Vl,J,X)
+  from (=? JJ nil) loop
+    cons U Vl <= Vl;
+    Vr <= cons U Vr;
+    JJ <= cons nil JJ
+  until (=? JJ J);
+  cons Y T <= Vl
+
+(* ===== AV algebra (identical to av.rwhile) ===== *)
+
+macro AV-HD(A, R)
+  cons T V <= A;
+  CT ^= =? T 'S;
+  if =? T 'S then
+    cons H Tl <= V;
+    Tl ^= Tl;
+    R <= cons 'S H;
+    T ^= 'S
+  else
+    CC ^= =? T 'C;
+    if =? T 'C then
+      cons A1 A2 <= V;
+      A2 ^= A2;
+      R <= A1;
+      T ^= 'C
+    else
+      R <= cons 'D (cons 'hd V);
+      T ^= 'D
+    fi CC;
+    CC ^= CC
+  fi CT;
+  CT ^= CT
+
+macro AV-TL(A, R)
+  cons T V <= A;
+  CT ^= =? T 'S;
+  if =? T 'S then
+    cons H Tl <= V;
+    H ^= H;
+    R <= cons 'S Tl;
+    T ^= 'S
+  else
+    CC ^= =? T 'C;
+    if =? T 'C then
+      cons A1 A2 <= V;
+      A1 ^= A1;
+      R <= A2;
+      T ^= 'C
+    else
+      R <= cons 'D (cons 'tl V);
+      T ^= 'D
+    fi CC;
+    CC ^= CC
+  fi CT;
+  CT ^= CT
+
+macro AV-CONS(A1, A2, R)
+  cons T1 V1 <= A1;
+  cons T2 V2 <= A2;
+  S1 ^= =? T1 'S;
+  S2 ^= =? T2 'S;
+  Both ^= nil;
+  if S1 then
+    if S2 then Both ^= (nil.nil) fi S2
+  fi S1;
+  CBoth ^= Both;
+  if Both then
+    R <= cons 'S (cons V1 V2);
+    T1 ^= 'S; T2 ^= 'S
+  else
+    A1 <= cons T1 V1;
+    A2 <= cons T2 V2;
+    R <= cons 'C (cons A1 A2)
+  fi CBoth;
+  CBoth ^= CBoth;
+  Both ^= Both;
+  S1 ^= S1;
+  S2 ^= S2
+
+macro AV-LIFT(A, Code)
+  A <= cons A nil;
+  from (=? A' nil) loop
+    AV-LIFT-STEP(A, A', RSt)
+  until (=? A nil);
+  cons A nil <= A';
+  cons Code nil <= RSt
+
+macro AV-LIFT-STEP(Wk, Wk', RSt)
+  cons (cons Tag Pay) Wk <= Wk;
+  if =? Tag 'S then
+    PayC ^= Pay;
+    RSt <= cons (cons 'val PayC) RSt
+  else
+   if =? Tag 'D then
+     PayC ^= Pay;
+     RSt <= cons PayC RSt
+   else
+    if =? Tag 'C then
+      Tag ^= 'C; Tag ^= 'CB;
+      cons LfX LfY <= Pay;
+      Wk <= cons LfX (cons LfY (cons ('CE . nil) Wk));
+      LfX ^= LfX; LfY ^= LfY
+    else
+     if =? Tag 'CE then
+       Tag ^= 'CE; Tag ^= 'C;
+       cons LfY (cons LfX (cons ('CB . nil) Wk')) <= Wk';
+       Pay <= cons LfX LfY;
+       cons LfQ (cons LfP RSt) <= RSt;
+       RSt <= cons (cons 'cons (cons LfP LfQ)) RSt
+     else
+       'error <= '9
+     fi =? Tag 'C
+    fi =? Tag 'CB
+   fi =? Tag 'D
+  fi =? Tag 'S;
+  Wk' <= cons (cons Tag Pay) Wk'
+
+macro AV-EQ(A1, A2, R)
+  cons T1 V1 <= A1;
+  cons T2 V2 <= A2;
+  BothS ^= nil;
+  if =? T1 'S then
+    if =? T2 'S then BothS ^= (nil.nil) fi =? T2 'S
+  fi =? T1 'S;
+  CBothS ^= BothS;
+  if BothS then
+    EqRes ^= =? V1 V2;
+    R <= cons 'S EqRes;
+    V1 ^= V1; V2 ^= V2;
+    T1 ^= 'S; T2 ^= 'S
+  else
+    A1 <= cons T1 V1;
+    A2 <= cons T2 V2;
+    AV-LIFT(A1, C1);
+    AV-LIFT(A2, C2);
+    A1 ^= A1; A2 ^= A2;
+    R <= cons 'D (cons 'eq (cons C1 C2))
+  fi CBothS;
+  CBothS ^= CBothS;
+  BothS ^= BothS
+
+(* ===== AV-based expression specializer ===== *)
+
+(* SPEC-EXP-AV(E, RE): RE := AV result of specializing expression E against the
+ * AV store Vl.  E is preserved (shell reconstructed), like spec.rwhile's
+ * SPEC-EXP. Stack machine: Cd = work stack, Cd' = done stack, RSt = AV results. *)
+macro SPEC-EXP-AV(E, RE)
+  E <= cons E nil;
+  from (=? E' nil) loop
+    SPEC-EXP-AV-STEP(E, E', RSt)
+  until (=? E nil);
+  cons E nil <= E';
+  cons RE nil <= RSt
+
+macro SPEC-EXP-AV-STEP(Cd, Cd', RSt)
+  cons (cons ETag EArg) Cd <= Cd;
+  if =? ETag 'var then
+    (* variable: push its store AV (LOOKUP is non-destructive) *)
+    LOOKUP(Vl, EArg, SX);
+    RSt <= cons SX RSt
+  else
+   if =? ETag 'val then
+     (* literal: static AV ('S . v) *)
+     EArgCopy ^= EArg;
+     RSt <= cons (cons 'S EArgCopy) RSt
+   else
+    if =? ETag 'cons then
+      ETag ^= 'cons; ETag ^= 'consB;
+      cons E1 E2 <= EArg;
+      Cd <= cons E1 (cons E2 (cons ('consE . nil) Cd))
+    else
+     if =? ETag 'consE then
+       ETag ^= 'consE; ETag ^= 'cons;
+       cons E2 (cons E1 (cons ('consB . nil) Cd')) <= Cd';
+       EArg <= cons E1 E2;
+       cons R2 (cons R1 RSt) <= RSt;
+       AV-CONS(R1, R2, Rc);
+       RSt <= cons Rc RSt
+     else
+      if =? ETag 'hd then
+        ETag ^= 'hd; ETag ^= 'hdB;
+        Cd <= cons EArg (cons ('hdE . nil) Cd)
+      else
+       if =? ETag 'hdE then
+         ETag ^= 'hdE; ETag ^= 'hd;
+         cons EArg (cons ('hdB . nil) Cd') <= Cd';
+         cons R1 RSt <= RSt;
+         AV-HD(R1, Rh);
+         RSt <= cons Rh RSt
+       else
+        if =? ETag 'tl then
+          ETag ^= 'tl; ETag ^= 'tlB;
+          Cd <= cons EArg (cons ('tlE . nil) Cd)
+        else
+         if =? ETag 'tlE then
+           ETag ^= 'tlE; ETag ^= 'tl;
+           cons EArg (cons ('tlB . nil) Cd') <= Cd';
+           cons R1 RSt <= RSt;
+           AV-TL(R1, Rt);
+           RSt <= cons Rt RSt
+         else
+          if =? ETag 'eq then
+            ETag ^= 'eq; ETag ^= 'eqB;
+            cons E1 E2 <= EArg;
+            Cd <= cons E1 (cons E2 (cons ('eqE . nil) Cd))
+          else
+           if =? ETag 'eqE then
+             ETag ^= 'eqE; ETag ^= 'eq;
+             cons E2 (cons E1 (cons ('eqB . nil) Cd')) <= Cd';
+             EArg <= cons E1 E2;
+             cons R2 (cons R1 RSt) <= RSt;
+             AV-EQ(R1, R2, Re);
+             RSt <= cons Re RSt
+           else
+             'error <= '0
+           fi =? ETag 'eq
+          fi =? ETag 'eqB
+         fi =? ETag 'tl
+        fi =? ETag 'tlB
+       fi =? ETag 'hd
+      fi =? ETag 'hdB
+     fi =? ETag 'cons
+    fi =? ETag 'consB
+   fi =? ETag 'val
+  fi =? ETag 'var;
+  Cd' <= cons (cons ETag EArg) Cd'
+
+(* ===== Main program (test harness for SPEC-EXP-AV) ===== *)
+
+read In;
+  cons Vl E <= In;
+  SPEC-EXP-AV(E, RE);
+  Out <= cons Vl (cons E RE);
+write Out
