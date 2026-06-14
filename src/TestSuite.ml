@@ -1031,6 +1031,41 @@ let test_plain_error_unchanged () =
     (Failure "No head. Expression hd nil has value nil")
     (fun () -> ignore (eval_string "read X; Y ^= hd nil; write X" "'a"))
 
+(* ===== Hygienic macro expansion (-hygienic-macros, opt-in) =====
+ * INNER uses a local Tmp; the caller also uses a local Tmp. Without hygiene the
+ * two collide and the value is corrupted (store-not-cleared); with hygiene they
+ * are alpha-renamed apart and the copy round-trips correctly. *)
+let hygiene_collision_prog =
+  "macro INNER(A, R) Tmp ^= A; R ^= Tmp; Tmp ^= A " ^
+  "read In; Tmp ^= In; INNER(Tmp, Out); Tmp ^= In; In ^= Out; write Out"
+
+let with_hygiene f =
+  MacroRwhile.hygienic := true;
+  Fun.protect ~finally:(fun () -> MacroRwhile.hygienic := false) f
+
+(* With the flag ON the local collision is resolved and Out = In. *)
+let test_hygienic_fixes_collision () =
+  let result = with_hygiene (fun () ->
+    EvalRwhile.evalProgram (parse_program hygiene_collision_prog) (atom "'a")) in
+  Alcotest.(check valT_testable) "hygienic copy round-trips" (atom "'a") result
+
+(* With the flag OFF (default) the same program corrupts the store and aborts. *)
+let test_nonhygienic_collision_aborts () =
+  Alcotest.(check bool) "non-hygienic collision raises" true
+    (try ignore (EvalRwhile.evalProgram
+                   (parse_program hygiene_collision_prog) (atom "'a")); false
+     with Failure _ -> true)
+
+(* The flag actually rewrites local identifiers: expansion introduces "Tmp-"
+   renamed locals when ON, and leaves the bare "Tmp" alone when OFF. *)
+let test_hygienic_renames_in_expansion () =
+  let expand () =
+    show_program (MacroRwhile.expMacProgram (parse_program hygiene_collision_prog)) in
+  let off = expand () in
+  let on = with_hygiene expand in
+  Alcotest.(check bool) "OFF keeps bare Tmp"   true (find_substring off "Tmp-" = None);
+  Alcotest.(check bool) "ON renames to Tmp-N"  true (find_substring on  "Tmp-" <> None)
+
 (* ===== Partially-static annotated-value (AV) algebra (Stage 1 foundation) =====
  * av.rwhile implements the AV algebra (cons/hd/tl over 'S/'D/'C tags) that will
  * back a partially-static rewrite of spec.rwhile (see
@@ -1399,6 +1434,11 @@ let () =
       Alcotest.test_case "non-cleared names dirty var" `Quick test_noncleared_names_var;
       Alcotest.test_case "llm-errors structured format" `Quick test_llm_error_format;
       Alcotest.test_case "plain error message unchanged" `Quick test_plain_error_unchanged;
+    ];
+    "hygienic-macros", [
+      Alcotest.test_case "hygiene fixes local collision" `Quick test_hygienic_fixes_collision;
+      Alcotest.test_case "non-hygienic collision aborts" `Quick test_nonhygienic_collision_aborts;
+      Alcotest.test_case "flag renames locals in expansion" `Quick test_hygienic_renames_in_expansion;
     ];
     "inv-eval", [
       Alcotest.test_case "inv swap" `Quick test_inv_eval_swap;

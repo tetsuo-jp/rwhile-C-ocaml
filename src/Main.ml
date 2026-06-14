@@ -26,13 +26,15 @@ let () =
       "extension: automatic fi-assertion  (iff E then C else D)");
      ("-array",   Arg.Set EvalRwhile.enable_array,
       "extension: array index operations  (A[I] ^= E  /  get A[I])");
+     ("-hygienic-macros", Arg.Set MacroRwhile.hygienic,
+      "expand macros hygienically: alpha-rename internal local variables");
      ("-llm-errors", Arg.Set EvalRwhile.llm_errors,
       "emit structured, machine-/LLM-friendly error messages");
      ("-stats",   Arg.Set f_stats,
       "after evaluation, print result size (node count / bytes) to stderr")]
     (fun s -> files := !files @ [s])
     ("R-WHILE Interpreter (C) Tetsuo Yokoyama\n" ^
-       Printf.sprintf "usage: %s [-inverse] [-p2d] [-exp] [-local] [-autofi] [-array] [-llm-errors] [-stats] program [data]"
+       Printf.sprintf "usage: %s [-inverse] [-p2d] [-exp] [-local] [-autofi] [-array] [-hygienic-macros] [-llm-errors] [-stats] program [data]"
          Sys.argv.(0));
   match !files with
   | [prog_filename] ->

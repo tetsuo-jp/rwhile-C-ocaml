@@ -56,6 +56,44 @@ and substLoopBranch s = function
     BLoop c   -> BLoop (substCom s c)
   | BLoopNone -> BLoopNone
 
+(* Collect every variable identifier occurring in a command (with duplicates).
+   Used by macro expansion to alpha-rename a macro's internal local variables
+   (those that are not formal parameters). *)
+let rec varsExp = function
+    ECons (e, f) -> varsExp e @ varsExp f
+  | EHd e -> varsExp e
+  | ETl e -> varsExp e
+  | EEq (e, f) -> varsExp e @ varsExp f
+  | EVar (Var x) -> [x]
+  | EVal _ -> []
+  | EList es -> concat (map varsExp es)
+  | EArrGet (Var x, i) -> x :: varsExp i
+
+and varsPat = function
+    PCons (q, r) -> varsPat q @ varsPat r
+  | PVar (Var x) -> [x]
+  | PVal _ -> []
+  | PList ps -> concat (map varsPat ps)
+
+and varsCom = function
+    CMac (_, xs) -> xs
+  | CAss (x, e) -> x :: varsExp e
+  | CRep (q, r) -> varsPat q @ varsPat r
+  | CSeq (c, d) -> varsCom c @ varsCom d
+  | CCond (e, thenbranch, elsebranch, f) ->
+     varsExp e @ varsThenBranch thenbranch @ varsElseBranch elsebranch @ varsExp f
+  | CLoop (e, dobranch, loopbranch, f) ->
+     varsExp e @ varsDoBranch dobranch @ varsLoopBranch loopbranch @ varsExp f
+  | CShow e -> varsExp e
+  | CLocal (x, c) -> x :: varsCom c
+  | CAutoFi (e, t, el) -> varsExp e @ varsThenBranch t @ varsElseBranch el
+  | CArrAss (x, i, e) -> x :: varsExp i @ varsExp e
+
+and varsThenBranch = function BThen c -> varsCom c | BThenNone -> []
+and varsElseBranch = function BElse c -> varsCom c | BElseNone -> []
+and varsDoBranch = function BDo c -> varsCom c | BDoNone -> []
+and varsLoopBranch = function BLoop c -> varsCom c | BLoopNone -> []
+
 let substMacro s (Mac (x, xs, c)) = Mac (x, map (substRIdent s) xs, substCom s c)
 
 let substProgram s (Prog (macros, x, c, y)) =
