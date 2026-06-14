@@ -109,8 +109,15 @@ AV ::= ('S . v)            -- 完全静的。v は素の値（さらに AV を�
 注: 可逆 if の exit assertion は then 節で書き換えた**後**のタグを検査する慣習
 （`if =? Tag 'C then (Tag→'CB) ... fi =? Tag 'CB`）。これを外すと assertion 失敗になる（実装時の落とし穴）。
 
+### ステップ1.6 完了（2026-06-14）: AV-EQ も実装 → AV 代数完備 ✅
+`AV-EQ` を実装（不変条件「完全静的 ⟺ タグ'S」により両 'S なら比較、それ以外は AV-LIFT で
+両辺を lower して動的 eq）。`av-algebra` 群 **13件 green**（cons/hd/tl/lift/eq）。
+マクロ・ハイジーンの教訓: R-WHILE のマクロ展開は内部局所変数を改名しないため、入れ子マクロ呼び出し
+（AV-EQ→AV-LIFT）で局所名が衝突する。AV-LIFT-STEP の内部局所を一意名(LfX/LfY/LfP/LfQ)に改名して解消。
+また AV-LIFT は入力を**保存**する（SPEC-EXP 流の `cons A nil <= A'`）ので呼び出し側でクリアが必要。
+
 ### 次の一手
-ステップ2: `SPEC-EXP`（spec.rwhile 49–216）を AV ベースに置換。まず `av.rwhile` の AV 演算を
+ステップ2: `SPEC-EXP`（spec.rwhile 49–216）を、揃った AV 演算を呼ぶ形に置換（spec_av.rwhile で並行開発）。まず `av.rwhile` の AV 演算を
 spec.rwhile に取り込み、SPEC-EXP の var/val/cons/hd/tl/eq を AV 規則へ。LIFT と eq の全静的判定は
 再帰が要るためスタックマシン化（既存 SPEC-EXP の B/E マーカー方式を踏襲）。spec-partial(swap) を
 壊さないこと。

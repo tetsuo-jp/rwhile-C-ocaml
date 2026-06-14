@@ -1074,6 +1074,17 @@ let test_av_lift_nested () =
   check_av "lift nested partial-static"
     "('lift . ('C . (('S . 'a) . ('C . (('S . 'b) . ('D . ('var . nil)))))))"
     "('cons . (('val . 'a) . ('cons . (('val . 'b) . ('var . nil)))))"
+let test_av_eq_static_true () =
+  check_av "eq static equal -> static true"
+    "('eq . (('S . 'a) . ('S . 'a)))" "('S . (nil . nil))"
+let test_av_eq_static_false () =
+  check_av "eq static unequal -> static false"
+    "('eq . (('S . 'a) . ('S . 'b)))" "('S . nil)"
+let test_av_eq_mixed_dynamic () =
+  (* one side dynamic -> residual eq with the static side lifted to ('val.v) *)
+  check_av "eq mixed -> dynamic eq"
+    "('eq . (('S . 'a) . ('D . ('var . nil))))"
+    "('D . ('eq . (('val . 'a) . ('var . nil))))"
 
 (* ===== Garbage / size measurement (Stage A) ===== *)
 
@@ -1193,6 +1204,9 @@ let () =
       Alcotest.test_case "lift dynamic" `Quick test_av_lift_dynamic;
       Alcotest.test_case "lift partial-static" `Quick test_av_lift_partial;
       Alcotest.test_case "lift nested" `Quick test_av_lift_nested;
+      Alcotest.test_case "eq static true" `Quick test_av_eq_static_true;
+      Alcotest.test_case "eq static false" `Quick test_av_eq_static_false;
+      Alcotest.test_case "eq mixed dynamic" `Quick test_av_eq_mixed_dynamic;
     ];
     "interpreter-robustness", [
       Alcotest.test_case "list-syntax input desugared" `Quick test_list_input_desugared;
