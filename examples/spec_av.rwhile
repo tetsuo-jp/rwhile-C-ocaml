@@ -628,19 +628,14 @@ macro SPEC-STEP-AV(Cd, Cd', RCode)
         LpCFs ^= LpCFs
       else
        if =? Tag 'seq then
-         Tag ^= 'seq; Tag ^= 'seqB;
+         (* push both subcommands onto the work stack; the shell is discarded,
+          * so no seqB/seqE reconstruction is needed (and cond/loop nested in a
+          * seq do not corrupt a shell stack). *)
          cons C D <= Arg;
-         Cd <= cons C (cons D (cons ('seqE . nil) Cd));
-         C ^= C; D ^= D
+         Cd <= cons C (cons D Cd)
        else
-        if =? Tag 'seqE then
-          Tag ^= 'seqE; Tag ^= 'seq;
-          cons D (cons C (cons ('seqB . nil) Cd')) <= Cd';
-          Arg <= cons C D
-        else
-          'error <= '1
-        fi =? Tag 'seq
-       fi =? Tag 'seqB
+         'error <= '1
+       fi =? Tag 'seq
       fi =? Tag 'lcheck
      fi =? Tag 'loop
     fi =? Tag 'cond

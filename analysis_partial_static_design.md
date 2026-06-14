@@ -197,7 +197,27 @@ fp1 の鍵は ri_fp3 の入力分割 `cons Prog Data <= V0`（V0 = `('C.(('S.pro
 これで入力分割は構造分割、純動的データ移動は残余化、という structural PE になる（symbolic 全展開は採らない＝
 論文 §6 のゴミ解析と整合）。
 
-### ステップ C3: spec_av main ＋ fp1
+### ステップ C3 試行（2026-06-14）: fp1(id) 実機検証で設計問題が判明
+spec_av に fp1 用 main（V0 slot を `('C.(('S.src).('D.('var.I'))))` に設定 → SPEC-CMD-AV →
+出力 AV を AV-LIFT して残余 rep を組み立て）を注入し `[spec_av]((ri_fp3 . id))` を実行。
+判明：
+
+1. **seq 簡素化が必要だった**（修正済み）：shell を破棄する設計なのに seq が `seqB/seqE` で Cd' を
+   pop しており、seq に cond/loop がネストすると `('cond.nil)` 等と衝突（`'cond` と `'seqB` の不一致
+   エラー）。seq を「C,D を work stack に積むだけ」に簡素化して解消。spec-av-step 全 green 維持。
+
+2. **symbolic 'rep の残余が分裂する（本質問題）**：fp1(id) 実行で store-not-cleared、非nil は **RCode**。
+   つまり SPEC-CMD-AV は動的 'ass を RCode に残余化する一方、symbolic 'rep は効果を出力 AV に
+   貯める。→ 残余が「RCode（残余化された ass）＋出力 AV（rep の効果）」に**分裂**し、きれいな
+   1本の可逆残余プログラムにならない。combine するには順序・整合性の調整＋MAKE-SEQ が要り、複雑。
+
+**結論（設計修正）**：fp1 のきれいな残余には **structural 'rep**（動的 rep も RCode に残余化）が本筋。
+partially-static は (a) 入力分割（構造的に既知の cons を分割）と (b) 静的ディスパッチ解決（cond/eq、
+SPEC-EXP-AV で既に動作）に使い、純動的データ移動は rep ごと残余化する（symbolic 全展開はしない）。
+これは論文 §6 のゴミ解析（コマンド構造を保持）とも整合。symbolic 'rep（C2）は撤回し structural+
+入力分割特例に作り直す。
+
+### ステップ C3（改訂）: structural 'rep ＋ spec_av main ＋ fp1
 spec_av に main（入力 `(ri_fp3 . src)` → V0 slot = `('C.(('S.src).('D.('var.0))))` を設定 → SPEC-CMD-AV →
 残余プログラム組み立て）を整え、`comp = [spec_av]((ri_fp3 . src))` を実行。`check_first_projection` を
 ri_fp3＋spec_av に向け green に。injectivity 用の符号埋め込みは機能的正しさ確認後。まず `av.rwhile` の AV 演算を
