@@ -1025,6 +1025,23 @@ let test_llm_error_format () =
   Alcotest.(check bool) "has category field"        true (find_substring m "category: no-head" <> None);
   Alcotest.(check bool) "has hint field"            true (find_substring m "hint:" <> None)
 
+(* R-WHILE truth convention: nil=false, ANY non-nil=true. A conditional/loop test
+   need not be the boolean (nil.nil). `if Y fi Y` and `from Y until Y` are the
+   identity for any non-nil Y (the self-interpreter ri.rwhile relies on this:
+   it dispatches with `if W ... fi W` on the raw test value). *)
+let test_nonnil_truth_cond_atom () =
+  Alcotest.(check valT_testable) "if Y fi Y on 'a = 'a"
+    (atom "'a") (eval_string "read Y; if Y fi Y; write Y" "'a")
+
+let test_nonnil_truth_cond_cons () =
+  Alcotest.(check valT_testable) "if Y fi Y on ('x.'y) = ('x.'y)"
+    (pair (atom "'x") (atom "'y"))
+    (eval_string "read Y; if Y fi Y; write Y" "('x.'y)")
+
+let test_nonnil_truth_loop_atom () =
+  Alcotest.(check valT_testable) "from Y until Y on 'a = 'a"
+    (atom "'a") (eval_string "read Y; from Y until Y; write Y" "'a")
+
 (* New: plain mode is unchanged (no structured wrapper). *)
 let test_plain_error_unchanged () =
   Alcotest.check_raises "plain hd nil message unchanged"
@@ -1066,6 +1083,20 @@ let test_nonhygienic_collision_aborts () =
        try ignore (EvalRwhile.evalProgram
                      (parse_program hygiene_collision_prog) (atom "'a")); false
        with Failure _ -> true))
+
+(* A generated fresh name must not alias an existing program variable. Here the
+   user variable Tmp-1 matches the "<base>-<n>" pattern the generator produces;
+   the macro local Tmp must be renamed to something OTHER than Tmp-1, so CP's
+   private scratch does not stomp the live user variable. *)
+let hygiene_dashed_collision_prog =
+  "macro CP(A,B) Tmp ^= A; B ^= Tmp; Tmp ^= A " ^
+  "read In; Tmp-1 ^= In; CP(Tmp-1, Out); Tmp-1 ^= In; In ^= Out; write Out"
+
+let test_hygiene_avoids_dashed_var_collision () =
+  let r = with_hygiene (fun () ->
+    EvalRwhile.evalProgram (parse_program hygiene_dashed_collision_prog) (atom "'a")) in
+  Alcotest.(check valT_testable) "fresh name avoids user Tmp-1; CP copies correctly"
+    (atom "'a") r
 
 (* The flag actually rewrites local identifiers: expansion introduces "Tmp-"
    renamed locals when ON, and leaves the bare "Tmp" alone when OFF. *)
@@ -1452,10 +1483,14 @@ let () =
       Alcotest.test_case "non-cleared names dirty var" `Quick test_noncleared_names_var;
       Alcotest.test_case "llm-errors structured format" `Quick test_llm_error_format;
       Alcotest.test_case "plain error message unchanged" `Quick test_plain_error_unchanged;
+      Alcotest.test_case "non-nil truth: if Y fi Y on atom" `Quick test_nonnil_truth_cond_atom;
+      Alcotest.test_case "non-nil truth: if Y fi Y on cons" `Quick test_nonnil_truth_cond_cons;
+      Alcotest.test_case "non-nil truth: from Y until Y on atom" `Quick test_nonnil_truth_loop_atom;
     ];
     "hygienic-macros", [
       Alcotest.test_case "hygiene fixes local collision" `Quick test_hygienic_fixes_collision;
       Alcotest.test_case "non-hygienic collision aborts" `Quick test_nonhygienic_collision_aborts;
+      Alcotest.test_case "fresh name avoids dashed user var" `Quick test_hygiene_avoids_dashed_var_collision;
       Alcotest.test_case "flag renames locals in expansion" `Quick test_hygienic_renames_in_expansion;
     ];
     "inv-eval", [

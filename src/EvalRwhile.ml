@@ -6,6 +6,12 @@ type store = (rIdent * valT) list
 
 let vtrue = VCons (VNil, VNil)
 let vfalse = VNil
+(* R-WHILE truth convention: nil is false, ANY non-nil value is true.  Test
+   expressions in conditionals/loops are not restricted to the boolean (nil.nil)
+   — e.g. `if Y fi Y` is the identity for any Y, and the self-interpreter
+   ri.rwhile dispatches on the raw test value with `if W ... fi W`.  =? still
+   yields exactly vtrue/vfalse. *)
+let is_true (v : valT) : bool = v <> VNil
 
 (* Extension feature flags -- set by Main.ml command-line options *)
 let enable_local  = ref false
@@ -372,12 +378,12 @@ and evalCom (s : store) : com -> store = function
   | CSeq (c, d) -> let s1 = evalCom s c in
 		   evalCom s1 d
   | CCond (e, thenbranch, elsebranch, f) ->
-     if evalExp s e = vtrue then
+     if is_true (evalExp s e) then
        let s1 = (match thenbranch with
 		 | BThen c -> evalCom s c
 		 | BThenNone -> s)
        in
-       if evalExp s1 f = vtrue then s1
+       if is_true (evalExp s1 f) then s1
        else eval_error ~category:"assertion-failed"
               ~context:("exit assertion=" ^ printTree prtExp f ^ "; branch=then")
               ~expected:"true (exit assertion must hold after the then-branch)"
@@ -397,7 +403,7 @@ and evalCom (s : store) : com -> store = function
               ~hint:"in 'if e then C else D fi f', f is an assertion: it must be FALSE after the else-branch is taken"
               ("Assertion " ^ printTree prtExp f ^ " is not false.\n")
   | CLoop (e, dobranch, loopbranch, f) ->
-     if evalExp s e = vtrue then
+     if is_true (evalExp s e) then
        let s1 = match dobranch with
 	   BDo c -> evalCom s c
 	 | BDoNone -> s
@@ -444,9 +450,9 @@ and evalCom (s : store) : com -> store = function
          ~hint:"pass the -autofi flag to enable the auto-fi conditional (iff)"
          "iff requires the -autofi flag"
      else
-       if evalExp s e = vtrue then
+       if is_true (evalExp s e) then
          let s1 = match thenbranch with BThen c -> evalCom s c | BThenNone -> s in
-         if evalExp s1 e = vtrue then s1
+         if is_true (evalExp s1 e) then s1
          else eval_error ~category:"assertion-failed"
                 ~context:("condition=" ^ printTree prtExp e ^ "; branch=then")
                 ~expected:"true (condition must still hold after the then-branch)"
@@ -476,7 +482,7 @@ and evalCom (s : store) : com -> store = function
        update (x, arr_rupdate arr idx v) s
 
 and evalLoop (s : store) (e, dobranch, loopbranch, f) : store =
-  if evalExp s f = VCons (VNil, VNil)
+  if is_true (evalExp s f)
   then s
   else
     let s1 = (match loopbranch with
