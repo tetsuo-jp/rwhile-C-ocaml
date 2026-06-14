@@ -180,7 +180,15 @@ fp1 の鍵は ri_fp3 の入力分割 `cons Prog Data <= V0`（V0 = `('C.(('S.pro
 'D → 記号 hd/tl）。これが入力分割（`cons Prog Data <= V0`, V0='C → Prog=('S.prog), Data=('D...)）の
 要。`av-algebra` 群に3件追加 green。spec_av.rwhile にもミラー済み（'rep 改修で使用予定）。
 
-### 設計：'rep の AV 化（次のステップ C2）
+### ステップ C2 完了（2026-06-14）: 'rep の AV 化（symbolic）✅
+'rep を AV-aware パターン読み書き（PAT-READ-AV / PAT-WRITE-AV、cons は AV-CONS/AV-UNCONS で
+分割合成）で書き換え。**常に AV 領域で実行（残余化しない）**＝部分静的構造は分割、純動的値は
+記号的に流れ（出力 lift 時に残余化）。spec-av-step 群13件 green（**入力分割テスト追加**）：
+- 入力分割 `cons V1 V2 <= V0`（V0=`('C.(('S.'a).('D...)))`）→ V1=`('S.'a)`静的, V2 動的, 残余なし ✅
+- swap 静的 → `('S.('b.'a))`; swap 動的 → X=`('C.(('D.tl X).('D.hd X)))`（記号 swap、残余なし）
+注: 旧 concrete-value 版補助（CHECK-PAT-STATIC-AV 等）は未使用化（参照用に残置）。
+
+### （旧）設計：'rep の AV 化
 'rep `Q <= R`：
 - R を AV-aware に読む（PAT-READ-AV：var→slot AV を消費、val→('S.v)、cons→AV-CONS）。得た AVr。
 - Q が cons で AVr が cons 形（'C / 'S-cons）→ AV-UNCONS で分割して各 var slot に書く（**構造分割・残余なし**）。

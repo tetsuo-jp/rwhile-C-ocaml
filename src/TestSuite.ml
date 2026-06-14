@@ -1238,27 +1238,35 @@ let rep_yzx = "('rep . (('cons . (('var . (nil . nil)) . ('var . (nil . (nil . n
 let swap_cmd =
   "('seq . (('rep . (('cons . (('var . (nil . nil)) . ('var . (nil . (nil . nil))))) . ('var . nil))) . ('rep . (('var . nil) . ('cons . (('var . (nil . (nil . nil))) . ('var . (nil . nil))))))))"
 
-let rep_xzy = "('rep . (('var . nil) . ('cons . (('var . (nil . (nil . nil))) . ('var . (nil . nil))))))"
 let test_ss_av_rep_static () =
-  (* cons Y Z <= X with X static ('a.'b): split statically, X consumed, no residual *)
+  (* cons Y Z <= X with X static ('a.'b): split, X consumed to ('S.nil), no residual *)
   check_spec_step_av "rep static split"
     "(('S . ('a . 'b)) . (('S . nil) . (('S . nil) . nil)))"
     rep_yzx
-    "((('D . ('var . nil)) . (('S . 'a) . (('S . 'b) . nil))) . nil)"
+    "((('S . nil) . (('S . 'a) . (('S . 'b) . nil))) . nil)"
+
+let test_ss_av_rep_input_split () =
+  (* THE fp1 input split: cons V1 V2 <= V0 with V0 partially static
+   * ('C.(('S.'a).('D...))) -> V1 static ('S.'a), V2 dynamic, no residual *)
+  check_spec_step_av "rep partial-static input split"
+    "(('C . (('S . 'a) . ('D . ('var . nil)))) . (('S . nil) . (('S . nil) . nil)))"
+    rep_yzx
+    "((('S . nil) . (('S . 'a) . (('D . ('var . nil)) . nil))) . nil)"
 
 let test_ss_av_swap_static () =
   (* full swap of a static (a.b) -> static (b.a), fully executed, no residual *)
   check_spec_step_av "swap static fully executed"
     "(('S . ('a . 'b)) . (('S . nil) . (('S . nil) . nil)))"
     swap_cmd
-    "((('S . ('b . 'a)) . (('D . ('var . (nil . nil))) . (('D . ('var . (nil . (nil . nil)))) . nil))) . nil)"
+    "((('S . ('b . 'a)) . (('S . nil) . (('S . nil) . nil))) . nil)"
 
 let test_ss_av_swap_dynamic () =
-  (* full swap of a dynamic X: both reps residualized (residual = swap itself) *)
-  check_spec_step_av "swap dynamic residualized"
+  (* full swap of a dynamic X: tracked symbolically as (tl X . hd X), no residual
+   * (the residual is produced when the result is lifted at output time) *)
+  check_spec_step_av "swap dynamic symbolic"
     "(('D . ('var . nil)) . (('S . nil) . (('S . nil) . nil)))"
     swap_cmd
-    ("((('D . ('var . nil)) . (('D . ('var . (nil . nil))) . (('D . ('var . (nil . (nil . nil)))) . nil))) . (" ^ rep_xzy ^ " . (" ^ rep_yzx ^ " . nil)))")
+    "((('C . (('D . ('tl . ('var . nil))) . ('D . ('hd . ('var . nil))))) . (('S . nil) . (('S . nil) . nil))) . nil)"
 
 (* ===== Test runner ===== *)
 
@@ -1345,8 +1353,9 @@ let () =
       Alcotest.test_case "ass dynamic expr" `Quick test_ss_av_ass_dynamic_expr;
       Alcotest.test_case "seq static" `Quick test_ss_av_seq_static;
       Alcotest.test_case "rep static split" `Quick test_ss_av_rep_static;
+      Alcotest.test_case "rep partial-static input split" `Quick test_ss_av_rep_input_split;
       Alcotest.test_case "swap static fully executed" `Quick test_ss_av_swap_static;
-      Alcotest.test_case "swap dynamic residualized" `Quick test_ss_av_swap_dynamic;
+      Alcotest.test_case "swap dynamic symbolic" `Quick test_ss_av_swap_dynamic;
       Alcotest.test_case "cond static true" `Quick test_ss_av_cond_static_true;
       Alcotest.test_case "cond static false" `Quick test_ss_av_cond_static_false;
       Alcotest.test_case "cond dynamic" `Quick test_ss_av_cond_dynamic;

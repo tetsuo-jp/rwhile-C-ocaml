@@ -405,6 +405,67 @@ macro PAT-CLR-SIMPLE-AV(PP)
     PAT-CLR-LEAF-AV(PP)
   fi =? (hd PP) 'cons
 
+(* ===== AV-aware pattern read/write (for partially-static 'rep) =====
+ * Read a pattern into an AV (consuming its vars); write an AV into a pattern.
+ * cons patterns split/combine via AV-CONS / AV-UNCONS, so partially-static
+ * structures (e.g. (prog.data)) are handled without losing the static part. *)
+
+macro PAT-READ-LEAF-AV2(P, RA)
+  if =? (hd P) 'var then
+    cons PRLt PRLi <= P;
+    LOOKUP(Vl, PRLi, PRLs);     (* PRLs = current slot AV *)
+    RA ^= PRLs;                 (* RA = slot AV (PRLs preserved) *)
+    UPDATE(Vl, PRLi, PRLs);     (* slot ^= PRLs -> nil *)
+    PRLs ^= PRLs;               (* discard old slot AV *)
+    PRLs <= cons 'S nil;        (* consumed var becomes static nil *)
+    UPDATE(Vl, PRLi, PRLs);     (* slot = ('S.nil) *)
+    cons PRLss PRLsv <= PRLs; PRLss ^= PRLss; PRLsv ^= PRLsv;
+    P <= cons PRLt PRLi
+  else
+    PRLv ^= tl P;
+    RA <= cons 'S PRLv
+  fi =? (hd P) 'var
+
+macro PAT-READ-AV(P, RA)
+  if =? (hd P) 'cons then
+    cons PRtg PRag <= P;
+    cons PRp1 PRp2 <= PRag;
+    PAT-READ-LEAF-AV2(PRp1, PRa1);
+    PAT-READ-LEAF-AV2(PRp2, PRa2);
+    AV-CONS(PRa1, PRa2, RA);
+    PRag <= cons PRp1 PRp2;
+    P <= cons PRtg PRag
+  else
+    PAT-READ-LEAF-AV2(P, RA)
+  fi =? (hd P) 'cons
+
+macro PAT-WRITE-LEAF-AV2(P, WA)
+  if =? (hd P) 'var then
+    cons PWLt PWLi <= P;
+    LOOKUP(Vl, PWLi, PWLs);
+    UPDATE(Vl, PWLi, PWLs);     (* clear slot to nil *)
+    PWLs ^= PWLs;               (* discard old *)
+    PWLs <= WA;                 (* move WA into PWLs (WA consumed) *)
+    UPDATE(Vl, PWLi, PWLs);     (* slot = WA (PWLs preserved) *)
+    cons PWLss PWLsv <= PWLs; PWLss ^= PWLss; PWLsv ^= PWLsv;
+    P <= cons PWLt PWLi
+  else
+    WA ^= WA
+  fi =? (hd P) 'var
+
+macro PAT-WRITE-AV(P, WA)
+  if =? (hd P) 'cons then
+    cons PWtg PWag <= P;
+    cons PWp1 PWp2 <= PWag;
+    AV-UNCONS(WA, PWa1, PWa2);
+    PAT-WRITE-LEAF-AV2(PWp1, PWa1);
+    PAT-WRITE-LEAF-AV2(PWp2, PWa2);
+    PWag <= cons PWp1 PWp2;
+    P <= cons PWtg PWag
+  else
+    PAT-WRITE-LEAF-AV2(P, WA)
+  fi =? (hd P) 'cons
+
 (* ===== AV-based command specializer (WIP: 'seq and 'ass) =====
  * SPEC-STEP-AV processes one command; residual commands accumulate in RCode
  * (reverse order).  Store slots are AVs; a dynamic slot is ('D.('var.k)). *)
@@ -471,22 +532,13 @@ macro SPEC-STEP-AV(Cd, Cd', RCode)
     Arg <= cons (cons 'var K) E
   else
    if =? Tag 'rep then
+     (* Execute the replacement in the AV domain: read R as an AV, write it into
+      * Q.  cons patterns split/combine via AV-UNCONS / AV-CONS, so a partially-
+      * static structure (e.g. (prog.data)) is split without losing the static
+      * part, and a fully-dynamic value flows symbolically (lifted at output). *)
      cons RpQ RpR <= Arg;
-     CHECK-PAT-STATIC-AV(RpR, RpStat);
-     if RpStat then
-       (* all RHS vars static: execute the replacement at PE time *)
-       PAT-READ-SIMPLE-AV(RpR, RpVal);
-       PAT-WRITE-SIMPLE-AV(RpQ, RpVal)
-     else
-       (* some RHS var dynamic: residualize Q <= R, mark all vars dynamic *)
-       Arg <= cons RpQ RpR;
-       Crep ^= Arg;
-       RCode <= cons (cons 'rep Crep) RCode;
-       cons RpQ RpR <= Arg;
-       PAT-CLR-SIMPLE-AV(RpQ);
-       PAT-CLR-SIMPLE-AV(RpR)
-     fi RpStat;
-     RpStat ^= RpStat;
+     PAT-READ-AV(RpR, RpAV);
+     PAT-WRITE-AV(RpQ, RpAV);
      Arg <= cons RpQ RpR
    else
     if =? Tag 'cond then
