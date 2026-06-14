@@ -139,9 +139,21 @@ spec.rwhile の束縛時ロジックを AV へ移植：静的式×静的変数�
 衝突 → `LfTag/LfPay/LfPayC` に改名。また `parse_macro_harness` は厳密マーカー
 `(* ===== Main program ===== *)` を要求。
 
+### ステップ3 続き（2026-06-14）: 'rep 完成 → swap がエンドツーエンドで特殊化 ✅
+spec.rwhile のパターン補助（CHECK-PAT-STATIC / PAT-READ-SIMPLE / PAT-WRITE-SIMPLE /
+PAT-CLR-SIMPLE と各 LEAF 版）を AV へ移植（静的タグ判定 `=? (hd slot) 'S`、動的スロット
+`('D.('var.k))`）。'rep を SPEC-STEP-AV に追加（全静的→PE時実行、さもなくば残余化＋全変数動的化）。
+`spec-av-step` 群7件 green。**full swap がエンドツーエンドで特殊化**：
+- 静的入力 `('a.'b)` → ストア X=`('S.('b.'a))`、RCode=nil（完全実行）
+- 動的入力 → 両 rep を残余化（残余＝swap 本体）
+＝ spec-partial 相当を AV 版で達成。
+
+注（既知の限界、spec.rwhile と同じ）: 'rep/'ass の残余化経路は静的変数が動的化されるとき値の
+materialize をしない（部分静的 rep の最適化は未）。faithful port のため許容。
+
 ### 次の一手
-ステップ3 続き: 'rep（パターン読み書き、静的/動的）、'cond / 'loop（テスト AV が 'S なら分岐確定、'D なら
-residual）を AV 化。揃ったら swap を AV 版でエンドツーエンド特殊化（部分静的入力）し spec-partial 相当を確認。まず `av.rwhile` の AV 演算を
+ステップ3 残り: 'cond（テスト AV が 'S なら分岐確定、'D なら whole-cond 残余化）、'loop（静的展開／動的残余化）。
+揃ったら Stage C（fp1: `[spec_av]((ri_fp3 . src))`）へ。まず `av.rwhile` の AV 演算を
 spec.rwhile に取り込み、SPEC-EXP の var/val/cons/hd/tl/eq を AV 規則へ。LIFT と eq の全静的判定は
 再帰が要るためスタックマシン化（既存 SPEC-EXP の B/E マーカー方式を踏襲）。spec-partial(swap) を
 壊さないこと。

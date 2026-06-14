@@ -1190,6 +1190,32 @@ let test_ss_av_seq_static () =
     "('seq . (('ass . (('var . nil) . ('val . 'a))) . ('ass . (('var . nil) . ('var . nil)))))"
     "((('S . nil) . nil) . (('seq . (('ass . (('var . nil) . ('val . 'a))) . ('ass . (('var . nil) . ('var . nil))))) . nil))"
 
+(* var indices: X=0=nil, Y=1=(nil.nil), Z=2=(nil.(nil.nil)) *)
+let rep_yzx = "('rep . (('cons . (('var . (nil . nil)) . ('var . (nil . (nil . nil))))) . ('var . nil)))"
+let swap_cmd =
+  "('seq . (('rep . (('cons . (('var . (nil . nil)) . ('var . (nil . (nil . nil))))) . ('var . nil))) . ('rep . (('var . nil) . ('cons . (('var . (nil . (nil . nil))) . ('var . (nil . nil))))))))"
+
+let test_ss_av_rep_static () =
+  (* cons Y Z <= X with X static ('a.'b): split statically, X consumed, no residual *)
+  check_spec_step_av "rep static split"
+    "(('S . ('a . 'b)) . (('S . nil) . (('S . nil) . nil)))"
+    rep_yzx
+    ("((('D . ('var . nil)) . (('S . 'a) . (('S . 'b) . nil))) . (" ^ rep_yzx ^ " . nil))")
+
+let test_ss_av_swap_static () =
+  (* full swap of a static (a.b) -> static (b.a), fully executed, no residual *)
+  check_spec_step_av "swap static fully executed"
+    "(('S . ('a . 'b)) . (('S . nil) . (('S . nil) . nil)))"
+    swap_cmd
+    ("((('S . ('b . 'a)) . (('D . ('var . (nil . nil))) . (('D . ('var . (nil . (nil . nil)))) . nil))) . (" ^ swap_cmd ^ " . nil))")
+
+let test_ss_av_swap_dynamic () =
+  (* full swap of a dynamic X: both reps residualized (residual = swap itself) *)
+  check_spec_step_av "swap dynamic residualized"
+    "(('D . ('var . nil)) . (('S . nil) . (('S . nil) . nil)))"
+    swap_cmd
+    ("((('D . ('var . nil)) . (('D . ('var . (nil . nil))) . (('D . ('var . (nil . (nil . nil)))) . nil))) . (" ^ swap_cmd ^ " . (('rep . (('var . nil) . ('cons . (('var . (nil . (nil . nil))) . ('var . (nil . nil)))))) . (('rep . (('cons . (('var . (nil . nil)) . ('var . (nil . (nil . nil))))) . ('var . nil))) . nil))))")
+
 (* ===== Test runner ===== *)
 
 let () =
@@ -1274,6 +1300,9 @@ let () =
       Alcotest.test_case "ass residualize" `Quick test_ss_av_ass_residualize;
       Alcotest.test_case "ass dynamic expr" `Quick test_ss_av_ass_dynamic_expr;
       Alcotest.test_case "seq static" `Quick test_ss_av_seq_static;
+      Alcotest.test_case "rep static split" `Quick test_ss_av_rep_static;
+      Alcotest.test_case "swap static fully executed" `Quick test_ss_av_swap_static;
+      Alcotest.test_case "swap dynamic residualized" `Quick test_ss_av_swap_dynamic;
     ];
     "spec-av-exp", [
       Alcotest.test_case "var static" `Quick test_se_av_var_static;

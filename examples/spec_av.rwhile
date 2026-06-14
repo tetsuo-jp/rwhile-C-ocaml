@@ -254,6 +254,132 @@ macro SPEC-EXP-AV-STEP(Cd, Cd', RSt)
   fi =? ETag 'var;
   Cd' <= cons (cons ETag EArg) Cd'
 
+(* ===== AV pattern helpers (for 'rep), ported from spec.rwhile =====
+ * Store slots are AVs: static ('S.v), dynamic ('D.('var.k)).  These handle
+ * 'var, 'val and one level of 'cons (the SIMPLE forms). *)
+
+macro PAT-LEAF-STATIC-AV(PP, Stat)
+  if =? (hd PP) 'var then
+    cons PLStg PLSag <= PP;
+    LOOKUP(Vl, PLSag, PLSsv);
+    Stat ^= =? (hd PLSsv) 'S;
+    PLSsv ^= PLSsv;
+    PP <= cons PLStg PLSag
+  else
+    Stat ^= (nil.nil)
+  fi =? (hd PP) 'var
+
+macro CHECK-PAT-STATIC-AV(PP, Stat)
+  if =? (hd PP) 'cons then
+    cons CPStg CPSag <= PP;
+    cons CPSp1 CPSp2 <= CPSag;
+    PAT-LEAF-STATIC-AV(CPSp1, CPS1);
+    PAT-LEAF-STATIC-AV(CPSp2, CPS2);
+    if CPS1 then
+      if CPS2 then Stat ^= (nil.nil) fi CPS2
+    fi CPS1;
+    CPS1 ^= CPS1;
+    CPS2 ^= CPS2;
+    CPSag <= cons CPSp1 CPSp2;
+    PP <= cons CPStg CPSag
+  else
+    PAT-LEAF-STATIC-AV(PP, Stat)
+  fi =? (hd PP) 'cons
+
+(* PAT-READ-LEAF-AV: read a static leaf value into PV; set 'var slot to dynamic. *)
+macro PAT-READ-LEAF-AV(PP, PV)
+  if =? (hd PP) 'var then
+    cons PRLtg PRLag <= PP;
+    LOOKUP(Vl, PRLag, PRLsv);     (* PRLsv = ('S . v) *)
+    PV ^= tl PRLsv;               (* PV = v *)
+    UPDATE(Vl, PRLag, PRLsv);     (* clear slot to nil *)
+    PRLsv ^= PRLsv;               (* discard old AV *)
+    PRLagc ^= PRLag;
+    PRLsv <= cons 'D (cons 'var PRLagc);
+    UPDATE(Vl, PRLag, PRLsv);     (* slot = ('D.('var.k))  (PRLsv preserved) *)
+    cons PRLdd PRLdr <= PRLsv; PRLdd ^= PRLdd; PRLdr ^= PRLdr;
+    PP <= cons PRLtg PRLag
+  else
+    PV ^= tl PP
+  fi =? (hd PP) 'var
+
+macro PAT-READ-SIMPLE-AV(PP, PV)
+  if =? (hd PP) 'cons then
+    cons PRStg PRSag <= PP;
+    cons PRSp1 PRSp2 <= PRSag;
+    PAT-READ-LEAF-AV(PRSp1, PRSv1);
+    PAT-READ-LEAF-AV(PRSp2, PRSv2);
+    PV <= cons PRSv1 PRSv2;
+    PRSag <= cons PRSp1 PRSp2;
+    PP <= cons PRStg PRSag
+  else
+    PAT-READ-LEAF-AV(PP, PV)
+  fi =? (hd PP) 'cons
+
+(* PAT-WRITE-LEAF-AV: write static value PV into 'var slot as ('S.PV); 'dynamic
+ * marker sets the slot dynamic instead. *)
+macro PAT-WRITE-LEAF-AV(PP, PV)
+  if =? (hd PP) 'var then
+    cons PWLtg PWLag <= PP;
+    LOOKUP(Vl, PWLag, PWLsv);
+    UPDATE(Vl, PWLag, PWLsv);     (* clear slot to nil *)
+    PWLsv ^= PWLsv;
+    IsDyn ^= =? PV 'dynamic;
+    if IsDyn then
+      PWLagc ^= PWLag;
+      PWLsv <= cons 'D (cons 'var PWLagc);
+      UPDATE(Vl, PWLag, PWLsv);
+      cons PWLdd PWLdr <= PWLsv; PWLdd ^= PWLdd; PWLdr ^= PWLdr;
+      PV ^= 'dynamic
+    else
+      PWLsv <= cons 'S PV;        (* slot = ('S . PV) *)
+      UPDATE(Vl, PWLag, PWLsv);
+      cons PWLss PWLsval <= PWLsv; PWLss ^= PWLss; PWLsval ^= PWLsval
+    fi IsDyn;
+    IsDyn ^= IsDyn;
+    PP <= cons PWLtg PWLag
+  else
+    PV ^= PV
+  fi =? (hd PP) 'var
+
+macro PAT-WRITE-SIMPLE-AV(PP, PV)
+  if =? (hd PP) 'cons then
+    cons PWStg PWSag <= PP;
+    cons PWSp1 PWSp2 <= PWSag;
+    cons PWSv1 PWSv2 <= PV;
+    PAT-WRITE-LEAF-AV(PWSp1, PWSv1);
+    PAT-WRITE-LEAF-AV(PWSp2, PWSv2);
+    PWSag <= cons PWSp1 PWSp2;
+    PP <= cons PWStg PWSag
+  else
+    PAT-WRITE-LEAF-AV(PP, PV)
+  fi =? (hd PP) 'cons
+
+macro PAT-CLR-LEAF-AV(PP)
+  if =? (hd PP) 'var then
+    cons PCLtg PCLag <= PP;
+    LOOKUP(Vl, PCLag, PCLsv);
+    UPDATE(Vl, PCLag, PCLsv);
+    PCLsv ^= PCLsv;
+    PCLagc ^= PCLag;
+    PCLsv <= cons 'D (cons 'var PCLagc);
+    UPDATE(Vl, PCLag, PCLsv);
+    cons PCLdd PCLdr <= PCLsv; PCLdd ^= PCLdd; PCLdr ^= PCLdr;
+    PP <= cons PCLtg PCLag
+  fi =? (hd PP) 'var
+
+macro PAT-CLR-SIMPLE-AV(PP)
+  if =? (hd PP) 'cons then
+    cons PCStg PCSag <= PP;
+    cons PCSp1 PCSp2 <= PCSag;
+    PAT-CLR-LEAF-AV(PCSp1);
+    PAT-CLR-LEAF-AV(PCSp2);
+    PCSag <= cons PCSp1 PCSp2;
+    PP <= cons PCStg PCSag
+  else
+    PAT-CLR-LEAF-AV(PP)
+  fi =? (hd PP) 'cons
+
 (* ===== AV-based command specializer (WIP: 'seq and 'ass) =====
  * SPEC-STEP-AV processes one command; residual commands accumulate in RCode
  * (reverse order).  Store slots are AVs; a dynamic slot is ('D.('var.k)). *)
@@ -319,20 +445,40 @@ macro SPEC-STEP-AV(Cd, Cd', RCode)
     ExpS ^= ExpS;
     Arg <= cons (cons 'var K) E
   else
-   if =? Tag 'seq then
-     Tag ^= 'seq; Tag ^= 'seqB;
-     cons C D <= Arg;
-     Cd <= cons C (cons D (cons ('seqE . nil) Cd));
-     C ^= C; D ^= D
+   if =? Tag 'rep then
+     cons RpQ RpR <= Arg;
+     CHECK-PAT-STATIC-AV(RpR, RpStat);
+     if RpStat then
+       (* all RHS vars static: execute the replacement at PE time *)
+       PAT-READ-SIMPLE-AV(RpR, RpVal);
+       PAT-WRITE-SIMPLE-AV(RpQ, RpVal)
+     else
+       (* some RHS var dynamic: residualize Q <= R, mark all vars dynamic *)
+       Arg <= cons RpQ RpR;
+       Crep ^= Arg;
+       RCode <= cons (cons 'rep Crep) RCode;
+       cons RpQ RpR <= Arg;
+       PAT-CLR-SIMPLE-AV(RpQ);
+       PAT-CLR-SIMPLE-AV(RpR)
+     fi RpStat;
+     RpStat ^= RpStat;
+     Arg <= cons RpQ RpR
    else
-    if =? Tag 'seqE then
-      Tag ^= 'seqE; Tag ^= 'seq;
-      cons D (cons C (cons ('seqB . nil) Cd')) <= Cd';
-      Arg <= cons C D
+    if =? Tag 'seq then
+      Tag ^= 'seq; Tag ^= 'seqB;
+      cons C D <= Arg;
+      Cd <= cons C (cons D (cons ('seqE . nil) Cd));
+      C ^= C; D ^= D
     else
-      'error <= '1
-    fi =? Tag 'seq
-   fi =? Tag 'seqB
+     if =? Tag 'seqE then
+       Tag ^= 'seqE; Tag ^= 'seq;
+       cons D (cons C (cons ('seqB . nil) Cd')) <= Cd';
+       Arg <= cons C D
+     else
+       'error <= '1
+     fi =? Tag 'seq
+    fi =? Tag 'seqB
+   fi =? Tag 'rep
   fi =? Tag 'ass;
   Cd' <= cons (cons Tag Arg) Cd'
 
