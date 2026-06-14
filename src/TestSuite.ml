@@ -1075,6 +1075,34 @@ let test_av_lift_nested () =
     "('lift . ('C . (('S . 'a) . ('C . (('S . 'b) . ('D . ('var . nil)))))))"
     "('cons . (('val . 'a) . ('cons . (('val . 'b) . ('var . nil)))))"
 
+(* ===== Garbage / size measurement (Stage A) ===== *)
+
+(* Assert a value's node count is within [limit] (regression guard on residual /
+ * garbage size for the projection demos). *)
+let assert_size_at_most name limit v =
+  let n = EvalRwhile.count_nodes v in
+  Alcotest.(check bool) (Printf.sprintf "%s: nodes %d <= %d" name n limit) true (n <= limit)
+
+let test_count_nodes () =
+  Alcotest.(check int) "nil = 1 node" 1 (EvalRwhile.count_nodes VNil);
+  Alcotest.(check int) "atom = 1 node" 1 (EvalRwhile.count_nodes (atom "'a"));
+  Alcotest.(check int) "('a.'b) = 3 nodes" 3 (EvalRwhile.count_nodes (parse_val "('a . 'b)"));
+  Alcotest.(check int) "[a,b,c] = 7 nodes" 7
+    (EvalRwhile.count_nodes (parse_val "('a . ('b . ('c . nil)))"));
+  (* list-sugar input is desugared, so it counts the same as the cons form *)
+  Alcotest.(check int) "['a,'b,'c] desugars to 7 nodes" 7
+    (EvalRwhile.count_nodes (EvalRwhile.desugar_val (parse_val "['a, 'b, 'c]")))
+
+(* Record (and guard) the garbage size of the currently-green spec-partial demo
+ * [[spec]((swap.'a))] — its residual program-as-data. *)
+let test_stats_spec_partial_residual () =
+  let spec = parse_file_program (examples_dir ^ "/spec.rwhile") in
+  let swap_data = Program2DataRwhile.program2data
+    (parse_file_program (examples_dir ^ "/swap.rwhile")) in
+  let residual = EvalRwhile.evalProgram spec
+    (VCons (swap_data, VCons (atom "'partial", atom "'a"))) in
+  assert_size_at_most "spec-partial(swap) residual" 200 residual
+
 (* ===== Test runner ===== *)
 
 let () =
@@ -1149,6 +1177,10 @@ let () =
       Alcotest.test_case "macro minus" `Quick test_eval_macro_minus;
       Alcotest.test_case "reversibility" `Quick test_eval_reversibility;
       Alcotest.test_case "non-cleared fails" `Quick test_eval_non_cleared_fails;
+    ];
+    "stats", [
+      Alcotest.test_case "count_nodes" `Quick test_count_nodes;
+      Alcotest.test_case "spec-partial residual size" `Quick test_stats_spec_partial_residual;
     ];
     "av-algebra", [
       Alcotest.test_case "hd static" `Quick test_av_hd_static;

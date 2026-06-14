@@ -168,6 +168,16 @@ let rec update (x, vx) = function
 
 let all_cleared (s : store) = for_all (fun (_, v) -> v = VNil) s
 
+(* Size of a value tree: total number of nodes (VNil/VAtom leaves and VCons
+ * internal nodes).  Used by the -stats flag and tests to measure residual /
+ * garbage sizes for the Futamura-projection demos (see
+ * plan_reversible_projections_impl.md Stage A). *)
+let rec count_nodes = function
+  | VNil -> 1
+  | VAtom _ -> 1
+  | VCons (a, b) -> 1 + count_nodes a + count_nodes b
+  | VList vs -> 1 + List.fold_left (fun acc v -> acc + count_nodes v) 0 vs
+
 (* プログラム中に使用されている変数名を列挙する。 *)
 let rec varProgram (Prog (ms, x, c, y)) = insert x (insert y (varCom c))
 

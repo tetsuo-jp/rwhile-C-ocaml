@@ -15,6 +15,7 @@ let () =
   let f_inv = ref false in
   let f_p2d = ref false in
   let f_exp = ref false in
+  let f_stats = ref false in
   Arg.parse
     [("-inverse", Arg.Set f_inv,  "inversion");
      ("-p2d",     Arg.Set f_p2d,  "translation from programs to data");
@@ -26,10 +27,12 @@ let () =
      ("-array",   Arg.Set EvalRwhile.enable_array,
       "extension: array index operations  (A[I] ^= E  /  get A[I])");
      ("-llm-errors", Arg.Set EvalRwhile.llm_errors,
-      "emit structured, machine-/LLM-friendly error messages")]
+      "emit structured, machine-/LLM-friendly error messages");
+     ("-stats",   Arg.Set f_stats,
+      "after evaluation, print result size (node count / bytes) to stderr")]
     (fun s -> files := !files @ [s])
     ("R-WHILE Interpreter (C) Tetsuo Yokoyama\n" ^
-       Printf.sprintf "usage: %s [-inverse] [-p2d] [-exp] [-local] [-autofi] [-array] [-llm-errors] program [data]"
+       Printf.sprintf "usage: %s [-inverse] [-p2d] [-exp] [-local] [-autofi] [-array] [-llm-errors] [-stats] program [data]"
          Sys.argv.(0));
   match !files with
   | [prog_filename] ->
@@ -49,7 +52,11 @@ let () =
      let data = parseValT channel in 
      let _ = close_in channel in
      (try
-        print_endline (showValT (EvalRwhile.evalProgram prog data))
+        let result = EvalRwhile.evalProgram prog data in
+        print_endline (showValT result);
+        if !f_stats then
+          Printf.eprintf "[RWHILE-STATS] nodes=%d bytes=%d\n%!"
+            (EvalRwhile.count_nodes result) (String.length (showValT result))
       with
       | Failure str ->
          (* eval_error already produced the structured block in LLM mode. *)
