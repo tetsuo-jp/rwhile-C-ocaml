@@ -217,7 +217,20 @@ SPEC-EXP-AV で既に動作）に使い、純動的データ移動は rep ごと
 これは論文 §6 のゴミ解析（コマンド構造を保持）とも整合。symbolic 'rep（C2）は撤回し structural+
 入力分割特例に作り直す。
 
-### ステップ C3（改訂）: structural 'rep ＋ spec_av main ＋ fp1
+### ステップ C3 追検証（2026-06-14）: symbolic+combine も不正と確定
+symbolic を活かせるか、`MAKE-SEQ` を追加し残余を「MAKE-SEQ(RCode)＋出力 rep」に結合して
+`comp=[spec_av]((ri_fp3.id))` を生成 → `[ri]((comp.'a))` を実行したところ **error in update**
+（comp が不正：ri の DynVal にプログラム断片が乗る）。**symbolic 方式は fp1 のきれいな残余を
+生成しないと実機で確定**（2度目の確認）。MAKE-SEQ 自体は有用なので残置。
+
+確定した本筋（structural）：
+- 'rep は **static→PE実行 / 動的→残余化** の構造的方式に戻す（commit 8553800 の版）。
+- 入力分割 `cons Prog Data <= V0`（V0='C＝静的prog＋動的data）は **main で peel 特例**：
+  Prog を静的設定、Data 半を残余 rep `Data <= ReadVar` で移動（spec.rwhile の peel を AV へ移植）。
+- 静的ディスパッチ解決（cond/eq）は SPEC-EXP-AV で既に動作。
+これで残余は RCode 1本（コマンド構造保持＝論文§6整合）になり、出力 AV 分裂を回避。
+
+### ステップ C3（改訂）: structural 'rep ＋ 入力 peel ＋ spec_av main ＋ fp1
 spec_av に main（入力 `(ri_fp3 . src)` → V0 slot = `('C.(('S.src).('D.('var.0))))` を設定 → SPEC-CMD-AV →
 残余プログラム組み立て）を整え、`comp = [spec_av]((ri_fp3 . src))` を実行。`check_first_projection` を
 ri_fp3＋spec_av に向け green に。injectivity 用の符号埋め込みは機能的正しさ確認後。まず `av.rwhile` の AV 演算を

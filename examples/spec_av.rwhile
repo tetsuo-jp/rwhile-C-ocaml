@@ -193,6 +193,21 @@ macro AV-EQ(A1, A2, R)
   CBothS ^= CBothS;
   BothS ^= BothS
 
+(* MAKE-SEQ(RCode, Cmd): fold a reverse-ordered residual list into one 'seq
+ * command (execution order = oldest first). RCode must be non-empty. *)
+macro MAKE-SEQ(RCode, Cmd)
+  from (=? Cmd nil) loop
+    cons MsC RCode <= RCode;
+    MsNil ^= =? Cmd nil;
+    if =? Cmd nil then
+      Cmd ^= MsC
+    else
+      Cmd <= cons 'seq (cons MsC Cmd)
+    fi MsNil;
+    MsNil ^= MsNil;
+    MsC ^= MsC
+  until (=? RCode nil)
+
 (* ===== AV-based expression specializer ===== *)
 
 (* SPEC-EXP-AV(E, RE): RE := AV result of specializing expression E against the
