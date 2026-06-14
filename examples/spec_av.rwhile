@@ -115,34 +115,34 @@ macro AV-LIFT(A, Code)
   cons Code nil <= RSt
 
 macro AV-LIFT-STEP(Wk, Wk', RSt)
-  cons (cons Tag Pay) Wk <= Wk;
-  if =? Tag 'S then
-    PayC ^= Pay;
-    RSt <= cons (cons 'val PayC) RSt
+  cons (cons LfTag LfPay) Wk <= Wk;
+  if =? LfTag 'S then
+    LfPayC ^= LfPay;
+    RSt <= cons (cons 'val LfPayC) RSt
   else
-   if =? Tag 'D then
-     PayC ^= Pay;
-     RSt <= cons PayC RSt
+   if =? LfTag 'D then
+     LfPayC ^= LfPay;
+     RSt <= cons LfPayC RSt
    else
-    if =? Tag 'C then
-      Tag ^= 'C; Tag ^= 'CB;
-      cons LfX LfY <= Pay;
+    if =? LfTag 'C then
+      LfTag ^= 'C; LfTag ^= 'CB;
+      cons LfX LfY <= LfPay;
       Wk <= cons LfX (cons LfY (cons ('CE . nil) Wk));
       LfX ^= LfX; LfY ^= LfY
     else
-     if =? Tag 'CE then
-       Tag ^= 'CE; Tag ^= 'C;
+     if =? LfTag 'CE then
+       LfTag ^= 'CE; LfTag ^= 'C;
        cons LfY (cons LfX (cons ('CB . nil) Wk')) <= Wk';
-       Pay <= cons LfX LfY;
+       LfPay <= cons LfX LfY;
        cons LfQ (cons LfP RSt) <= RSt;
        RSt <= cons (cons 'cons (cons LfP LfQ)) RSt
      else
        'error <= '9
-     fi =? Tag 'C
-    fi =? Tag 'CB
-   fi =? Tag 'D
-  fi =? Tag 'S;
-  Wk' <= cons (cons Tag Pay) Wk'
+     fi =? LfTag 'C
+    fi =? LfTag 'CB
+   fi =? LfTag 'D
+  fi =? LfTag 'S;
+  Wk' <= cons (cons LfTag LfPay) Wk'
 
 macro AV-EQ(A1, A2, R)
   cons T1 V1 <= A1;
@@ -254,7 +254,100 @@ macro SPEC-EXP-AV-STEP(Cd, Cd', RSt)
   fi =? ETag 'var;
   Cd' <= cons (cons ETag EArg) Cd'
 
-(* ===== Main program (test harness for SPEC-EXP-AV) ===== *)
+(* ===== AV-based command specializer (WIP: 'seq and 'ass) =====
+ * SPEC-STEP-AV processes one command; residual commands accumulate in RCode
+ * (reverse order).  Store slots are AVs; a dynamic slot is ('D.('var.k)). *)
+macro SPEC-STEP-AV(Cd, Cd', RCode)
+  cons (cons Tag Arg) Cd <= Cd;
+  if =? Tag 'ass then
+    cons (cons 'var K) E <= Arg;
+    SPEC-EXP-AV(E, RE);
+    cons TRE VRE <= RE;            (* RE -> TRE, VRE  (RE = nil) *)
+    ExpS ^= =? TRE 'S;
+    if ExpS then
+      (* static expression value VRE *)
+      LOOKUP(Vl, K, AVx);
+      UPDATE(Vl, K, AVx);          (* AVx = old slot; slot = nil *)
+      cons TAVx VAVx <= AVx;       (* AVx -> TAVx, VAVx  (AVx = nil) *)
+      if =? TAVx 'S then
+        (* static variable: reversible update of VAVx with VRE *)
+        NewV ^= VRE;
+        CKNil ^= =? VAVx nil;
+        if =? VAVx nil then
+          VAVx ^= NewV
+        else
+          CKNew ^= =? VAVx NewV;
+          if =? VAVx NewV then
+            VAVx ^= NewV; VAVx ^= nil; NewV ^= VRE
+          else
+            if =? NewV nil then NewV ^= VRE else 'error <= '10 fi =? NewV VRE
+          fi CKNew;
+          CKNew ^= CKNew
+        fi CKNil;
+        CKNil ^= CKNil;
+        NewV ^= NewV;
+        AVx <= cons TAVx VAVx;     (* reassemble ('S . VAVx') *)
+        UPDATE(Vl, K, AVx)         (* slot = new AV  (AVx preserved) *)
+      else
+        (* dynamic/partial variable, static expr: restore slot, residualize *)
+        AVx <= cons TAVx VAVx;
+        UPDATE(Vl, K, AVx);        (* slot unchanged  (AVx preserved) *)
+        KK ^= K;
+        VREc ^= VRE;
+        RCode <= cons (cons 'ass (cons (cons 'var KK) (cons 'val VREc))) RCode
+      fi =? (hd AVx) 'S;
+      cons TAVx VAVx <= AVx;       (* re-split AVx -> clear  (AVx = nil) *)
+      TAVx ^= TAVx; VAVx ^= VAVx;
+      VRE ^= VRE;
+      TRE ^= 'S
+    else
+      (* dynamic or partial expr: residualize X ^= lift(RE); slot -> dynamic *)
+      RE <= cons TRE VRE;          (* reassemble RE *)
+      AV-LIFT(RE, LE);             (* AV-LIFT preserves RE *)
+      RE ^= RE;
+      LOOKUP(Vl, K, AVx);
+      UPDATE(Vl, K, AVx);          (* slot = nil; AVx = old *)
+      AVx ^= AVx;                  (* discard old AV *)
+      KKc ^= K;
+      AVx <= cons 'D (cons 'var KKc);
+      UPDATE(Vl, K, AVx);          (* slot = ('D.('var.K))  (AVx preserved) *)
+      cons TD AVxR <= AVx;         (* re-split -> clear AVx *)
+      TD ^= TD; AVxR ^= AVxR;
+      KK ^= K;
+      RCode <= cons (cons 'ass (cons (cons 'var KK) LE)) RCode
+    fi ExpS;
+    ExpS ^= ExpS;
+    Arg <= cons (cons 'var K) E
+  else
+   if =? Tag 'seq then
+     Tag ^= 'seq; Tag ^= 'seqB;
+     cons C D <= Arg;
+     Cd <= cons C (cons D (cons ('seqE . nil) Cd));
+     C ^= C; D ^= D
+   else
+    if =? Tag 'seqE then
+      Tag ^= 'seqE; Tag ^= 'seq;
+      cons D (cons C (cons ('seqB . nil) Cd')) <= Cd';
+      Arg <= cons C D
+    else
+      'error <= '1
+    fi =? Tag 'seq
+   fi =? Tag 'seqB
+  fi =? Tag 'ass;
+  Cd' <= cons (cons Tag Arg) Cd'
+
+(* SPEC-CMD-AV(Cmd): run SPEC-STEP-AV over Cmd; residual left in RCode; Cmd is
+ * consumed into the work stack and reconstructed from the shell at the end. *)
+macro SPEC-CMD-AV(Cmd)
+  Cd <= cons Cmd nil;
+  from (=? Cd' nil) loop
+    SPEC-STEP-AV(Cd, Cd', RCode)
+  until (=? Cd nil);
+  cons Cmd nil <= Cd'
+
+(* ===== Main program ===== *)
+(* Default main: a test harness for SPEC-EXP-AV; input (Vl . E), output
+ * (Vl . (E . RE)).  (Other harnesses are injected via parse_macro_harness.) *)
 
 read In;
   cons Vl E <= In;

@@ -1152,6 +1152,44 @@ let test_se_av_eq_static_resolves () =
   check_spec_exp_av "eq static var/literal -> static true"
     "('eq . (('var . nil) . ('val . 'a)))" "('S . (nil . nil))"
 
+(* ===== AV-based SPEC-STEP (Stage B step 3: 'seq, 'ass) =====
+ * Harness: input (Vl . Cmd), output (Vl' . (Cmd . RCode)). *)
+let check_spec_step_av name vl_str cmd_str expected_str =
+  let prog = parse_macro_harness (examples_dir ^ "/spec_av.rwhile")
+    "read In; cons Vl Cmd <= In; SPEC-CMD-AV(Cmd); Out <= cons Vl (cons Cmd RCode); write Out" in
+  let out = EvalRwhile.evalProgram prog (pair (parse_val vl_str) (parse_val cmd_str)) in
+  Alcotest.(check valT_testable) name (parse_val expected_str) out
+
+let test_ss_av_ass_static_exec () =
+  (* var0 static-nil, "var0 ^= 'a" -> executed statically, slot becomes ('S.'a),
+   * no residual *)
+  check_spec_step_av "ass static execution"
+    "(('S . nil) . nil)"
+    "('ass . (('var . nil) . ('val . 'a)))"
+    "((('S . 'a) . nil) . (('ass . (('var . nil) . ('val . 'a))) . nil))"
+
+let test_ss_av_ass_residualize () =
+  (* var0 dynamic, "var0 ^= 'a" -> residualized as var0 ^= (val 'a) *)
+  check_spec_step_av "ass residualize (dynamic var)"
+    "(('D . ('var . nil)) . nil)"
+    "('ass . (('var . nil) . ('val . 'a)))"
+    "((('D . ('var . nil)) . nil) . (('ass . (('var . nil) . ('val . 'a))) . (('ass . (('var . nil) . ('val . 'a))) . nil)))"
+
+let test_ss_av_ass_dynamic_expr () =
+  (* var0 static-nil, "var0 ^= var1" with var1 dynamic -> residualized and var0
+   * promoted to dynamic *)
+  check_spec_step_av "ass dynamic expr promotes var"
+    "(('S . nil) . (('D . ('var . (nil . nil))) . nil))"
+    "('ass . (('var . nil) . ('var . (nil . nil))))"
+    "((('D . ('var . nil)) . (('D . ('var . (nil . nil))) . nil)) . (('ass . (('var . nil) . ('var . (nil . nil)))) . (('ass . (('var . nil) . ('var . (nil . nil)))) . nil)))"
+
+let test_ss_av_seq_static () =
+  (* seq of two static assignments, both executed statically (no residual) *)
+  check_spec_step_av "seq static execution"
+    "(('S . nil) . nil)"
+    "('seq . (('ass . (('var . nil) . ('val . 'a))) . ('ass . (('var . nil) . ('var . nil)))))"
+    "((('S . nil) . nil) . (('seq . (('ass . (('var . nil) . ('val . 'a))) . ('ass . (('var . nil) . ('var . nil))))) . nil))"
+
 (* ===== Test runner ===== *)
 
 let () =
@@ -1230,6 +1268,12 @@ let () =
     "stats", [
       Alcotest.test_case "count_nodes" `Quick test_count_nodes;
       Alcotest.test_case "spec-partial residual size" `Quick test_stats_spec_partial_residual;
+    ];
+    "spec-av-step", [
+      Alcotest.test_case "ass static execution" `Quick test_ss_av_ass_static_exec;
+      Alcotest.test_case "ass residualize" `Quick test_ss_av_ass_residualize;
+      Alcotest.test_case "ass dynamic expr" `Quick test_ss_av_ass_dynamic_expr;
+      Alcotest.test_case "seq static" `Quick test_ss_av_seq_static;
     ];
     "spec-av-exp", [
       Alcotest.test_case "var static" `Quick test_se_av_var_static;

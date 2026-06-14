@@ -130,9 +130,18 @@ SPEC-EXP-AV は SPEC-EXP と同型のスタックマシンで、各結合を AV 
 最後の例が重要：`=? Tag 'ass` 系のディスパッチが静的に解決されることを意味し、ri_fp3 の過剰残余化が
 解ける見込み。
 
+### ステップ3 着手（2026-06-14）: AV 版 SPEC-STEP の 'seq / 'ass 完成 ✅
+`spec_av.rwhile` に `SPEC-STEP-AV`（+ ループ駆動 `SPEC-CMD-AV`）を実装。'seq は構造、'ass は
+spec.rwhile の束縛時ロジックを AV へ移植：静的式×静的変数→静的 rupdate（残余なし）、動的/部分静的式
+→ `X ^= lift(RE)` を残余化し変数を動的化。`spec-av-step` 群4件 green（静的実行／残余化／動的式での変数
+動的化／seq）。
+ハイジーン教訓（再）: `AV-LIFT-STEP` の内部 `Tag/Pay/PayC` が SPEC-STEP-AV のコマンドタグ `Tag` と
+衝突 → `LfTag/LfPay/LfPayC` に改名。また `parse_macro_harness` は厳密マーカー
+`(* ===== Main program ===== *)` を要求。
+
 ### 次の一手
-ステップ3: `SPEC-STEP`（コマンド: ass/rep/cond/loop）を AV 対応に。cond/loop のテスト AV が `'S` なら
-分岐確定、`'D` なら residual。`spec_av.rwhile` を育て、spec-partial 相当（swap）が AV 版で通ることを確認。まず `av.rwhile` の AV 演算を
+ステップ3 続き: 'rep（パターン読み書き、静的/動的）、'cond / 'loop（テスト AV が 'S なら分岐確定、'D なら
+residual）を AV 化。揃ったら swap を AV 版でエンドツーエンド特殊化（部分静的入力）し spec-partial 相当を確認。まず `av.rwhile` の AV 演算を
 spec.rwhile に取り込み、SPEC-EXP の var/val/cons/hd/tl/eq を AV 規則へ。LIFT と eq の全静的判定は
 再帰が要るためスタックマシン化（既存 SPEC-EXP の B/E マーカー方式を踏襲）。spec-partial(swap) を
 壊さないこと。
