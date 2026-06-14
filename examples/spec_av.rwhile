@@ -483,6 +483,41 @@ macro PAT-WRITE-AV(P, WA)
     PAT-WRITE-LEAF-AV2(P, WA)
   fi =? (hd P) 'cons
 
+(* ===== Structural AV pattern write (Stage C, for fp1) =====
+ * Write AV WA into pattern P, residualizing into RCode the ONE case that cannot
+ * be done reversibly in the AV domain: splitting a *pure dynamic* value into a
+ * cons pattern (symbolic hd/tl would read the dynamic value twice = irreversible).
+ *  - P var/val leaf      -> slot := WA (alias / static), no residual.
+ *  - P cons, WA cons-shaped ('C / 'S-cons) -> AV-UNCONS + write components,
+ *    no residual (this is the partially-static INPUT SPLIT: static parts kept).
+ *  - P cons, WA pure 'D leaf -> emit residual `P <= <code of WA>` and set P's
+ *    vars dynamic.  The residual reuses the source variable indices carried by
+ *    the 'D marker (same namespace as residualized 'ass), so no fresh allocator.
+ * One-level on the cons LHS, like PAT-WRITE-SIMPLE-AV (macros cannot recurse). *)
+macro PAT-WRITE-STRUCT(P, WA, RCode)
+  if =? (hd P) 'cons then
+    WSisD ^= =? (hd WA) 'D;
+    if WSisD then
+      (* dynamic cons-split: residualize the rep, set P's vars dynamic *)
+      cons WSt WScode <= WA;            (* WA = ('D . code); WA -> nil *)
+      WSt ^= 'D;
+      PAT-CLR-SIMPLE-AV(P);             (* P's vars -> ('D.('var.k)); P preserved *)
+      WSPc ^= P;                        (* copy P for the residual LHS *)
+      RCode <= cons (cons 'rep (cons WSPc WScode)) RCode
+    else
+      cons WStg WSag <= P;
+      cons WSp1 WSp2 <= WSag;
+      AV-UNCONS(WA, WSa1, WSa2);        (* WA is 'C or 'S here: real split *)
+      PAT-WRITE-LEAF-AV2(WSp1, WSa1);
+      PAT-WRITE-LEAF-AV2(WSp2, WSa2);
+      WSag <= cons WSp1 WSp2;
+      P <= cons WStg WSag
+    fi WSisD;
+    WSisD ^= WSisD
+  else
+    PAT-WRITE-LEAF-AV2(P, WA)
+  fi =? (hd P) 'cons
+
 (* ===== AV-based command specializer (WIP: 'seq and 'ass) =====
  * SPEC-STEP-AV processes one command; residual commands accumulate in RCode
  * (reverse order).  Store slots are AVs; a dynamic slot is ('D.('var.k)). *)
@@ -555,7 +590,7 @@ macro SPEC-STEP-AV(Cd, Cd', RCode)
       * part, and a fully-dynamic value flows symbolically (lifted at output). *)
      cons RpQ RpR <= Arg;
      PAT-READ-AV(RpR, RpAV);
-     PAT-WRITE-AV(RpQ, RpAV);
+     PAT-WRITE-STRUCT(RpQ, RpAV, RCode);
      Arg <= cons RpQ RpR
    else
     if =? Tag 'cond then

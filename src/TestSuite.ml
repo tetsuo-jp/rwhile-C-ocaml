@@ -1338,12 +1338,16 @@ let test_ss_av_swap_static () =
     "((('S . ('b . 'a)) . (('S . nil) . (('S . nil) . nil))) . nil)"
 
 let test_ss_av_swap_dynamic () =
-  (* full swap of a dynamic X: tracked symbolically as (tl X . hd X), no residual
-   * (the residual is produced when the result is lifted at output time) *)
-  check_spec_step_av "swap dynamic symbolic"
+  (* full swap of a dynamic X (structural Stage-C 'rep): the first rep
+   * `cons Y Z <= X` cannot split a pure-dynamic X reversibly, so it RESIDUALIZES
+   * (== rep_yzx) and makes Y,Z dynamic; the second rep `X <= cons Z Y` then
+   * rebinds X to the partial cons ('C.((D Z).(D Y))) with no residual. So the
+   * store ends X=('C.((D var2).(D var1))), Y=Z=('S.nil), and RCode=[rep_yzx]. *)
+  check_spec_step_av "swap dynamic structural"
     "(('D . ('var . nil)) . (('S . nil) . (('S . nil) . nil)))"
     swap_cmd
-    "((('C . (('D . ('tl . ('var . nil))) . ('D . ('hd . ('var . nil))))) . (('S . nil) . (('S . nil) . nil))) . nil)"
+    ("((('C . (('D . ('var . (nil . (nil . nil)))) . ('D . ('var . (nil . nil))))) . (('S . nil) . (('S . nil) . nil))) . ("
+     ^ rep_yzx ^ " . nil))")
 
 (* ===== Test runner ===== *)
 
@@ -1439,7 +1443,7 @@ let () =
       Alcotest.test_case "rep static split" `Quick test_ss_av_rep_static;
       Alcotest.test_case "rep partial-static input split" `Quick test_ss_av_rep_input_split;
       Alcotest.test_case "swap static fully executed" `Quick test_ss_av_swap_static;
-      Alcotest.test_case "swap dynamic symbolic" `Quick test_ss_av_swap_dynamic;
+      Alcotest.test_case "swap dynamic structural" `Quick test_ss_av_swap_dynamic;
       Alcotest.test_case "cond static true" `Quick test_ss_av_cond_static_true;
       Alcotest.test_case "cond static false" `Quick test_ss_av_cond_static_false;
       Alcotest.test_case "cond dynamic" `Quick test_ss_av_cond_dynamic;
