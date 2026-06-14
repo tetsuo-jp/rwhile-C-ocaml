@@ -158,9 +158,21 @@ Stage C の課題として後回し。これにより condCleanS の難しいシ
 動的テスト→test を AV-LIFT して whole-cond を残余化。`spec-av-step` 群10件 green（cond static-true/false/dynamic 含む）。
 これが fp1 のディスパッチ解決（`=? Tag 'ass` 系の静的 cond が枝に解決）の核心。
 
-### 次の一手
-ステップ3 残り: 'loop（静的展開／動的残余化）。これが最も複雑（spec.rwhile の l1E/l2E... 状態機械）。
-揃ったら Stage C（fp1: `[spec_av]((ri_fp3 . src))`）へ。まず `av.rwhile` の AV 演算を
+### ステップ3 完了（2026-06-14）: 'loop 完成 → **Stage B 完了** ✅
+'loop を継続（'lcheck）による静的展開で実装：静的 entry（true）→ D を積み 'lcheck で exit 判定、
+exit 静的 false → L,D を積み再度 'lcheck（後退辺）、exit 静的 true → 終了。これを SPEC-CMD-AV の
+ループ駆動が回して**静的にアンロール**。動的 entry → entry test を lift して whole-loop 残余化。
+`spec-av-step` 群12件 green（loop static-unroll / dynamic 含む）。検証した静的カウントループは
+I:nil→(nil.nil) に展開され残余なし。
+
+**Stage B（spec コアの partially-static 化）完了**：AV版 SPEC-EXP ＋ SPEC-STEP（seq/ass/rep/cond/loop）が
+全て動作。AV 特殊化器がコア R-WHILE で機能的に完備。
+
+### 次の一手（Stage C: 第1射影 fp1）
+spec_av.rwhile に main（入力設定＋出力組み立て）を整え、`comp = [spec_av]((ri_fp3 . src))` を実行。
+ri_fp3 の read 変数を partially-static（prog 静的・data 動的）で与え、ディスパッチ/ループが静的解決され
+残余が縮約されることを確認 → `check_first_projection` を ri_fp3＋spec_av に向け green に。
+（injectivity 用の元プログラム符号埋め込みは fp1 の機能的正しさ確認後に追加。）まず `av.rwhile` の AV 演算を
 spec.rwhile に取り込み、SPEC-EXP の var/val/cons/hd/tl/eq を AV 規則へ。LIFT と eq の全静的判定は
 再帰が要るためスタックマシン化（既存 SPEC-EXP の B/E マーカー方式を踏襲）。spec-partial(swap) を
 壊さないこと。

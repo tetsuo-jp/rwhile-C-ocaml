@@ -1206,6 +1206,21 @@ let test_ss_av_cond_dynamic () =
     "(('D . ('var . nil)) . (('S . nil) . nil))" cond_cmd
     ("((('D . ('var . nil)) . (('S . nil) . nil)) . (" ^ cond_cmd ^ " . nil))")
 
+(* counting loop: from =? I nil do (var2 ^= nil) loop I <= cons nil I until =? I (nil.nil)
+ * with I = var0, var2 = var index (nil.nil) *)
+let loop_cmd =
+  "('loop . (('eq . (('var . nil) . ('val . nil))) . (('ass . (('var . (nil . nil)) . ('val . nil))) . (('rep . (('var . nil) . ('cons . (('val . nil) . ('var . nil))))) . (('eq . (('var . nil) . ('val . (nil . nil)))) . nil)))))"
+let test_ss_av_loop_static_unroll () =
+  (* I static-nil: loop unrolls once (I -> (nil.nil)), no residual *)
+  check_spec_step_av "loop static unroll"
+    "(('S . nil) . (('S . nil) . (('S . nil) . nil)))" loop_cmd
+    "((('S . (nil . nil)) . (('S . nil) . (('S . nil) . nil))) . nil)"
+let test_ss_av_loop_dynamic () =
+  (* I dynamic: residualize the whole loop (entry test lifted, == original here) *)
+  check_spec_step_av "loop dynamic residualized"
+    "(('D . ('var . nil)) . (('S . nil) . (('S . nil) . nil)))" loop_cmd
+    ("((('D . ('var . nil)) . (('S . nil) . (('S . nil) . nil))) . (" ^ loop_cmd ^ " . nil))")
+
 (* var indices: X=0=nil, Y=1=(nil.nil), Z=2=(nil.(nil.nil)) *)
 let rep_yzx = "('rep . (('cons . (('var . (nil . nil)) . ('var . (nil . (nil . nil))))) . ('var . nil)))"
 let swap_cmd =
@@ -1323,6 +1338,8 @@ let () =
       Alcotest.test_case "cond static true" `Quick test_ss_av_cond_static_true;
       Alcotest.test_case "cond static false" `Quick test_ss_av_cond_static_false;
       Alcotest.test_case "cond dynamic" `Quick test_ss_av_cond_dynamic;
+      Alcotest.test_case "loop static unroll" `Quick test_ss_av_loop_static_unroll;
+      Alcotest.test_case "loop dynamic" `Quick test_ss_av_loop_dynamic;
     ];
     "spec-av-exp", [
       Alcotest.test_case "var static" `Quick test_se_av_var_static;

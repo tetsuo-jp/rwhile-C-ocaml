@@ -495,20 +495,77 @@ macro SPEC-STEP-AV(Cd, Cd', RCode)
       fi AnnT;
       AnnT ^= AnnT
     else
-     if =? Tag 'seq then
-       Tag ^= 'seq; Tag ^= 'seqB;
-       cons C D <= Arg;
-       Cd <= cons C (cons D (cons ('seqE . nil) Cd));
-       C ^= C; D ^= D
+     if =? Tag 'loop then
+       (* loop = ('loop . (E . (D . (L . (F . nil))))).  Static control unrolls
+        * via an 'lcheck continuation; dynamic control residualizes the loop. *)
+       cons LpE (cons LpD (cons LpL (cons LpF nil))) <= Arg;
+       SPEC-EXP-AV(LpE, LpRE);
+       cons LpTE LpVE <= LpRE;
+       LpCEs ^= =? LpTE 'S;
+       if LpCEs then
+         if LpVE then
+           (* static entry true: run D, then check exit via 'lcheck *)
+           LpEc ^= LpE; LpDc ^= LpD; LpLc ^= LpL; LpFc ^= LpF;
+           LpDp ^= LpD;
+           Cd <= cons LpDp (cons (cons 'lcheck (cons LpEc (cons LpDc (cons LpLc (cons LpFc nil))))) Cd);
+           LpE ^= LpE; LpD ^= LpD; LpL ^= LpL; LpF ^= LpF
+         else
+           'error <= '40
+         fi LpVE;
+         LpVE ^= LpVE;
+         LpTE ^= 'S
+       else
+         (* dynamic entry test: residualize whole loop (entry test lifted) *)
+         LpRE <= cons LpTE LpVE;
+         AV-LIFT(LpRE, LpLEe);
+         LpRE ^= LpRE;
+         LpE ^= LpE;
+         Arg <= cons LpLEe (cons LpD (cons LpL (cons LpF nil)));
+         LpCl ^= Arg;
+         RCode <= cons (cons 'loop LpCl) RCode;
+         Arg ^= Arg
+       fi LpCEs;
+       LpCEs ^= LpCEs
      else
-      if =? Tag 'seqE then
-        Tag ^= 'seqE; Tag ^= 'seq;
-        cons D (cons C (cons ('seqB . nil) Cd')) <= Cd';
-        Arg <= cons C D
+      if =? Tag 'lcheck then
+        cons LpE (cons LpD (cons LpL (cons LpF nil))) <= Arg;
+        SPEC-EXP-AV(LpF, LpRF);
+        cons LpTF LpVF <= LpRF;
+        LpCFs ^= =? LpTF 'S;
+        if LpCFs then
+          if LpVF then
+            (* exit test true: loop finished *)
+            LpE ^= LpE; LpD ^= LpD; LpL ^= LpL; LpF ^= LpF
+          else
+            (* exit test false: run L, then D, then re-check via 'lcheck *)
+            LpEc ^= LpE; LpDc ^= LpD; LpLc ^= LpL; LpFc ^= LpF;
+            LpLp ^= LpL; LpDp ^= LpD;
+            Cd <= cons LpLp (cons LpDp (cons (cons 'lcheck (cons LpEc (cons LpDc (cons LpLc (cons LpFc nil))))) Cd));
+            LpE ^= LpE; LpD ^= LpD; LpL ^= LpL; LpF ^= LpF
+          fi LpVF;
+          LpVF ^= LpVF;
+          LpTF ^= 'S
+        else
+          'error <= '41
+        fi LpCFs;
+        LpCFs ^= LpCFs
       else
-        'error <= '1
-      fi =? Tag 'seq
-     fi =? Tag 'seqB
+       if =? Tag 'seq then
+         Tag ^= 'seq; Tag ^= 'seqB;
+         cons C D <= Arg;
+         Cd <= cons C (cons D (cons ('seqE . nil) Cd));
+         C ^= C; D ^= D
+       else
+        if =? Tag 'seqE then
+          Tag ^= 'seqE; Tag ^= 'seq;
+          cons D (cons C (cons ('seqB . nil) Cd')) <= Cd';
+          Arg <= cons C D
+        else
+          'error <= '1
+        fi =? Tag 'seq
+       fi =? Tag 'seqB
+      fi =? Tag 'lcheck
+     fi =? Tag 'loop
     fi =? Tag 'cond
    fi =? Tag 'rep
   fi =? Tag 'ass;
