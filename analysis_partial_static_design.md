@@ -101,6 +101,14 @@ AV ::= ('S . v)            -- 完全静的。v は素の値（さらに AV を�
 これにより「静的×動的の cons → 後で静的部を取り出せる」ことが可能になり、過剰残余化を解く
 土台ができた。
 
+### ステップ1.5 完了（2026-06-14）: 再帰的 AV-LIFT も実装・検証 ✅
+`examples/av.rwhile` に `AV-LIFT`（AV→残余コード）をスタックマシン（spec.rwhile の SPEC-EXP と
+同型の work/done/marker 方式）で実装。再帰的 'C・ネストも正しく lower（`av-algebra` 群10件 green）。
+これで SPEC-EXP に必要な AV 演算（cons/hd/tl/lift）が揃った。eq は lift＋全静的判定で構成予定。
+
+注: 可逆 if の exit assertion は then 節で書き換えた**後**のタグを検査する慣習
+（`if =? Tag 'C then (Tag→'CB) ... fi =? Tag 'CB`）。これを外すと assertion 失敗になる（実装時の落とし穴）。
+
 ### 次の一手
 ステップ2: `SPEC-EXP`（spec.rwhile 49–216）を AV ベースに置換。まず `av.rwhile` の AV 演算を
 spec.rwhile に取り込み、SPEC-EXP の var/val/cons/hd/tl/eq を AV 規則へ。LIFT と eq の全静的判定は

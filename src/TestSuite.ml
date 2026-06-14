@@ -1061,6 +1061,19 @@ let test_av_cons_mixed_keeps_static () =
   check_av "cons mixed keeps static car"
     "('cons . (('S . 'a) . ('D . ('var . nil))))"
     "('C . (('S . 'a) . ('D . ('var . nil))))"
+let test_av_lift_static () =
+  check_av "lift static -> val" "('lift . ('S . 'a))" "('val . 'a)"
+let test_av_lift_dynamic () =
+  check_av "lift dynamic -> code" "('lift . ('D . ('var . nil)))" "('var . nil)"
+let test_av_lift_partial () =
+  (* lift recurses through 'C, lowering static leaves to 'val and keeping code *)
+  check_av "lift partial-static cons"
+    "('lift . ('C . (('S . 'a) . ('D . ('var . nil)))))"
+    "('cons . (('val . 'a) . ('var . nil)))"
+let test_av_lift_nested () =
+  check_av "lift nested partial-static"
+    "('lift . ('C . (('S . 'a) . ('C . (('S . 'b) . ('D . ('var . nil)))))))"
+    "('cons . (('val . 'a) . ('cons . (('val . 'b) . ('var . nil)))))"
 
 (* ===== Test runner ===== *)
 
@@ -1144,6 +1157,10 @@ let () =
       Alcotest.test_case "tl partial-static" `Quick test_av_tl_partial;
       Alcotest.test_case "cons both-static folds" `Quick test_av_cons_both_static;
       Alcotest.test_case "cons mixed keeps static" `Quick test_av_cons_mixed_keeps_static;
+      Alcotest.test_case "lift static" `Quick test_av_lift_static;
+      Alcotest.test_case "lift dynamic" `Quick test_av_lift_dynamic;
+      Alcotest.test_case "lift partial-static" `Quick test_av_lift_partial;
+      Alcotest.test_case "lift nested" `Quick test_av_lift_nested;
     ];
     "interpreter-robustness", [
       Alcotest.test_case "list-syntax input desugared" `Quick test_list_input_desugared;

@@ -92,6 +92,50 @@ macro AV-CONS(A1, A2, R)
   S1 ^= S1;
   S2 ^= S2
 
+(* AV-LIFT(A, Code): Code := residual expression code for AV A (recursive).
+ *   ('S . v)           -> ('val . v)
+ *   ('D . code)        -> code
+ *   ('C . (a1 . a2))   -> ('cons . (lift a1 . lift a2))
+ * Stack machine modelled on spec.rwhile's SPEC-EXP (work stack Wk, done stack
+ * Wk' with 'CB/'CE markers, result stack RSt). Consumes A. *)
+macro AV-LIFT(A, Code)
+  A <= cons A nil;
+  from (=? A' nil) loop
+    AV-LIFT-STEP(A, A', RSt)
+  until (=? A nil);
+  cons A nil <= A';
+  cons Code nil <= RSt
+
+macro AV-LIFT-STEP(Wk, Wk', RSt)
+  cons (cons Tag Pay) Wk <= Wk;
+  if =? Tag 'S then
+    PayC ^= Pay;
+    RSt <= cons (cons 'val PayC) RSt
+  else
+   if =? Tag 'D then
+     PayC ^= Pay;
+     RSt <= cons PayC RSt
+   else
+    if =? Tag 'C then
+      Tag ^= 'C; Tag ^= 'CB;
+      cons A1 A2 <= Pay;
+      Wk <= cons A1 (cons A2 (cons ('CE . nil) Wk));
+      A1 ^= A1; A2 ^= A2
+    else
+     if =? Tag 'CE then
+       Tag ^= 'CE; Tag ^= 'C;
+       cons A2 (cons A1 (cons ('CB . nil) Wk')) <= Wk';
+       Pay <= cons A1 A2;
+       cons C2 (cons C1 RSt) <= RSt;
+       RSt <= cons (cons 'cons (cons C1 C2)) RSt
+     else
+       'error <= '9
+     fi =? Tag 'C
+    fi =? Tag 'CB
+   fi =? Tag 'D
+  fi =? Tag 'S;
+  Wk' <= cons (cons Tag Pay) Wk'
+
 (* ===== Main program ===== *)
 
 read In;
@@ -106,10 +150,17 @@ read In;
      AV-TL(Args, Out);
      Op ^= 'tl
    else
+    COplift ^= =? Op 'lift;
+    if =? Op 'lift then
+      AV-LIFT(Args, Out);
+      Op ^= 'lift
+    else
      (* assume 'cons *)
      cons A1 A2 <= Args;
      AV-CONS(A1, A2, Out);
      Op ^= 'cons
+    fi COplift;
+    COplift ^= COplift
    fi COptl;
    COptl ^= COptl
   fi COphd;
