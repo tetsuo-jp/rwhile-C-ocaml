@@ -3,22 +3,27 @@
  * http://www-kb.is.s.u-tokyo.ac.jp/ppl2015/programme/
  *)
 
+(* Hygiene-clean: the accumulator scratch (Vr, K) is threaded through parameters
+   so AUX and INV-AUX coincide on it under -hygienic-macros. U and V are balanced
+   per-iteration locals (set by SET-UV, cleared by INV-SET-UV). *)
+(* Hygiene-clean: all of AUX's working set (T, Vr, K, U, V) is threaded through
+   parameters so AUX and INV-AUX coincide on it under -hygienic-macros. *)
 macro LOOKUP(Vl,J,X)
-  AUX(Vl,J,X,T);
+  AUX(Vl,J,X,T,Vr,K,U,V);
   X ^= T;
-  INV-AUX(Vl,J,X,T)   (* clear T *)
+  INV-AUX(Vl,J,X,T,Vr,K,U,V)   (* clear T *)
 
 macro UPDATE(Vl,J,X)
-  AUX(Vl,J,X,T);
+  AUX(Vl,J,X,T,Vr,K,U,V);
   T ^= X;
-  INV-AUX(Vl,J,X,T)   (* clear T *)
+  INV-AUX(Vl,J,X,T,Vr,K,U,V)   (* clear T *)
 
 macro SET-UV(U,V,K,J)
   U ^= (=? K Nil);
   V ^= (=? K J)
 
 (* In the workshop paper, there are two typos. *)
-macro AUX(Vl,J,X,T)
+macro AUX(Vl,J,X,T,Vr,K,U,V)
   SET-UV(U,V,K,J);
   from U loop
     INV-SET-UV(U,V,K,J);

@@ -1035,13 +1035,23 @@ let test_plain_error_unchanged () =
  * INNER uses a local Tmp; the caller also uses a local Tmp. Without hygiene the
  * two collide and the value is corrupted (store-not-cleared); with hygiene they
  * are alpha-renamed apart and the copy round-trips correctly. *)
+(* The colliding scratch Tmp is purely macro-internal (it must NOT appear in the
+   top-level body, or the globals policy would treat it as a shared global and
+   leave it un-renamed). INNER and OUTER both use a local Tmp; without hygiene
+   the two collide and corrupt the value. *)
 let hygiene_collision_prog =
   "macro INNER(A, R) Tmp ^= A; R ^= Tmp; Tmp ^= A " ^
-  "read In; Tmp ^= In; INNER(Tmp, Out); Tmp ^= In; In ^= Out; write Out"
+  "macro OUTER(P, Q) Tmp ^= P; INNER(Tmp, Q); Tmp ^= P " ^
+  "read In; OUTER(In, Out); In ^= Out; write Out"
 
-let with_hygiene f =
-  MacroRwhile.hygienic := true;
-  Fun.protect ~finally:(fun () -> MacroRwhile.hygienic := false) f
+(* Run f with the hygiene flag forced to a given value, restoring the previous
+   value afterwards (so these tests behave correctly whether or not the suite is
+   run with RWHILE_HYGIENIC=1). *)
+let with_flag value f =
+  let prev = !MacroRwhile.hygienic in
+  MacroRwhile.hygienic := value;
+  Fun.protect ~finally:(fun () -> MacroRwhile.hygienic := prev) f
+let with_hygiene f = with_flag true f
 
 (* With the flag ON the local collision is resolved and Out = In. *)
 let test_hygienic_fixes_collision () =
@@ -1049,20 +1059,21 @@ let test_hygienic_fixes_collision () =
     EvalRwhile.evalProgram (parse_program hygiene_collision_prog) (atom "'a")) in
   Alcotest.(check valT_testable) "hygienic copy round-trips" (atom "'a") result
 
-(* With the flag OFF (default) the same program corrupts the store and aborts. *)
+(* With the flag OFF the same program corrupts the store and aborts. *)
 let test_nonhygienic_collision_aborts () =
   Alcotest.(check bool) "non-hygienic collision raises" true
-    (try ignore (EvalRwhile.evalProgram
-                   (parse_program hygiene_collision_prog) (atom "'a")); false
-     with Failure _ -> true)
+    (with_flag false (fun () ->
+       try ignore (EvalRwhile.evalProgram
+                     (parse_program hygiene_collision_prog) (atom "'a")); false
+       with Failure _ -> true))
 
 (* The flag actually rewrites local identifiers: expansion introduces "Tmp-"
    renamed locals when ON, and leaves the bare "Tmp" alone when OFF. *)
 let test_hygienic_renames_in_expansion () =
   let expand () =
     show_program (MacroRwhile.expMacProgram (parse_program hygiene_collision_prog)) in
-  let off = expand () in
-  let on = with_hygiene expand in
+  let off = with_flag false expand in
+  let on = with_flag true expand in
   Alcotest.(check bool) "OFF keeps bare Tmp"   true (find_substring off "Tmp-" = None);
   Alcotest.(check bool) "ON renames to Tmp-N"  true (find_substring on  "Tmp-" <> None)
 
@@ -1304,6 +1315,13 @@ let test_ss_av_swap_dynamic () =
     "((('C . (('D . ('tl . ('var . nil))) . ('D . ('hd . ('var . nil))))) . (('S . nil) . (('S . nil) . nil))) . nil)"
 
 (* ===== Test runner ===== *)
+
+(* RWHILE_HYGIENIC=1 ./test-suite runs the WHOLE suite with -hygienic-macros on,
+   used to verify that the core programs (spec/ri/spec_av) are hygiene-clean.
+   The hygiene-specific group below already toggles the flag per-test, so it is
+   unaffected. *)
+let () =
+  if Sys.getenv_opt "RWHILE_HYGIENIC" <> None then MacroRwhile.hygienic := true
 
 let () =
   Alcotest.run "R-WHILE Interpreter" [

@@ -1,19 +1,22 @@
+(* Hygiene-clean: the accumulator scratch (Rev, Cnt) is threaded through
+   parameters so AUX and INV-AUX coincide on it under -hygienic-macros.
+   U is a true per-iteration local. *)
 macro LOOKUP(Vl,J,X)
-  AUX(Vl,J,X,T);
+  AUX(Vl,J,X,T,Rev,Cnt);
   X ^= T;
-  INV-AUX(Vl,J,X,T)   (* clear T *)
+  INV-AUX(Vl,J,X,T,Rev,Cnt)   (* clear T *)
 
 macro UPDATE(Vl,J,X)
-  AUX(Vl,J,X,T);
+  AUX(Vl,J,X,T,Rev,Cnt);
   T ^= X;
-  INV-AUX(Vl,J,X,T)   (* clear T *)
+  INV-AUX(Vl,J,X,T,Rev,Cnt)   (* clear T *)
 
-macro AUX(Vl,J,X,T)
-  from (=? JJ Nil) loop
+macro AUX(Vl,J,X,T,Rev,Cnt)
+  from (=? Cnt nil) loop
     cons U Vl <= Vl;
-    Vr <= cons U Vr;
-    JJ <= cons nil JJ  (* JJ := JJ + 1 *)
-  until (=? JJ J);
+    Rev <= cons U Rev;
+    Cnt <= cons nil Cnt  (* Cnt := Cnt + 1 *)
+  until (=? Cnt J);
   cons T Vl <= Vl
 
 read X;
