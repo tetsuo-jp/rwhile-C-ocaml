@@ -16,12 +16,21 @@ let () =
   let f_p2d = ref false in
   let f_exp = ref false in
   Arg.parse
-    [("-inverse", Arg.Set f_inv, "inversion");
-     ("-p2d", Arg.Set f_p2d, "translation from programs to data");
-     ("-exp", Arg.Set f_exp, "expand macro")]
+    [("-inverse", Arg.Set f_inv,  "inversion");
+     ("-p2d",     Arg.Set f_p2d,  "translation from programs to data");
+     ("-exp",     Arg.Set f_exp,  "expand macro");
+     ("-local",   Arg.Set EvalRwhile.enable_local,
+      "extension: scoped local variables  (local X in C end)");
+     ("-autofi",  Arg.Set EvalRwhile.enable_autofi,
+      "extension: automatic fi-assertion  (iff E then C else D)");
+     ("-array",   Arg.Set EvalRwhile.enable_array,
+      "extension: array index operations  (A[I] ^= E  /  get A[I])");
+     ("-llm-errors", Arg.Set EvalRwhile.llm_errors,
+      "emit structured, machine-/LLM-friendly error messages")]
     (fun s -> files := !files @ [s])
     ("R-WHILE Interpreter (C) Tetsuo Yokoyama\n" ^
-       Printf.sprintf "usage: %s [-inverse] [-p2d] program [data]" Sys.argv.(0));
+       Printf.sprintf "usage: %s [-inverse] [-p2d] [-exp] [-local] [-autofi] [-array] [-llm-errors] program [data]"
+         Sys.argv.(0));
   match !files with
   | [prog_filename] ->
      let channel = open_in prog_filename in
@@ -42,5 +51,14 @@ let () =
      (try
         print_endline (showValT (EvalRwhile.evalProgram prog data))
       with
-        Failure(str) -> print_endline ("Error:\n" ^ str))
+      | Failure str ->
+         (* eval_error already produced the structured block in LLM mode. *)
+         print_endline (if !EvalRwhile.llm_errors then str else "Error:\n" ^ str)
+      | e ->
+         (* Any other exception (Not_found, Invalid_argument, ...) is unexpected;
+            format it too so callers always get a parseable error in LLM mode. *)
+         let msg = Printexc.to_string e in
+         print_endline (if !EvalRwhile.llm_errors
+                        then EvalRwhile.format_uncaught msg
+                        else "Error:\n" ^ msg))
   | _ -> failwith "Invalid arguments"

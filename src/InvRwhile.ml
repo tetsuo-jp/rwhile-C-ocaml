@@ -9,15 +9,19 @@ let invMacroName (RIdent str) : rIdent =
 	  else "INV-" ^ str)
 
 let rec invCom = function
-    CMac (x, idents) -> CMac (invMacroName x, idents) 
+    CMac (x, idents) -> CMac (invMacroName x, idents)
   | CAss (x, e) -> CAss (x, e)
   | CRep (p1, p2) -> CRep (p2, p1)
   | CSeq (c, d) -> CSeq (invCom d, invCom c)
-  | CCond (e, thenbranch, elsebranch, f) -> 
+  | CCond (e, thenbranch, elsebranch, f) ->
      CCond (f, invThenBranch thenbranch, invElseBranch elsebranch, e)
   | CLoop (e, dobranch, loopbranch, f) ->
      CLoop (f, invDoBranch dobranch, invLoopBranch loopbranch, e)
   | CShow e -> CShow e
+  (* Extensions *)
+  | CLocal (x, c) -> CLocal (x, invCom c)        (* local scope is symmetric *)
+  | CAutoFi (e, t, el) -> CAutoFi (e, invThenBranch t, invElseBranch el)
+  | CArrAss (x, i, e) -> CArrAss (x, i, e)       (* array update is self-inverse *)
 
 and invThenBranch = function
     BThen c   -> BThen (invCom c)

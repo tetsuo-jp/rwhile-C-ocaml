@@ -1,0 +1,478 @@
+(* spec_ext.rwhile - spec.rwhile rewritten using new syntax extensions
+ *
+ * Extensions used (run with: ./ri -array -autofi spec_ext.rwhile <data>)
+ *
+ *   -array   Eliminates the LOOKUP / UPDATE / AUX macro trio entirely.
+ *            "X ^= get Vl[J]"  reads  Vl[J] non-destructively into X.
+ *            "Vl[J] ^= X"      XOR-updates Vl[J] with X (reversible write).
+ *            Index encoding: nil=0, (nil.nil)=1, (nil.(nil.nil))=2, ...
+ *            (Same encoding as the original AUX traversal loop.)
+ *
+ *   -autofi  Replaces two matching "if E then ... fi E" pairs with
+ *            "iff E then ... fi".  Applicable when E's variables are not
+ *            modified inside the branch body:
+ *              - "if AnnE then ... fi AnnE"   in SPEC-STEP ('ass case)
+ *              - "if ValT then ... fi ValT"   in SPEC-STEP ('cond case)
+ *
+ * All other logic is unchanged from spec.rwhile.
+ *
+ * Input:  (P . S)
+ *   P = program-as-data: (('var . I) . (Cmd . ('var . J)))
+ *   S = static (known) input value for the read variable
+ *
+ * Output: P_residual = residual program-as-data
+ *)
+
+(* ===== Specialization helpers ===== *)
+
+(* SPEC-EXP: Specialize an expression.
+ * Input:  E  = expression code
+ * Output: RE = ('S . value) for static, or ('D . expr_code) for dynamic
+ * Uses the partial store Vl where each entry is ('S.v) or ('D.nil).
+ *)
+macro SPEC-EXP(E, RE)
+  E <= cons E nil;
+  from (=? E' nil) loop
+    SPEC-EXP-STEP(E, E', RSt)
+  until (=? E nil);
+  cons E nil <= E';
+  cons RE nil <= RSt
+
+macro SPEC-EXP-STEP(Cd, Cd', RSt)
+  cons (cons ETag EArg) Cd <= Cd;
+  if =? ETag 'var then
+    (* Variable reference: look up in partial store *)
+    SV ^= get Vl[EArg];              (* -array: replaces LOOKUP(Vl,EArg,SV) *)
+    (* SV = ('S . v) or ('D . nil) *)
+    cons Ann Val <= SV;
+    CAnn ^= Ann;
+    if Ann then
+      (* Static: push ('S . value) *)
+      RSt <= cons (cons (nil.nil) Val) RSt;
+      Ann ^= (nil.nil)
+    else
+      (* Dynamic: push ('D . ('var . k)) *)
+      RSt <= cons (cons nil (cons 'var EArg)) RSt
+    fi CAnn;
+    CAnn ^= CAnn
+  else
+   if =? ETag 'val then
+     (* Literal: always static *)
+     RSt <= cons (cons (nil.nil) EArg) RSt
+   else
+    if =? ETag 'cons then
+      (* Push sub-expressions and marker *)
+      ETag ^= 'cons; ETag ^= 'consB;
+      cons E1 E2 <= EArg;
+      Cd <= cons E1 (cons E2 (cons ('consE . nil) Cd))
+    else
+     if =? ETag 'consE then
+       (* Combine two results *)
+       ETag ^= 'consE; ETag ^= 'cons;
+       cons E2 (cons E1 (cons ('consB . nil) Cd')) <= Cd';
+       cons R2 (cons R1 RSt) <= RSt;
+       EArg <= cons E1 E2;
+       (* Check if both static *)
+       cons A1 V1 <= R1;
+       cons A2 V2 <= R2;
+       if A1 then
+         if A2 then
+           (* Both static: result is static cons *)
+           RSt <= cons (cons (nil.nil) (cons V1 V2)) RSt;
+           A1 ^= (nil.nil); A2 ^= (nil.nil)
+         else
+           (* Mixed: result is dynamic *)
+           RSt <= cons (cons nil (cons 'cons (cons (cons 'val V1) V2))) RSt;
+           A1 ^= (nil.nil)
+         fi A2
+       else
+         if A2 then
+           (* Mixed: result is dynamic *)
+           RSt <= cons (cons nil (cons 'cons (cons V1 (cons 'val V2)))) RSt;
+           A2 ^= (nil.nil)
+         else
+           (* Both dynamic: result is dynamic *)
+           RSt <= cons (cons nil (cons 'cons (cons V1 V2))) RSt
+         fi A2
+       fi A1;
+       R1 <= cons A1 V1;
+       R2 <= cons A2 V2
+     else
+      if =? ETag 'hd then
+        ETag ^= 'hd; ETag ^= 'hdB;
+        Cd <= cons EArg (cons ('hdE . nil) Cd)
+      else
+       if =? ETag 'hdE then
+         ETag ^= 'hdE; ETag ^= 'hd;
+         cons EArg (cons ('hdB . nil) Cd') <= Cd';
+         cons R1 RSt <= RSt;
+         cons A1 V1 <= R1;
+         if A1 then
+           (* Static: take head *)
+           cons HV TV <= V1;
+           RSt <= cons (cons (nil.nil) HV) RSt;
+           V1 <= cons HV TV;
+           A1 ^= (nil.nil)
+         else
+           (* Dynamic: generate hd code *)
+           RSt <= cons (cons nil (cons 'hd V1)) RSt
+         fi A1;
+         R1 <= cons A1 V1
+       else
+        if =? ETag 'tl then
+          ETag ^= 'tl; ETag ^= 'tlB;
+          Cd <= cons EArg (cons ('tlE . nil) Cd)
+        else
+         if =? ETag 'tlE then
+           ETag ^= 'tlE; ETag ^= 'tl;
+           cons EArg (cons ('tlB . nil) Cd') <= Cd';
+           cons R1 RSt <= RSt;
+           cons A1 V1 <= R1;
+           if A1 then
+             (* Static: take tail *)
+             cons HV TV <= V1;
+             RSt <= cons (cons (nil.nil) TV) RSt;
+             V1 <= cons HV TV;
+             A1 ^= (nil.nil)
+           else
+             (* Dynamic: generate tl code *)
+             RSt <= cons (cons nil (cons 'tl V1)) RSt
+           fi A1;
+           R1 <= cons A1 V1
+         else
+          if =? ETag 'eq then
+            ETag ^= 'eq; ETag ^= 'eqB;
+            cons E1 E2 <= EArg;
+            Cd <= cons E1 (cons E2 (cons ('eqE . nil) Cd))
+          else
+           if =? ETag 'eqE then
+             ETag ^= 'eqE; ETag ^= 'eq;
+             cons E2 (cons E1 (cons ('eqB . nil) Cd')) <= Cd';
+             cons R2 (cons R1 RSt) <= RSt;
+             EArg <= cons E1 E2;
+             cons A1 V1 <= R1;
+             cons A2 V2 <= R2;
+             if A1 then
+               if A2 then
+                 (* Both static: compare *)
+                 EqRes ^= =? V1 V2;
+                 RSt <= cons (cons (nil.nil) EqRes) RSt;
+                 A1 ^= (nil.nil); A2 ^= (nil.nil)
+               else
+                 RSt <= cons (cons nil (cons 'eq (cons (cons 'val V1) V2))) RSt;
+                 A1 ^= (nil.nil)
+               fi A2
+             else
+               if A2 then
+                 RSt <= cons (cons nil (cons 'eq (cons V1 (cons 'val V2)))) RSt;
+                 A2 ^= (nil.nil)
+               else
+                 RSt <= cons (cons nil (cons 'eq (cons V1 V2))) RSt
+               fi A2
+             fi A1;
+             R1 <= cons A1 V1;
+             R2 <= cons A2 V2
+           else
+             'error <= '0
+           fi =? ETag 'eq
+          fi =? ETag 'eqB
+         fi =? ETag 'tl
+        fi =? ETag 'tlB
+       fi =? ETag 'hd
+      fi =? ETag 'hdB
+     fi =? ETag 'cons
+    fi =? ETag 'consB
+   fi =? ETag 'val
+  fi =? ETag 'var;
+  Cd' <= cons (cons ETag EArg) Cd'
+
+(* LIFT: Convert specialization result to expression code.
+ * ('S . v) -> ('val . v)
+ * ('D . e) -> e
+ *)
+macro LIFT(R, E)
+  cons Ann Val <= R;
+  if Ann then
+    E ^= cons 'val Val
+  else
+    E ^= Val
+  fi Ann;
+  R <= cons Ann Val
+
+(* SPEC-STEP: Specialize one command.
+ * Processes one command from the queue.
+ * Static commands are executed; dynamic commands add to RCode.
+ *)
+macro SPEC-STEP(Cd, Cd')
+  cons (cons Tag Arg) Cd <= Cd;
+  if =? Tag 'ass then
+    (* Assignment: X ^= E *)
+    cons (cons 'var K) E <= Arg;
+    SPEC-EXP(E, RE);
+    cons AnnE ValE <= RE;
+    iff AnnE then                           (* -autofi: AnnE unmodified in body *)
+      (* Static: perform reversible update *)
+      SV ^= get Vl[K];                      (* -array: replaces LOOKUP(Vl,K,SV) *)
+      Vl[K] ^= SV;                          (* -array: replaces UPDATE(Vl,K,SV) *)
+      cons AnnK ValK <= SV;
+      if AnnK then
+        (* Variable is static: do rupdate *)
+        NewV ^= ValE;
+        if =? ValK nil then
+          ValK ^= NewV
+        else
+          if =? ValK NewV then
+            ValK ^= NewV; ValK ^= nil; NewV ^= ValE
+          else
+            if =? NewV nil then
+              NewV ^= ValE
+            else
+              'error <= '10
+            fi =? NewV ValE
+          fi =? nil nil
+        fi =? nil nil;
+        NewV ^= ValE;
+        SV <= cons AnnK ValK;
+        Vl[K] ^= SV                         (* -array: replaces UPDATE(Vl,K,SV) *)
+	      else
+	        (* Variable was dynamic, expression is static: generate residual *)
+	        SV <= cons AnnK ValK;
+	        Vl[K] ^= SV;                        (* -array: replaces UPDATE(Vl,K,SV) *)
+	        LE ^= cons 'val ValE;
+	        RCode <= cons (cons 'ass (cons (cons 'var K) LE)) RCode;
+	        LE ^= cons 'val ValE
+	      fi hd SV;
+      cons AnnK ValK <= SV;
+      AnnK ^= AnnK;
+      ValK ^= ValK
+    else
+      (* Dynamic expression: generate residual, mark variable as dynamic *)
+      SV ^= get Vl[K];                      (* -array: replaces LOOKUP(Vl,K,SV) *)
+      Vl[K] ^= SV;                          (* -array: replaces UPDATE(Vl,K,SV) *)
+      SV ^= SV;
+      Vl[K] ^= (nil.nil);                   (* -array: replaces UPDATE(Vl,K,(nil.nil)) *)
+      RCode <= cons (cons 'ass (cons (cons 'var K) ValE)) RCode
+    fi;                                      (* -autofi end *)
+    AnnE ^= AnnE;
+    ValE ^= ValE;
+    Arg <= cons (cons 'var K) E
+  else
+   if =? Tag 'rep then
+     (* Replacement: Q <= R *)
+     (* For simplicity, always residualize replacements *)
+     RCode <= cons (cons 'rep Arg) RCode
+   else
+    if =? Tag 'seq then
+      Tag ^= 'seq; Tag ^= 'seqB;
+      cons C D <= Arg;
+      Cd <= cons C (cons D (cons (cons 'seqE nil) Cd))
+    else
+     if =? Tag 'seqE then
+       Tag ^= 'seqE; Tag ^= 'seq;
+       cons D (cons C (cons ('seqB . nil) Cd')) <= Cd';
+       Arg <= cons C D
+     else
+      if =? Tag 'cond then
+        Tag ^= 'cond; Tag ^= 'condB;
+        cons E (cons C (cons D (cons F nil))) <= Arg;
+        SPEC-EXP(E, RE);
+        cons AnnT ValT <= RE;
+        if AnnT then
+          (* Static test: take one branch *)
+          iff ValT then                      (* -autofi: ValT unmodified in body *)
+            (* CC is a copy of C so that the outer 'cons C (...)' and the inner
+             * condCleanS continuation use DIFFERENT variables; reading C twice in
+             * one pattern would silently read the second occurrence as nil. *)
+            CC ^= C;
+            Cd <= cons C (cons (cons 'condCleanS (cons ValT (cons E (cons CC (cons D (cons F nil)))))) Cd)
+          else
+            (* DD copies D for the same reason (D appears outer and inner). *)
+            DD ^= D;
+            Cd <= cons D (cons (cons 'condCleanS (cons ValT (cons E (cons C (cons DD (cons F nil)))))) Cd)
+          fi;                                (* -autofi end *)
+          AnnT ^= (nil.nil)
+        else
+          (* Dynamic test: residualize the whole conditional *)
+          Arg <= cons E (cons C (cons D (cons F nil)));
+          RCode <= cons (cons 'cond Arg) RCode
+        fi AnnT;
+        RE <= cons AnnT ValT
+      else
+       if =? Tag 'condCleanS then
+         Tag ^= 'condCleanS; Tag ^= 'cond;
+         cons ValT (cons E (cons C (cons D (cons F nil)))) <= Arg;
+         cons (cons 'condB nil) Cd' <= Cd';
+         Arg <= cons E (cons C (cons D (cons F nil)))
+       else
+        if =? Tag 'loop then
+          (* Loop: for simplicity, try static unrolling *)
+          Tag ^= 'loop; Tag ^= 'l1B;
+          Cd <= cons (cons 'l1E (cons nil Arg)) Cd
+        else
+         if =? Tag 'l1E then
+           Tag ^= 'l1E; Tag ^= 'l2B;
+           cons W C' <= Arg;
+           cons (cons 'l1B nil) Cd' <= Cd';
+           cons E (cons C (cons D (cons F nil))) <= C';
+           SPEC-EXP(E, RE);
+           cons AnnE2 ValE2 <= RE;
+           if AnnE2 then
+             (* Static entry test *)
+             if ValE2 then
+               (* True: enter do-branch *)
+               CC ^= C;
+               Arg <= cons E (cons C (cons D (cons F nil)));
+               Cd <= cons CC (cons (cons 'l2E W) Cd);
+               AnnE2 ^= (nil.nil)
+             else
+               (* False entry: error *)
+               'error <= '20
+             fi =? nil nil
+           else
+             (* Dynamic entry: residualize the loop *)
+             C' <= cons E (cons C (cons D (cons F nil)));
+             RCode <= cons (cons 'loop C') RCode;
+             Arg <= cons W C'
+           fi AnnE2;
+           RE <= cons AnnE2 ValE2
+         else
+          if =? Tag 'l2E then
+            Tag ^= 'l2E; Tag ^= 'l3B;
+            W <= Arg;
+            cons CC (cons (cons 'l2B C') Cd') <= Cd';
+            cons E (cons C (cons D (cons F nil))) <= C';
+            CC ^= C;
+            SPEC-EXP(F, RF);
+            cons AnnF ValF <= RF;
+            if AnnF then
+              if ValF then
+                (* Exit test true: loop done *)
+                C' <= cons E (cons C (cons D (cons F nil)));
+                Cd <= cons (cons 'l3done C') Cd;
+                AnnF ^= (nil.nil)
+              else
+                (* Exit test false: continue loop *)
+                DD ^= D;
+                C' <= cons E (cons C (cons D (cons F nil)));
+                Cd <= cons DD (cons (cons 'l4E C') Cd)
+              fi =? nil nil
+            else
+              (* Dynamic exit: residualize *)
+              C' <= cons E (cons C (cons D (cons F nil)));
+              RCode <= cons (cons 'loop C') RCode;
+              Cd <= cons (cons 'l3done C') Cd
+            fi AnnF;
+            RF <= cons AnnF ValF
+          else
+           if =? Tag 'l4E then
+             Tag ^= 'l4E; Tag ^= 'l1B;
+             cons DD (cons ('l4B . nil) Cd') <= Cd';
+             cons E (cons C (cons D (cons F nil))) <= Arg;
+             DD ^= D;
+             Arg <= cons E (cons C (cons D (cons F nil)));
+             Cd <= cons (cons 'l1E (cons nil Arg)) Cd
+           else
+            if =? Tag 'l3done then
+              Tag ^= 'l3done; Tag ^= 'loop
+            else
+              'error <= '30
+            fi =? Tag 'loop
+           fi =? Tag 'l1B
+          fi =? Tag 'l3B
+         fi =? Tag 'l2B
+        fi =? Tag 'l1B
+       fi =? Tag 'loop
+      fi =? Tag 'condCleanS
+     fi =? Tag 'cond
+    fi =? Tag 'seqB
+   fi =? Tag 'seq
+  fi =? Tag 'ass;
+ Cd' <= cons (cons Tag Arg) Cd'
+
+(* MAKE-SEQ: fold a list of residual commands into a single 'seq command.
+ * Input:  RCode = list of commands (in reverse order)
+ * Output: Cmd = single command (or 'nop) *)
+macro MAKE-SEQ(RCode, Cmd)
+  from (=? Cmd nil) loop
+    cons C RCode <= RCode;
+    CCmdNil ^= =? Cmd nil;
+    if =? Cmd nil then
+      Cmd ^= C
+    else
+      Cmd <= cons 'seq (cons C Cmd)
+    fi CCmdNil;
+    CCmdNil ^= CCmdNil;
+    C ^= C
+  until (=? RCode nil)
+
+(* ===== Main program ===== *)
+
+read V;
+  cons P S <= V;
+  cons (cons 'var I') (cons Cmd (cons 'var J')) <= P;
+
+  (* Initialize 80-variable partial store, all (nil . nil) = dynamic *)
+  Vl ^= ((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).nil))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+  ;
+
+  (* Set read variable to static:                                      *)
+  (* -array replaces: LOOKUP+UPDATE (clear slot) + UPDATE (set value) *)
+  (* + LOOKUP (verify and clear SV)                                   *)
+  SV ^= get Vl[I'];        (* SV = (nil.nil) = old dynamic marker   *)
+  Vl[I'] ^= SV;             (* Vl[I'] = nil  (clear slot)            *)
+  SV ^= SV;                 (* SV = nil                               *)
+  SV ^= cons (nil.nil) S;  (* SV = ((nil.nil) . S)                   *)
+  Vl[I'] ^= SV;             (* Vl[I'] = ((nil.nil) . S)               *)
+  SV ^= get Vl[I'];        (* SV = nil  (verify and clear)           *)
+
+  (* Specialization loop *)
+  Cd ^= cons Cmd nil;
+  from (=? Cd' nil)
+  loop SPEC-STEP(Cd, Cd')
+  until (=? Cd nil);
+  cons Cd' nil <= Cd';
+
+  (* Extract write variable value *)
+  WV ^= get Vl[J'];         (* -array: replaces LOOKUP(Vl,J',WV) *)
+  cons WAnn WVal <= WV;
+  if WAnn then
+    (* Write variable is static: residual just returns the constant *)
+    RCode ^= RCode;
+    ResCmd ^= cons 'ass (cons (cons 'var J') (cons 'val WVal));
+    WV <= cons WAnn WVal
+  else
+    (* Write variable is dynamic: use accumulated residual code *)
+    MAKE-SEQ(RCode, ResCmd);
+    WV <= cons WAnn WVal
+  fi hd WV;
+  cons WAnn WVal <= WV;
+  WAnn ^= WAnn;
+  WVal ^= WVal;
+
+  (* Build residual program *)
+  Output ^= cons (cons 'var I') (cons ResCmd (cons 'var J'));
+  ResCmd ^= ResCmd;
+  LE ^= LE;
+
+  (* Cleanup Vl: undo static marking of I', restore to (nil.nil), then XOR-clear *)
+  (* -array replaces: UPDATE+LOOKUP (undo set) + UPDATE (restore nil.nil)        *)
+  SV ^= cons (nil.nil) S;  (* SV = ((nil.nil).S)                     *)
+  Vl[I'] ^= SV;             (* Vl[I'] = nil  (they matched)           *)
+  SV ^= cons (nil.nil) S;  (* SV = nil                               *)
+  Vl[I'] ^= (nil.nil);      (* Vl[I'] = (nil.nil)  (restore marker)  *)
+  Vl ^= ((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).((nil.nil).nil))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+  ;
+
+  (* Reconstruct Cmd and P, then build V *)
+  Cd' ^= Cmd;
+  Cmd ^= Cd';
+  P ^= cons (cons 'var I') (cons Cmd (cons 'var J'));
+  I' ^= I';
+  Cmd ^= Cmd;
+  J' ^= J';
+  V ^= cons P (cons Output S);
+  P ^= P;
+  Output ^= Output;
+  S ^= S;
+
+write V

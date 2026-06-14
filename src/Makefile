@@ -3,7 +3,7 @@ OCAMLC=ocamlfind ocamlc -g -package extlib -linkpkg
 
 all: ri
 
-ri: BNFC_Util.ml AbsRwhile.ml ShowRwhile.ml PrintRwhile.ml ParRwhile.mli ParRwhile.ml LexRwhile.ml InvRwhile.ml MacroRwhile.ml EvalRwhile.ml Program2DataRwhile.ml Main.ml
+ri: BNFC_Util.ml AbsRwhile.ml PrintRwhile.ml ParRwhile.mli ParRwhile.ml LexRwhile.ml InvRwhile.ml Subst.ml MacroRwhile.ml EvalRwhile.ml Program2DataRwhile.ml Main.ml
 	$(OCAMLC) -o $@ $^
 
 LexRwhile.ml: LexRwhile.mll
@@ -16,8 +16,14 @@ BNFC_Util.ml: Rwhile.cf
 	bnfc -ocaml Rwhile.cf
 	touch BNFC_Util.ml
 
+test-suite: BNFC_Util.ml AbsRwhile.ml PrintRwhile.ml ParRwhile.mli ParRwhile.ml LexRwhile.ml InvRwhile.ml Subst.ml MacroRwhile.ml EvalRwhile.ml Program2DataRwhile.ml TestSuite.ml
+	$(OCAMLC) -package alcotest -linkpkg -o $@ BNFC_Util.ml AbsRwhile.ml PrintRwhile.ml ParRwhile.mli ParRwhile.ml LexRwhile.ml InvRwhile.ml Subst.ml MacroRwhile.ml EvalRwhile.ml Program2DataRwhile.ml TestSuite.ml
+
+run-tests: test-suite
+	./test-suite
+
 clean:
-	-rm -f *.cmi *.cmo *.o *.mli *.cmx ri
+	-rm -f *.cmi *.cmo *.o *.mli *.cmx ri test-suite
 
 distclean: clean
 	-rm -f LexRwhile.* ParRwhile.* LayoutRwhile.* SkelRwhile.* PrintRwhile.* ShowRwhile.* TestRwhile.* AbsRwhile.* TestRwhile BNFC_Util.ml\

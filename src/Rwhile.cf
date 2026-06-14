@@ -4,11 +4,20 @@
 --
 -- Variables   ∋ X, Y ::= X0 | X1 | ...
 -- Expressions ∋ E, F ::= X | d | cons E F | hd E | tl E | =? E F
+--                      | get X[E]                              (extension: array read)
+--                      | [E, ..., E]                          (list notation: sugar)
 -- Patterns    ∋ Q, R ::= X | d | cons Q R
+--                      | [Q, ..., Q]                          (list notation: sugar)
 -- Commands    ∋ C, D ::= X ^= E | Q <= R | C; D
 --                      | if E then C else D fi F | from E do C loop D until F
+--                      | local X in C end                      (extension: scoped local)
+--                      | iff E then C else D fi                 (extension: auto-fi)
+--                      | X[E] ^= E                             (extension: array update)
 -- Macro       ∋ M    ::= macro X ( X, ..., X ) C
 -- Programs    ∋ P    ::= M* read X; C; write Y
+--
+-- Extensions enabled by runtime flags: -local  -autofi  -array
+-- Always-on sugar: [e1,...,en] = (e1.(e2.(...(en.nil)...)))   [] = nil
 --
 -------------------------------------------------------------------------------
 
@@ -35,13 +44,16 @@ separator RIdent "," ;
 -- Command
 -------------------------------------------------------------------------------
 
-CSeq.  Com  ::= Com ";" Com1 ;                               -- Sequence
-CMac.  Com1 ::= RIdent "(" [RIdent] ")" ;                    -- Parameterized macro
-CAss.  Com1 ::= RIdent "^=" Exp ;                            -- Reversible assignment
-CRep.  Com1 ::= Pat "<=" Pat ;                               -- Reversible replacement
-CCond. Com1 ::= "if" Exp ThenBranch ElseBranch "fi" Exp ;    -- Reversible conditional
-CLoop. Com1 ::= "from" Exp DoBranch LoopBranch "until" Exp ; -- Reversible loop
-CShow. Com1 ::= "show" Exp ;                                 -- Show command (for debugging use)
+CSeq.    Com  ::= Com ";" Com1 ;                                  -- Sequence
+CMac.    Com1 ::= RIdent "(" [RIdent] ")" ;                       -- Parameterized macro
+CAss.    Com1 ::= RIdent "^=" Exp ;                               -- Reversible assignment
+CRep.    Com1 ::= Pat "<=" Pat ;                                  -- Reversible replacement
+CCond.   Com1 ::= "if" Exp ThenBranch ElseBranch "fi" Exp ;       -- Reversible conditional
+CLoop.   Com1 ::= "from" Exp DoBranch LoopBranch "until" Exp ;    -- Reversible loop
+CShow.   Com1 ::= "show" Exp ;                                    -- Show command (for debugging use)
+CLocal.  Com1 ::= "local" RIdent "in" Com "end" ;                 -- Scoped local variable (-local)
+CAutoFi. Com1 ::= "iff" Exp ThenBranch ElseBranch "fi" ;          -- Auto-fi conditional (-autofi)
+CArrAss. Com1 ::= RIdent "[" Exp1 "]" "^=" Exp ;                  -- Array element update (-array)
 coercions Com 1;
 
 BThen.     ThenBranch ::= "then" Com ;
@@ -61,13 +73,16 @@ BLoopNone. LoopBranch ::= ;
 -- Expression
 -------------------------------------------------------------------------------
 
-ECons. Exp  ::= "cons" Exp1 Exp1 ;
-EHd.   Exp  ::= "hd" Exp1 ;
-ETl.   Exp  ::= "tl" Exp1 ;
-EEq.   Exp  ::= "=?" Exp1 Exp1 ;     -- Equality check
-EVar.  Exp1 ::= Variable ;
-EVal.  Exp1 ::= Val ;
+ECons.   Exp  ::= "cons" Exp1 Exp1 ;
+EHd.     Exp  ::= "hd" Exp1 ;
+ETl.     Exp  ::= "tl" Exp1 ;
+EEq.     Exp  ::= "=?" Exp1 Exp1 ;   -- Equality check
+EArrGet. Exp  ::= "get" Variable "[" Exp1 "]" ; -- Array element read (-array)
+EVar.    Exp1 ::= Variable ;
+EVal.    Exp1 ::= Val ;
+EList.   Exp1 ::= "[" [Exp] "]" ;    -- List notation sugar: [e1,..,en]
 coercions Exp 1;
+separator Exp "," ;
 
 
 -------------------------------------------------------------------------------
@@ -77,7 +92,9 @@ coercions Exp 1;
 PCons. Pat  ::= "cons" Pat1 Pat1 ;
 PVar.  Pat1 ::= Variable ;
 PVal.  Pat1 ::= Val ;
+PList. Pat1 ::= "[" [Pat] "]" ;      -- List notation sugar: [p1,..,pn]
 coercions Pat 1;
+separator Pat "," ;
 
 
 -------------------------------------------------------------------------------
@@ -87,6 +104,8 @@ coercions Pat 1;
 VNil.  Val  ::= "nil" ;
 VAtom. Val  ::= Atom ;          -- ex. 'a, 'loop
 VCons. Val  ::= "(" Val "." Val ")";
+VList. Val  ::= "[" [Val] "]" ; -- List notation sugar: ['a,'b,'c] = ('a.('b.('c.nil)))
+separator Val "," ;
 
 
 -------------------------------------------------------------------------------

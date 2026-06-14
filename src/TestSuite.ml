@@ -951,6 +951,86 @@ let test_spec_ext_macro_make_seq () =
   let result = EvalRwhile.evalProgram prog input in
   Alcotest.(check valT_testable) "spec_ext MAKE-SEQ folds reverse residual list" expected result
 
+(* ===== Interpreter robustness / bug-fix regression tests ===== *)
+
+(* Assert that running [thunk ()] raises Failure whose message contains [sub]. *)
+let check_fail_contains name sub thunk =
+  match (try ignore (thunk ()); None with Failure m -> Some m) with
+  | None -> Alcotest.failf "%s: expected a Failure, but none was raised" name
+  | Some m ->
+     Alcotest.(check bool) (name ^ ": message contains \"" ^ sub ^ "\"")
+       true (find_substring m sub <> None)
+
+(* BUG: input value with list-notation sugar must be desugared, exactly like a
+ * list literal written inside the program. *)
+let test_list_input_desugared () =
+  (* X ^= nil is a no-op on a non-nil X, so this is the identity program. *)
+  let prog = parse_program "read X; X ^= nil; write X" in
+  let out  = EvalRwhile.evalProgram prog (parse_val "['a, 'b, 'c]") in
+  let expected = parse_val "('a . ('b . ('c . nil)))" in
+  Alcotest.(check valT_testable) "list-syntax input desugared to cons-chain" expected out
+
+(* list-syntax input used by hd/=?: previously raised "No head". *)
+let test_list_input_hd () =
+  let prog = parse_program "read X; cons H T <= X; T <= cons H T; write T" in
+  let out  = EvalRwhile.evalProgram prog (parse_val "['a, 'b]") in
+  let expected = parse_val "('a . ('b . nil))" in
+  Alcotest.(check valT_testable) "hd/cons on list-syntax input" expected out
+
+(* BUG: inv_evalPat must desugar a literal pattern (PVal) before comparing, so a
+ * cons literal containing list sugar matches the equivalent constructed value. *)
+let test_pval_list_pattern_desugar () =
+  let prog = parse_program "read X; (nil . ['a]) <= cons nil (cons 'a nil); write X" in
+  let out  = EvalRwhile.evalProgram prog VNil in
+  Alcotest.(check valT_testable) "literal pattern with list sugar matches" VNil out
+
+(* BUG: a variable that occurs only inside show must still get a store slot
+ * (previously raised an uncaught Not_found). *)
+let test_show_var_collected () =
+  let prog = parse_program "read X; show GHOST; write X" in
+  let out  = EvalRwhile.evalProgram prog (atom "'a") in
+  Alcotest.(check valT_testable) "show-only variable does not crash" (atom "'a") out
+
+(* BUG: loop reversibility violation must be a caught Failure with a useful
+ * message, not an OCaml Assert_failure (and not silently skipped). *)
+let test_loop_reversibility_caught () =
+  check_fail_contains "loop reversibility" "not false after the loop body"
+    (fun () -> eval_string
+        "read D; from =? X nil do Z ^= 'z loop Y ^= 'y until =? Z nil; write D" "nil")
+
+(* BUG: a non-linear replacement pattern (a variable used twice) must be
+ * detected and reported (non-fatal warning). *)
+let test_nonlinear_pattern_detected () =
+  let prog = parse_program "read X; Y <= cons X X; write Y" in
+  let viols = EvalRwhile.linearity_violations prog in
+  Alcotest.(check bool) "cons X X flagged as non-linear" true (List.length viols >= 1);
+  (* A linear program produces no violations. *)
+  let ok = parse_program "read X; Y <= cons X nil; write Y" in
+  Alcotest.(check int) "linear program has no violations" 0
+    (List.length (EvalRwhile.linearity_violations ok))
+
+(* BUG: the not-all-cleared error must name the actually-dirty variable. *)
+let test_noncleared_names_var () =
+  check_fail_contains "non-cleared names Y" "Y"
+    (fun () -> eval_string "read X; Y ^= 'junk; write X" "'a")
+
+(* New: -llm-errors mode emits a structured, parseable block. *)
+let test_llm_error_format () =
+  EvalRwhile.llm_errors := true;
+  let m =
+    Fun.protect ~finally:(fun () -> EvalRwhile.llm_errors := false)
+      (fun () -> try ignore (eval_string "read X; Y ^= hd X; write X" "'a"); ""
+                 with Failure m -> m) in
+  Alcotest.(check bool) "has [RWHILE-ERROR] header" true (find_substring m "[RWHILE-ERROR]" <> None);
+  Alcotest.(check bool) "has category field"        true (find_substring m "category: no-head" <> None);
+  Alcotest.(check bool) "has hint field"            true (find_substring m "hint:" <> None)
+
+(* New: plain mode is unchanged (no structured wrapper). *)
+let test_plain_error_unchanged () =
+  Alcotest.check_raises "plain hd nil message unchanged"
+    (Failure "No head. Expression hd nil has value nil")
+    (fun () -> ignore (eval_string "read X; Y ^= hd nil; write X" "'a"))
+
 (* ===== Test runner ===== *)
 
 let () =
@@ -1025,6 +1105,17 @@ let () =
       Alcotest.test_case "macro minus" `Quick test_eval_macro_minus;
       Alcotest.test_case "reversibility" `Quick test_eval_reversibility;
       Alcotest.test_case "non-cleared fails" `Quick test_eval_non_cleared_fails;
+    ];
+    "interpreter-robustness", [
+      Alcotest.test_case "list-syntax input desugared" `Quick test_list_input_desugared;
+      Alcotest.test_case "hd on list-syntax input" `Quick test_list_input_hd;
+      Alcotest.test_case "literal pattern list-sugar desugar" `Quick test_pval_list_pattern_desugar;
+      Alcotest.test_case "show-only variable collected" `Quick test_show_var_collected;
+      Alcotest.test_case "loop reversibility caught" `Quick test_loop_reversibility_caught;
+      Alcotest.test_case "non-linear pattern detected" `Quick test_nonlinear_pattern_detected;
+      Alcotest.test_case "non-cleared names dirty var" `Quick test_noncleared_names_var;
+      Alcotest.test_case "llm-errors structured format" `Quick test_llm_error_format;
+      Alcotest.test_case "plain error message unchanged" `Quick test_plain_error_unchanged;
     ];
     "inv-eval", [
       Alcotest.test_case "inv swap" `Quick test_inv_eval_swap;
