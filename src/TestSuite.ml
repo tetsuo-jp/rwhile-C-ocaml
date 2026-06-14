@@ -1085,6 +1085,18 @@ let test_av_eq_mixed_dynamic () =
   check_av "eq mixed -> dynamic eq"
     "('eq . (('S . 'a) . ('D . ('var . nil))))"
     "('D . ('eq . (('val . 'a) . ('var . nil))))"
+let test_av_uncons_partial () =
+  (* split a partially-static cons into static car + dynamic cdr (the input split) *)
+  check_av "uncons partial-static"
+    "('uncons . ('C . (('S . 'a) . ('D . ('var . nil)))))"
+    "(('S . 'a) . ('D . ('var . nil)))"
+let test_av_uncons_static () =
+  check_av "uncons static cons"
+    "('uncons . ('S . ('a . 'b)))" "(('S . 'a) . ('S . 'b))"
+let test_av_uncons_dynamic () =
+  check_av "uncons dynamic (symbolic hd/tl)"
+    "('uncons . ('D . ('var . nil)))"
+    "(('D . ('hd . ('var . nil))) . ('D . ('tl . ('var . nil))))"
 
 (* ===== Garbage / size measurement (Stage A) ===== *)
 
@@ -1364,6 +1376,9 @@ let () =
       Alcotest.test_case "eq static true" `Quick test_av_eq_static_true;
       Alcotest.test_case "eq static false" `Quick test_av_eq_static_false;
       Alcotest.test_case "eq mixed dynamic" `Quick test_av_eq_mixed_dynamic;
+      Alcotest.test_case "uncons partial-static" `Quick test_av_uncons_partial;
+      Alcotest.test_case "uncons static cons" `Quick test_av_uncons_static;
+      Alcotest.test_case "uncons dynamic" `Quick test_av_uncons_dynamic;
     ];
     "interpreter-robustness", [
       Alcotest.test_case "list-syntax input desugared" `Quick test_list_input_desugared;

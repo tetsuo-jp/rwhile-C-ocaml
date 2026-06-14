@@ -144,6 +144,31 @@ macro AV-LIFT-STEP(Wk, Wk', RSt)
   fi =? LfTag 'S;
   Wk' <= cons (cons LfTag LfPay) Wk'
 
+(* AV-UNCONS(A, A1, A2): split a cons-shaped AV into its two components
+ * ('C/'S-cons split; 'D symbolic). Used for partially-static pattern reads. *)
+macro AV-UNCONS(A, A1, A2)
+  cons T V <= A;
+  CUs ^= =? T 'S;
+  if =? T 'S then
+    cons H Tl <= V;
+    A1 <= cons 'S H;
+    A2 <= cons 'S Tl;
+    T ^= 'S
+  else
+    CUc ^= =? T 'C;
+    if =? T 'C then
+      cons A1 A2 <= V;
+      T ^= 'C
+    else
+      Vc ^= V;
+      A1 <= cons 'D (cons 'hd V);
+      A2 <= cons 'D (cons 'tl Vc);
+      T ^= 'D
+    fi CUc;
+    CUc ^= CUc
+  fi CUs;
+  CUs ^= CUs
+
 macro AV-EQ(A1, A2, R)
   cons T1 V1 <= A1;
   cons T2 V2 <= A2;

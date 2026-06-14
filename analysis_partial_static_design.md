@@ -168,11 +168,31 @@ I:nil→(nil.nil) に展開され残余なし。
 **Stage B（spec コアの partially-static 化）完了**：AV版 SPEC-EXP ＋ SPEC-STEP（seq/ass/rep/cond/loop）が
 全て動作。AV 特殊化器がコア R-WHILE で機能的に完備。
 
-### 次の一手（Stage C: 第1射影 fp1）
-spec_av.rwhile に main（入力設定＋出力組み立て）を整え、`comp = [spec_av]((ri_fp3 . src))` を実行。
-ri_fp3 の read 変数を partially-static（prog 静的・data 動的）で与え、ディスパッチ/ループが静的解決され
-残余が縮約されることを確認 → `check_first_projection` を ri_fp3＋spec_av に向け green に。
-（injectivity 用の元プログラム符号埋め込みは fp1 の機能的正しさ確認後に追加。）まず `av.rwhile` の AV 演算を
+## Stage C（第1射影 fp1）
+
+### 診断：partially-static 'rep が必要
+fp1 の鍵は ri_fp3 の入力分割 `cons Prog Data <= V0`（V0 = `('C.(('S.prog).('D.dataref)))`）を
+**残余化せず構造分割**すること。現行 'rep は「全 RHS 変数が静的」でないと残余化するため、'C（部分静的）の
+読みを残余化してしまい prog の静的性を失う。→ partially-static な pattern 読み書きが要る。
+
+### ステップ C1 着手（2026-06-14）: AV-UNCONS 実装・検証 ✅
+`AV-UNCONS(A, A1, A2)`：cons 形 AV を2成分に分割（'C → av1,av2／'S-cons → ('S.h),('S.t)／
+'D → 記号 hd/tl）。これが入力分割（`cons Prog Data <= V0`, V0='C → Prog=('S.prog), Data=('D...)）の
+要。`av-algebra` 群に3件追加 green。spec_av.rwhile にもミラー済み（'rep 改修で使用予定）。
+
+### 設計：'rep の AV 化（次のステップ C2）
+'rep `Q <= R`：
+- R を AV-aware に読む（PAT-READ-AV：var→slot AV を消費、val→('S.v)、cons→AV-CONS）。得た AVr。
+- Q が cons で AVr が cons 形（'C / 'S-cons）→ AV-UNCONS で分割して各 var slot に書く（**構造分割・残余なし**）。
+- Q が cons で AVr が 'D 葉（純動的）→ 構造分割不能 → 従来どおり残余化（PAT-CLR で var 動的化）。
+- Q が var → slot := AVr（代入）。
+これで入力分割は構造分割、純動的データ移動は残余化、という structural PE になる（symbolic 全展開は採らない＝
+論文 §6 のゴミ解析と整合）。
+
+### ステップ C3: spec_av main ＋ fp1
+spec_av に main（入力 `(ri_fp3 . src)` → V0 slot = `('C.(('S.src).('D.('var.0))))` を設定 → SPEC-CMD-AV →
+残余プログラム組み立て）を整え、`comp = [spec_av]((ri_fp3 . src))` を実行。`check_first_projection` を
+ri_fp3＋spec_av に向け green に。injectivity 用の符号埋め込みは機能的正しさ確認後。まず `av.rwhile` の AV 演算を
 spec.rwhile に取り込み、SPEC-EXP の var/val/cons/hd/tl/eq を AV 規則へ。LIFT と eq の全静的判定は
 再帰が要るためスタックマシン化（既存 SPEC-EXP の B/E マーカー方式を踏襲）。spec-partial(swap) を
 壊さないこと。
