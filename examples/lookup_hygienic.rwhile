@@ -1,0 +1,32 @@
+(* lookup_hygienic.rwhile — hygiene-clean version of lookup.rwhile.
+ * All scratch that crosses the AUX/INV-AUX boundary (Elem, Rest, Rev, Cnt) is
+ * passed as an explicit parameter instead of being an implicitly-shared local,
+ * so the program works under -hygienic-macros (and still works without it).
+ * U is a true per-iteration local (set then consumed each step) and may be
+ * alpha-renamed freely. *)
+
+macro LOOKUP(Vl,J,X)
+  AUX(Vl,J,Elem,Rest,Rev,Cnt);
+  X ^= Elem;
+  INV-AUX(Vl,J,Elem,Rest,Rev,Cnt)
+
+macro UPDATE(Vl,J,X)
+  AUX(Vl,J,Elem,Rest,Rev,Cnt);
+  Elem ^= X;
+  INV-AUX(Vl,J,Elem,Rest,Rev,Cnt)
+
+macro AUX(Vl,J,Elem,Rest,Rev,Cnt)
+  from (=? Cnt nil) loop
+    cons U Vl <= Vl;
+    Rev <= cons U Rev;
+    Cnt <= cons nil Cnt
+  until (=? Cnt J);
+  cons Elem Rest <= Vl
+
+read X;
+  Vl ^= ('00.('11.('22.nil)));
+  J ^= (nil.(nil.nil));
+  LOOKUP(Vl,J,X);
+  J ^= (nil.(nil.nil));
+  Vl ^= ('00.('11.('22.nil)));
+write X
