@@ -230,7 +230,25 @@ symbolic を活かせるか、`MAKE-SEQ` を追加し残余を「MAKE-SEQ(RCode)
 - 静的ディスパッチ解決（cond/eq）は SPEC-EXP-AV で既に動作。
 これで残余は RCode 1本（コマンド構造保持＝論文§6整合）になり、出力 AV 分裂を回避。
 
-### ステップ C3（改訂）: structural 'rep ＋ 入力 peel ＋ spec_av main ＋ fp1
+### ステップ C3 第3検証（2026-06-14）: all-symbolic でも fp1 不正
+'ass も symbolic 化（nil変数→slot:=AV、X^=X→クリア）して all-symbolic 一貫にし、fp1(id) を
+再試行。今度は `[ri]((comp.'a))` がエラーなく**実行できた**が、結果が `(id.'a)` に**ならない**
+（runnable だが不正）。→ symbolic 方式は fp1 で正しい残余を生成しないと**3度目に確定**。
+（この all-symbolic 'ass 変更は dead-end のため revert。spec_av は commit 3244268 の状態
+＝symbolic 'rep＋residualizing 'ass＋MAKE-SEQ＋簡素化 seq、全 AV テスト green に戻した。）
+
+### Stage C の正直な現状（要設計判断）
+spec コア（Stages A,B）は完備・テスト済み。だが fp1 のきれいな可逆残余生成は、可逆言語の
+オンライン部分評価における健全性問題（symbolic 全展開は再配置プログラムで非パターン残余＝不可、
+structural は静的部の lift と入力 peel の精密な扱いが必要）に突き当たり、3度の実機検証でも未達。
+これは複数セッション規模の研究エンジニアリングで、疲労下の試行錯誤では収束していない。
+
+**推奨**: ここで Stage C を一旦区切る。spec コア（A,B）と AV 機構（cons/hd/tl/lift/eq/uncons、
+SPEC-EXP-AV、SPEC-STEP-AV 全コマンド、MAKE-SEQ）は再現アーティファクトとして価値がある。
+fp1 完遂は、structural 'rep（静的部 lift つき残余化）＋ 入力 peel の設計を腰を据えて（必要なら
+論文側と突き合わせて）詰めてから実装するのが堅実。
+
+### （参考）ステップ C3（改訂）: structural 'rep ＋ 入力 peel ＋ spec_av main ＋ fp1
 spec_av に main（入力 `(ri_fp3 . src)` → V0 slot = `('C.(('S.src).('D.('var.0))))` を設定 → SPEC-CMD-AV →
 残余プログラム組み立て）を整え、`comp = [spec_av]((ri_fp3 . src))` を実行。`check_first_projection` を
 ri_fp3＋spec_av に向け green に。injectivity 用の符号埋め込みは機能的正しさ確認後。まず `av.rwhile` の AV 演算を
