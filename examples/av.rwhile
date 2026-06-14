@@ -1,0 +1,118 @@
+(*
+ * av.rwhile - Partially-static annotated-value (AV) algebra, proof of concept.
+ *
+ * AV ::= ('S . v)            static value v
+ *      | ('D . code)         dynamic, residual expression code
+ *      | ('C . (av1 . av2))  cons of two AVs (partially static)
+ *
+ * These reversible macros are the foundation for rewriting spec.rwhile's
+ * binding-time engine to support partially-static structures (see
+ * analysis_partial_static_design.md).  Non-recursive ops only: cons/hd/tl.
+ *
+ * Test harness: input In = (Op . Payload); output Out = result AV.
+ *   ('hd   . AV)          -> AV-HD
+ *   ('tl   . AV)          -> AV-TL
+ *   ('cons . (AV1 . AV2)) -> AV-CONS
+ *)
+
+(* AV-HD(A, R): R := head of AV A; consumes A, produces R (R must be nil). *)
+macro AV-HD(A, R)
+  cons T V <= A;
+  CT ^= =? T 'S;
+  if =? T 'S then
+    (* static (h.t): R = ('S . h) *)
+    cons H Tl <= V;
+    Tl ^= Tl;
+    R <= cons 'S H;
+    T ^= 'S
+  else
+    CC ^= =? T 'C;
+    if =? T 'C then
+      (* C (a1.a2): R = a1 *)
+      cons A1 A2 <= V;
+      A2 ^= A2;
+      R <= A1;
+      T ^= 'C
+    else
+      (* dynamic: R = ('D . ('hd . code)) *)
+      R <= cons 'D (cons 'hd V);
+      T ^= 'D
+    fi CC;
+    CC ^= CC
+  fi CT;
+  CT ^= CT
+
+(* AV-TL(A, R): R := tail of AV A; consumes A. *)
+macro AV-TL(A, R)
+  cons T V <= A;
+  CT ^= =? T 'S;
+  if =? T 'S then
+    cons H Tl <= V;
+    H ^= H;
+    R <= cons 'S Tl;
+    T ^= 'S
+  else
+    CC ^= =? T 'C;
+    if =? T 'C then
+      cons A1 A2 <= V;
+      A1 ^= A1;
+      R <= A2;
+      T ^= 'C
+    else
+      R <= cons 'D (cons 'tl V);
+      T ^= 'D
+    fi CC;
+    CC ^= CC
+  fi CT;
+  CT ^= CT
+
+(* AV-CONS(A1, A2, R): R := cons of A1, A2 (normalized); consumes A1, A2. *)
+macro AV-CONS(A1, A2, R)
+  cons T1 V1 <= A1;
+  cons T2 V2 <= A2;
+  S1 ^= =? T1 'S;
+  S2 ^= =? T2 'S;
+  Both ^= nil;
+  if S1 then
+    if S2 then Both ^= (nil.nil) fi S2
+  fi S1;
+  CBoth ^= Both;
+  if Both then
+    (* both static: fold into ('S . (V1.V2)) *)
+    R <= cons 'S (cons V1 V2);
+    T1 ^= 'S; T2 ^= 'S
+  else
+    (* keep as ('C . (A1.A2)); rebuild A1,A2 from their parts *)
+    A1 <= cons T1 V1;
+    A2 <= cons T2 V2;
+    R <= cons 'C (cons A1 A2)
+  fi CBoth;
+  CBoth ^= CBoth;
+  Both ^= Both;
+  S1 ^= S1;
+  S2 ^= S2
+
+(* ===== Main program ===== *)
+
+read In;
+  cons Op Args <= In;
+  COphd ^= =? Op 'hd;
+  if =? Op 'hd then
+    AV-HD(Args, Out);
+    Op ^= 'hd
+  else
+   COptl ^= =? Op 'tl;
+   if =? Op 'tl then
+     AV-TL(Args, Out);
+     Op ^= 'tl
+   else
+     (* assume 'cons *)
+     cons A1 A2 <= Args;
+     AV-CONS(A1, A2, Out);
+     Op ^= 'cons
+   fi COptl;
+   COptl ^= COptl
+  fi COphd;
+  COphd ^= COphd;
+  Args ^= Args;
+write Out

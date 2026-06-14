@@ -1031,6 +1031,37 @@ let test_plain_error_unchanged () =
     (Failure "No head. Expression hd nil has value nil")
     (fun () -> ignore (eval_string "read X; Y ^= hd nil; write X" "'a"))
 
+(* ===== Partially-static annotated-value (AV) algebra (Stage 1 foundation) =====
+ * av.rwhile implements the AV algebra (cons/hd/tl over 'S/'D/'C tags) that will
+ * back a partially-static rewrite of spec.rwhile (see
+ * analysis_partial_static_design.md). These check the key property the current
+ * spec lacks: cons(static, dynamic) keeps the static part recoverable. *)
+let check_av name input_str expected_str =
+  let prog = parse_file_program (examples_dir ^ "/av.rwhile") in
+  let out  = EvalRwhile.evalProgram prog (parse_val input_str) in
+  Alcotest.(check valT_testable) name (parse_val expected_str) out
+
+let test_av_hd_static () =
+  check_av "hd static" "('hd . ('S . ('a . 'b)))" "('S . 'a)"
+let test_av_hd_partial () =
+  (* hd of a partially-static cons recovers the static head *)
+  check_av "hd partial-static"
+    "('hd . ('C . (('S . 'a) . ('D . ('var . nil)))))" "('S . 'a)"
+let test_av_hd_dynamic () =
+  check_av "hd dynamic"
+    "('hd . ('D . ('var . nil)))" "('D . ('hd . ('var . nil)))"
+let test_av_tl_partial () =
+  check_av "tl partial-static"
+    "('tl . ('C . (('S . 'a) . ('D . ('var . nil)))))" "('D . ('var . nil))"
+let test_av_cons_both_static () =
+  check_av "cons both-static folds"
+    "('cons . (('S . 'a) . ('S . 'b)))" "('S . ('a . 'b))"
+let test_av_cons_mixed_keeps_static () =
+  (* the crux: a static/dynamic cons stays partially static (not collapsed) *)
+  check_av "cons mixed keeps static car"
+    "('cons . (('S . 'a) . ('D . ('var . nil))))"
+    "('C . (('S . 'a) . ('D . ('var . nil))))"
+
 (* ===== Test runner ===== *)
 
 let () =
@@ -1105,6 +1136,14 @@ let () =
       Alcotest.test_case "macro minus" `Quick test_eval_macro_minus;
       Alcotest.test_case "reversibility" `Quick test_eval_reversibility;
       Alcotest.test_case "non-cleared fails" `Quick test_eval_non_cleared_fails;
+    ];
+    "av-algebra", [
+      Alcotest.test_case "hd static" `Quick test_av_hd_static;
+      Alcotest.test_case "hd partial-static" `Quick test_av_hd_partial;
+      Alcotest.test_case "hd dynamic" `Quick test_av_hd_dynamic;
+      Alcotest.test_case "tl partial-static" `Quick test_av_tl_partial;
+      Alcotest.test_case "cons both-static folds" `Quick test_av_cons_both_static;
+      Alcotest.test_case "cons mixed keeps static" `Quick test_av_cons_mixed_keeps_static;
     ];
     "interpreter-robustness", [
       Alcotest.test_case "list-syntax input desugared" `Quick test_list_input_desugared;

@@ -182,6 +182,21 @@ $ ./ri -p2d examples/ri.rwhile   | wc -c   →   498985   (≈0.5 MB)
    - committed の first-projection テストは ri.rwhile のまま（ri_fp3 でも green に
      ならないため切替えていない）。fp1 系は依然 red。
 
+### Stage 0 再確認（2026-06-14, インタプリタ修正後）
+
+インタプリタ（EvalRwhile.ml）のバグ6件修正後に fp1(ri_fp3) を再測定したが状況は不変
+（＝fp1 の壁は spec 側で、インタプリタ起因ではないことを確認）：
+- `[spec]((ri_fp3 . ('partial . id)))` 残余 ≈ 714KB（loop 36 / cond 343 / rep 779 / ass 617）
+  ＝ ri_fp3 本体がほぼ未特殊化。実行時 `error in update: var=V2`（V2 にプログラム断片が乗る）。
+- 根本原因（精緻化）: peel は「プログラム保持変数 Y(=FCYi) に runtime `Y^=s` を出しつつ
+  static 追跡」する設計。ri_fp3 では Y が名前付き program slot（V1）と一致し、さらに解釈対象
+  プログラムの変数（id の read/write 変数 = V2）とも衝突するため、static 追跡値と runtime 値が
+  食い違い、出力再構成のプログラム断片が dynamic スロットへ書かれる。
+- 結論（不変）: bounded patch では解けない。**spec コアの設計変更**が必要：
+  (A) 一般 partially-static 値の導入（read 変数が `(static . dynamic)` を持てる）→ peel 自体を撤去、
+  または (B) peel と ri_fp3 を、プログラム保持変数が名前付き/解釈対象スロットと衝突しないよう作り直す。
+  (A) が本筋（第2射影にも必要）。いずれも複数セッション規模。
+
 ### Stage 0 の結論（改訂）
 
 「第1射影を直す」= **配列版 ri.rwhile を特殊化する**のは、診断②により本質的に筋が悪い
