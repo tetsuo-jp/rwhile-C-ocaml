@@ -1326,11 +1326,15 @@ let test_ss_av_rep_static () =
 
 let test_ss_av_rep_input_split () =
   (* THE fp1 input split: cons V1 V2 <= V0 with V0 partially static
-   * ('C.(('S.'a).('D...))) -> V1 static ('S.'a), V2 dynamic, no residual *)
-  check_spec_step_av "rep partial-static input split"
+   * ('C.(('S.'a).('D.('var.0)))). V1 := static ('S.'a). V2's dynamic half is
+   * ('D.('var.0)), which aliases var0 != V2's index (2); under the NO-ALIAS
+   * invariant this re-homes: emit a runtime move `V2 <= V0` and set V2's slot to
+   * the self-reference ('D.('var.2)). *)
+  check_spec_step_av "rep partial-static input split (re-home)"
     "(('C . (('S . 'a) . ('D . ('var . nil)))) . (('S . nil) . (('S . nil) . nil)))"
     rep_yzx
-    "((('S . nil) . (('S . 'a) . (('D . ('var . nil)) . nil))) . nil)"
+    ("((('S . nil) . (('S . 'a) . (('D . ('var . (nil . (nil . nil)))) . nil))) . ("
+     ^ "('rep . (('var . (nil . (nil . nil))) . ('var . nil))) . nil))")
 
 let test_ss_av_swap_static () =
   (* full swap of a static (a.b) -> static (b.a), fully executed, no residual *)
@@ -1414,14 +1418,15 @@ let test_fp1_split_rejoin () =
   Alcotest.(check valT_testable) "fp1(split-rejoin,'a): [comp]('d) = ('a.'d)"
     (parse_val "('a . 'd)") (fp1_roundtrip p_split_rejoin "'a" (atom "'d"))
 
-(* rung 2 (ERROR SOURCE): move the dynamic half to a DIFFERENT variable (V3^=V2),
- * self-clear the source (V2^=V2), then rejoin from V3. Identity on a pair, but it
- * forces a cross-variable dynamic move + self-clear under aliasing. This currently
- * produces a non-reversible residual (the input var is not consumed; the aliased
- * self-clear becomes a set), so running it raises Failure ("error in update").
- * This is a CHARACTERIZATION test: it pins the bug to this exact pattern and stays
- * green until the no-alias/runtime-move fix lands — at which point flip it to
- * assert (parse_val "('a . 'd)"). *)
+(* rung 2 (the no-alias fix target): move the dynamic half to a DIFFERENT variable
+ * (V3^=V2), reversibly clear the source (V2^=V3, since V3=V2), then rejoin from V3.
+ * Identity on a pair, but it forces a cross-variable dynamic move. Before the
+ * no-alias fix this produced a non-reversible residual (input var not consumed,
+ * because V2 aliased a different variable). With PAT-WRITE-LEAF-REHOME the split
+ * emits a runtime move so V2 owns its value; the residual is correct and
+ * [comp]('d) = ('a.'d).  (A self-clear V2^=V2 here would be correct directly but
+ * is irreversible, which ri.rwhile cannot self-interpret — so the reversible
+ * clear V2^=V3 is used.) *)
 let p_move_clear_rejoin =
   "(('var . nil) . (" ^
   "('seq . (" ^
@@ -1429,18 +1434,16 @@ let p_move_clear_rejoin =
     "('seq . (" ^
       "('ass . (('var.(nil.(nil.(nil.nil)))) . ('var.(nil.(nil.nil))))) . " ^
       "('seq . (" ^
-        "('ass . (('var.(nil.(nil.nil))) . ('var.(nil.(nil.nil))))) . " ^
+        "('ass . (('var.(nil.(nil.nil))) . ('var.(nil.(nil.(nil.nil)))))) . " ^
         "('rep . (('var.nil) . ('cons . (('var.(nil.nil)) . ('var.(nil.(nil.(nil.nil))))))))" ^
       "))" ^
     "))" ^
   "))" ^
   " . ('var . nil)))"
-let test_fp1_move_clear_known_bug () =
-  Alcotest.(check bool)
-    "ERROR SOURCE: cross-var dynamic move + self-clear -> non-reversible residual (currently errors)"
-    true
-    (try ignore (fp1_roundtrip p_move_clear_rejoin "'a" (atom "'d")); false
-     with Failure _ -> true)
+let test_fp1_move_clear () =
+  Alcotest.(check valT_testable)
+    "fp1(cross-var move+reversible clear,'a): [comp]('d) = ('a.'d)  (no-alias fix)"
+    (parse_val "('a . 'd)") (fp1_roundtrip p_move_clear_rejoin "'a" (atom "'d"))
 
 (* ===== Test runner ===== *)
 
@@ -1548,7 +1551,7 @@ let () =
       Alcotest.test_case "assembled residual computes swap" `Quick test_assemble_fp1_swap;
       Alcotest.test_case "fp1 main specializes swap" `Quick test_fp1_main_swap;
       Alcotest.test_case "fp1 split-rejoin round-trip" `Quick test_fp1_split_rejoin;
-      Alcotest.test_case "fp1 ERROR SOURCE: cross-var move+self-clear" `Quick test_fp1_move_clear_known_bug;
+      Alcotest.test_case "fp1 cross-var move+clear (no-alias fix)" `Quick test_fp1_move_clear;
     ];
     "spec-av-exp", [
       Alcotest.test_case "var static" `Quick test_se_av_var_static;

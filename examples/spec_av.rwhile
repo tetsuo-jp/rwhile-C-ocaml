@@ -537,15 +537,55 @@ macro PAT-WRITE-STRUCT(P, WA, RCode)
       cons WStg WSag <= P;
       cons WSp1 WSp2 <= WSag;
       AV-UNCONS(WA, WSa1, WSa2);        (* WA is 'C or 'S here: real split *)
-      PAT-WRITE-LEAF-AV2(WSp1, WSa1);
-      PAT-WRITE-LEAF-AV2(WSp2, WSa2);
+      PAT-WRITE-LEAF-REHOME(WSp1, WSa1, RCode);
+      PAT-WRITE-LEAF-REHOME(WSp2, WSa2, RCode);
       WSag <= cons WSp1 WSp2;
       P <= cons WStg WSag
     fi WSisD;
     WSisD ^= WSisD
   else
-    PAT-WRITE-LEAF-AV2(P, WA)
+    PAT-WRITE-LEAF-REHOME(P, WA, RCode)
   fi =? (hd P) 'cons
+
+(* PAT-WRITE-LEAF-REHOME(P, WA, RCode): write AV WA into leaf pattern P (a var),
+ * preserving the NO-ALIAS invariant: a dynamic slot k must reference itself
+ * ('D.('var.k)), never another variable.  If WA is a dynamic-var leaf
+ * ('D.('var.k)) with k <> P's index, we cannot just store it (that aliases var k);
+ * instead emit a runtime MOVE  P <= ('var.k)  into RCode and set the slot to the
+ * self-reference ('D.('var.P)).  Otherwise (static, partial, self-referential, or
+ * non-var-dynamic) store WA directly.  Non-var P: discard WA. *)
+macro PAT-WRITE-LEAF-REHOME(P, WA, RCode)
+  if =? (hd P) 'var then
+    cons RhT RhI <= P;                  (* P = ('var . RhI) *)
+    (* Reh = (WA is ('D.('var.k)) with k <> RhI); WA and RhI preserved *)
+    if =? (hd WA) 'D then
+      if =? (hd (tl WA)) 'var then
+        if =? (tl (tl WA)) RhI else Reh ^= (nil.nil) fi =? (tl (tl WA)) RhI
+      fi =? (hd (tl WA)) 'var
+    fi =? (hd WA) 'D;
+    if Reh then
+      (* re-home: WA = ('D.('var.k)) -> emit move, slot := ('D.('var.RhI)) *)
+      cons RhDt (cons RhVt RhK) <= WA;  (* RhDt='D, RhVt='var, RhK=k; WA=nil *)
+      RhDt ^= 'D; RhVt ^= 'var;
+      LOOKUP(Vl, RhI, RhOld); UPDATE(Vl, RhI, RhOld); RhOld ^= RhOld;  (* clear slot *)
+      RhIc ^= RhI;
+      RhNew <= cons 'D (cons 'var RhIc);
+      UPDATE(Vl, RhI, RhNew);           (* slot := ('D.('var.RhI)) *)
+      cons RhN1 RhN2 <= RhNew; RhN1 ^= RhN1; RhN2 ^= RhN2;
+      RhI2 ^= RhI;
+      RCode <= cons (cons 'rep (cons (cons 'var RhI2) (cons 'var RhK))) RCode
+    else
+      (* store WA directly into the slot *)
+      LOOKUP(Vl, RhI, RhS); UPDATE(Vl, RhI, RhS); RhS ^= RhS;
+      RhS <= WA;                        (* move WA into RhS (WA consumed) *)
+      UPDATE(Vl, RhI, RhS);             (* slot := WA (RhS preserved) *)
+      cons RhSt RhSv <= RhS; RhSt ^= RhSt; RhSv ^= RhSv
+    fi Reh;
+    Reh ^= Reh;
+    P <= cons RhT RhI
+  else
+    WA ^= WA
+  fi =? (hd P) 'var
 
 (* ===== AV-based command specializer (WIP: 'seq and 'ass) =====
  * SPEC-STEP-AV processes one command; residual commands accumulate in RCode
