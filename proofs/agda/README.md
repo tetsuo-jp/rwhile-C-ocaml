@@ -101,6 +101,24 @@ Done: reversibility of `inv` (atom/seq/cond/loop); concrete `rupdate`
 instantiation; determinism + function-level inverse; a verified flat-IL → R-WHILE
 translation with IL reversibility.
 
+## Extraction demo (verified code → native binary)
+
+`Extract.agda` imports the verified `rupdF` and compiles, via Agda's GHC
+backend, to a native executable — demonstrating the "replace the
+implementation by extraction" route: the *same* Agda code that carries the
+`--safe` reversibility proofs is ordinary runnable code.
+
+```
+./build-extract.sh      # agda --compile (exposes the `text` pkg, finds libffi)
+./Extract
+#  V0 initially            = nil
+#  V0 after  x ^= (nil.nil) = (nil . nil)
+#  V0 after  toggling twice = nil      ← reversibility, at runtime
+```
+
+`Extract.agda` uses `--guardedness` (for IO) instead of `--safe`, but it only
+*imports* and runs the `--safe`-checked `rupdF`; no proof is weakened.
+
 ## Honest scope (what is NOT yet proved)
 
 These are results about an Agda **model** of R-WHILE's core, hand-written to
