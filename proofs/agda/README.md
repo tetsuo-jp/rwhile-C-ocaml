@@ -36,28 +36,48 @@ Theorems (all `--safe`, no postulates / holes / termination pragmas):
 The loop case is the crux: inverting it reverses the whole iteration chain,
 done by the accumulator induction `rev-rest`.
 
-## Files
+## Files (in dependency order)
 
-- `RWhileRev.agda` — core: atom / seq / cond.
-- `RWhileRevFull.agda` — adds the reversible loop `CLoop`.
+- `RWhileRev.agda` — core reversibility: atom / seq / cond.
+- `RWhileRevFull.agda` — adds the reversible loop `CLoop` (the crux).
+- `RWhileValStore.agda` — **step (1)**: instantiate the abstract atom with
+  R-WHILE's concrete value trees + the reversible XOR-update `rupdate`;
+  prove `rupdate` is a partial involution (`RAss-sym`), hence the concrete
+  assignment is reversible.
+- `RWhileDet.agda` — **step (2)**: determinism of `_⊢_⇒_` (given
+  deterministic atoms, collected by `Det⟨ c ⟩`) and the function-level
+  inverse law `inv-cancels` (running `inv c` on c's output returns to start).
+- `RWhileDetConcrete.agda` — **step (2), concrete**: `rupdate` is
+  deterministic (`RAss-det`, under a `funext` hypothesis), so the concrete
+  assignment's inverse cancels (`assign-inv-cancels`).
+- `RWhileIL.agda` — **step (3)**: a reversible Intermediate Language with
+  flat (list) sequencing, its own big-step semantics, a translation `trS`
+  to R-WHILE proved **semantics-preserving** (`tr-soundS`/`tr-completeS`),
+  and **IL reversibility** (`il-revS`). Demonstrates the layered-correctness
+  architecture (prove in an efficient IL, transport via a verified
+  translation).
 
 ## Checking
 
 ```
 cd proofs/agda
-agda --safe RWhileRevFull.agda
+for f in RWhileRev RWhileRevFull RWhileValStore RWhileDet RWhileDetConcrete RWhileIL; do
+  agda --safe $f.agda
+done
 ```
 
 Requires Agda + agda-stdlib (the `standard-library` library, as used by
-`rev-alg-agda`).
+`rev-alg-agda`).  All files are `--safe`: no postulates, holes, `TERMINATING`
+pragmas, or `trustMe` (the only assumption is `funext`, taken as an explicit
+module hypothesis in `RWhileDetConcrete`).
 
-## Scope / next steps
+## Status / further work
 
-- The atomic step is abstract (a relation + its converse). A natural next
-  layer instantiates it with R-WHILE's concrete value trees and `rupdate`,
-  proving `rupdate`'s local invertibility, to obtain reversibility for the
-  full language with pattern replacement.
-- Determinism of `_⊢_⇒_` (given deterministic atoms) would upgrade the
-  relational inverse to a function-level inverse `⟦inv c⟧ ∘ ⟦c⟧ = id`.
-- This connects to the broader plan (an intermediate language proved
-  correct, then a verified IL → R-WHILE translation).
+Done: reversibility of `inv` (atom/seq/cond/loop); concrete `rupdate`
+instantiation; determinism + function-level inverse; a verified flat-IL → R-WHILE
+translation with IL reversibility.
+
+Next: extend the IL with loops; instantiate `rupdate` determinism without
+`funext` via a first-order store; connect the IL to R-WHILE's pattern
+replacement (`CRep`); and (broader plan) use the IL as the efficient layer in
+which to prove further properties, transported to R-WHILE by the translation.
