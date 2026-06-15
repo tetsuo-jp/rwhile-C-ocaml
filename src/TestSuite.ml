@@ -1251,6 +1251,55 @@ let check_spec_step_av name vl_str cmd_str expected_str =
   let out = EvalRwhile.evalProgram prog (pair (parse_val vl_str) (parse_val cmd_str)) in
   Alcotest.(check valT_testable) name (parse_val expected_str) out
 
+(* Decode a unary nil-list index to an int; -1 if not a unary index. *)
+let rec unary_to_int = function
+  | VNil -> 0
+  | VCons (VNil, rest) -> (match unary_to_int rest with -1 -> -1 | n -> n + 1)
+  | _ -> -1
+
+(* Pretty-print a p2d command/expr with decoded var indices. *)
+let rec pp_cmd v =
+  let open Printf in
+  match v with
+  | VCons (VAtom (Atom "'seq"), VCons (c, d)) -> sprintf "%s; %s" (pp_cmd c) (pp_cmd d)
+  | VCons (VAtom (Atom "'ass"), VCons (lhs, e)) -> sprintf "%s ^= %s" (pp_cmd lhs) (pp_cmd e)
+  | VCons (VAtom (Atom "'rep"), VCons (p, r)) -> sprintf "%s <= %s" (pp_cmd p) (pp_cmd r)
+  | VCons (VAtom (Atom "'cons"), VCons (a, b)) -> sprintf "cons(%s, %s)" (pp_cmd a) (pp_cmd b)
+  | VCons (VAtom (Atom "'var"), k) -> sprintf "V%d" (unary_to_int k)
+  | VCons (VAtom (Atom "'val"), x) -> sprintf "{%s}" (show_val x)
+  | VCons (VAtom (Atom "'hd"), x) -> sprintf "hd(%s)" (pp_cmd x)
+  | VCons (VAtom (Atom "'tl"), x) -> sprintf "tl(%s)" (pp_cmd x)
+  | VCons (VAtom (Atom "'cond"), rest) -> sprintf "cond(%s)" (show_val rest)
+  | VCons (VAtom (Atom "'loop"), rest) -> sprintf "loop(%s)" (show_val rest)
+  | other -> show_val other
+
+(* fp1 via ri_fp3: residual body of a source program (the "compiled" code).
+ * Returns (residual_body_pretty, comp). *)
+let fp1_ri_fp3_body src_name =
+  let spec_av = parse_file_program (examples_dir ^ "/spec_av.rwhile") in
+  let ri_fp3 = Program2DataRwhile.program2data
+    (parse_file_program (examples_dir ^ "/ri_fp3.rwhile")) in
+  let src = parse_file_program (examples_dir ^ "/" ^ src_name ^ ".rwhile") in
+  let src_data = Program2DataRwhile.program2data src in
+  let comp = EvalRwhile.evalProgram spec_av (pair ri_fp3 src_data) in
+  match comp with
+  | VCons (_, VCons (body, _)) -> pp_cmd body
+  | _ -> "unexpected comp shape"
+
+(* CHARACTERIZATION of the open fp1-via-ri_fp3 specialization bug (candidate B).
+ * `swap` and `sx_splitjoin` (uncons-then-rejoin = identity) differ only by the
+ * order of the rebuilt cons, yet their fp1-via-ri_fp3 residual BODIES are
+ * currently BYTE-IDENTICAL: spec_av folds ri_fp3's stack-based EVAL-PAT /
+ * INV-EVAL-PAT away, so the dynamic structural ops (hd/tl/cons) vanish and the
+ * residual is pure data-routing -- swap is not actually performed.  Direct
+ * specialization (test_fp1_main_swap) is correct, so the bug is specific to
+ * ri_fp3's stack-machine indirection.  When the bug is fixed this test SHOULD
+ * fail (bodies must then differ); update it to assert the correct residuals. *)
+let test_fp1_ri_fp3_known_bug () =
+  Alcotest.(check string)
+    "KNOWN BUG: swap and splitjoin residual bodies identical (structural ops lost)"
+    (fp1_ri_fp3_body "sx_splitjoin") (fp1_ri_fp3_body "swap")
+
 let test_ss_av_ass_static_exec () =
   (* var0 static-nil, "var0 ^= 'a" -> executed statically, slot ('S.'a), no residual *)
   check_spec_step_av "ass static execution"
@@ -1586,6 +1635,7 @@ let () =
       Alcotest.test_case "fp1 cross-var move+clear (no-alias fix)" `Quick test_fp1_move_clear;
       Alcotest.test_case "ri_fp3 reversible-clear self-interp: id" `Quick test_ri_fp3_selfinterp_id;
       Alcotest.test_case "ri_fp3 reversible-clear self-interp: swap" `Quick test_ri_fp3_selfinterp_swap;
+      Alcotest.test_case "fp1-via-ri_fp3 KNOWN BUG: structural ops lost" `Quick test_fp1_ri_fp3_known_bug;
     ];
     "spec-av-exp", [
       Alcotest.test_case "var static" `Quick test_se_av_var_static;

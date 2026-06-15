@@ -1,0 +1,4 @@
+read V0;
+  cons V1 V2 <= V0;
+  V0 <= cons V1 V2;
+write V0
