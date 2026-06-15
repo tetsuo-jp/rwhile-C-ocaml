@@ -56,6 +56,10 @@ done by the accumulator induction `rev-rest`.
   `inv (CRep q r) = CRep r q` is semantically the inverse (`crep-reversible`).
   Broadens the concrete model from `rupdate` alone to R-WHILE's other atomic
   reversible operation.
+- `RWhileCRepDet.agda` — `CRep` in the determinism layer: pattern read/write
+  are deterministic (`Read-det`/`Write-det`, under `funext`), hence `CRep` and
+  its inverse are deterministic and the function-level inverse law holds for
+  pattern replacement (`crep-inv-cancels`).
 - `RWhileIL.agda` — **step (3)**: a reversible Intermediate Language with
   flat (list) sequencing, its own big-step semantics, a translation `trS`
   to R-WHILE proved **semantics-preserving** (`tr-soundS`/`tr-completeS`),
@@ -67,7 +71,7 @@ done by the accumulator induction `rev-rest`.
 
 ```
 cd proofs/agda
-for f in RWhileRev RWhileRevFull RWhileValStore RWhileCRep RWhileDet RWhileDetConcrete RWhileIL; do
+for f in RWhileRev RWhileRevFull RWhileValStore RWhileCRep RWhileCRepDet RWhileDet RWhileDetConcrete RWhileIL; do
   agda --safe $f.agda
 done
 ```
@@ -95,7 +99,6 @@ model. Also out of scope so far: the expression language
 reversible language).
 
 Next: extend the IL with loops; instantiate determinism without `funext` via a
-first-order store; thread `CRep` (now modelled) into the determinism layer;
-and connect the model to the OCaml (extraction, or an equivalence with a
-formal model of `eval`/`inv`) so the *implementation* — not only the model —
-is certified.
+first-order store; and connect the model to the OCaml (extraction, or an
+equivalence with a formal model of `eval`/`inv`) so the *implementation* — not
+only the model — is certified.
