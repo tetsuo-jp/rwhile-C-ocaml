@@ -1391,6 +1391,57 @@ let test_fp1_main_swap () =
   Alcotest.(check valT_testable) "fp1(swap,'a): [comp]('b) = ('b.'a)"
     (parse_val "('b . 'a)") result
 
+(* ===== fp1 round-trip ladder: localize the residual-correctness error source =====
+ * comp = [spec_av]((P . Src)); then run comp via ri on a dynamic input d.
+ * Correct iff [comp](d) = [P]((Src.d)). The first rung that fails pinpoints the
+ * triggering pattern. Var indices: V0=nil, V1=(nil.nil), V2=(nil.(nil.nil)),
+ * V3=(nil.(nil.(nil.nil))). *)
+let fp1_roundtrip p_str src_str d =
+  let spec_av = parse_file_program (examples_dir ^ "/spec_av.rwhile") in
+  let comp = EvalRwhile.evalProgram spec_av (pair (parse_val p_str) (parse_val src_str)) in
+  run_via_ri comp d
+
+(* rung 1: split V0 into V1,V2 then rejoin into V0 (= identity on a pair).
+ * Same-variable I/O (read=write=V0); no cross-variable dynamic move. *)
+let p_split_rejoin =
+  "(('var . nil) . (" ^
+  "('seq . (" ^
+    "('rep . (('cons . (('var.(nil.nil)) . ('var.(nil.(nil.nil))))) . ('var.nil))) . " ^
+    "('rep . (('var.nil) . ('cons . (('var.(nil.nil)) . ('var.(nil.(nil.nil)))))))" ^
+  "))" ^
+  " . ('var . nil)))"
+let test_fp1_split_rejoin () =
+  Alcotest.(check valT_testable) "fp1(split-rejoin,'a): [comp]('d) = ('a.'d)"
+    (parse_val "('a . 'd)") (fp1_roundtrip p_split_rejoin "'a" (atom "'d"))
+
+(* rung 2 (ERROR SOURCE): move the dynamic half to a DIFFERENT variable (V3^=V2),
+ * self-clear the source (V2^=V2), then rejoin from V3. Identity on a pair, but it
+ * forces a cross-variable dynamic move + self-clear under aliasing. This currently
+ * produces a non-reversible residual (the input var is not consumed; the aliased
+ * self-clear becomes a set), so running it raises Failure ("error in update").
+ * This is a CHARACTERIZATION test: it pins the bug to this exact pattern and stays
+ * green until the no-alias/runtime-move fix lands — at which point flip it to
+ * assert (parse_val "('a . 'd)"). *)
+let p_move_clear_rejoin =
+  "(('var . nil) . (" ^
+  "('seq . (" ^
+    "('rep . (('cons . (('var.(nil.nil)) . ('var.(nil.(nil.nil))))) . ('var.nil))) . " ^
+    "('seq . (" ^
+      "('ass . (('var.(nil.(nil.(nil.nil)))) . ('var.(nil.(nil.nil))))) . " ^
+      "('seq . (" ^
+        "('ass . (('var.(nil.(nil.nil))) . ('var.(nil.(nil.nil))))) . " ^
+        "('rep . (('var.nil) . ('cons . (('var.(nil.nil)) . ('var.(nil.(nil.(nil.nil))))))))" ^
+      "))" ^
+    "))" ^
+  "))" ^
+  " . ('var . nil)))"
+let test_fp1_move_clear_known_bug () =
+  Alcotest.(check bool)
+    "ERROR SOURCE: cross-var dynamic move + self-clear -> non-reversible residual (currently errors)"
+    true
+    (try ignore (fp1_roundtrip p_move_clear_rejoin "'a" (atom "'d")); false
+     with Failure _ -> true)
+
 (* ===== Test runner ===== *)
 
 (* RWHILE_HYGIENIC=1 ./test-suite runs the WHOLE suite with -hygienic-macros on,
@@ -1496,6 +1547,8 @@ let () =
       Alcotest.test_case "AV-INIT builds static-nil store" `Quick test_av_init;
       Alcotest.test_case "assembled residual computes swap" `Quick test_assemble_fp1_swap;
       Alcotest.test_case "fp1 main specializes swap" `Quick test_fp1_main_swap;
+      Alcotest.test_case "fp1 split-rejoin round-trip" `Quick test_fp1_split_rejoin;
+      Alcotest.test_case "fp1 ERROR SOURCE: cross-var move+self-clear" `Quick test_fp1_move_clear_known_bug;
     ];
     "spec-av-exp", [
       Alcotest.test_case "var static" `Quick test_se_av_var_static;
