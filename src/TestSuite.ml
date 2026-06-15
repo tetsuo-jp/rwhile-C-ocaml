@@ -1797,6 +1797,8 @@ let test_core_agree_reverse () =
   check_core_agrees "core = eval (reverse/loop)" core_rev_prog "('a . ('b . ('c . nil)))"
 let test_core_agree_cond_then () = check_core_agrees "core = eval (cond then)" core_cond_prog "('p . nil)"
 let test_core_agree_cond_else () = check_core_agrees "core = eval (cond else)" core_cond_prog "('x . nil)"
+let core_list_prog = "read X; [A, B] <= X; X <= [B, A]; write X"   (* exercises EList/PList normalization *)
+let test_core_agree_list () = check_core_agrees "core = eval (list sugar)" core_list_prog "('a . ('b . nil))"
 
 let core_body prog_str =
   let AbsRwhile.Prog (_, _, c, _) = MacroRwhile.expMacProgram (parse_program prog_str) in
@@ -1832,6 +1834,7 @@ let () =
       Alcotest.test_case "Core agrees with eval: reverse (loop)" `Quick test_core_agree_reverse;
       Alcotest.test_case "Core agrees with eval: cond then" `Quick test_core_agree_cond_then;
       Alcotest.test_case "Core agrees with eval: cond else" `Quick test_core_agree_cond_else;
+      Alcotest.test_case "Core agrees with eval: list sugar" `Quick test_core_agree_list;
       Alcotest.test_case "inv_core is involutive" `Quick test_core_inv_involution;
       Alcotest.test_case "inv_core reverses execution" `Quick test_core_reversible_swap;
     ];
