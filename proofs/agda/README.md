@@ -60,6 +60,14 @@ done by the accumulator induction `rev-rest`.
   are deterministic (`Read-det`/`Write-det`, under `funext`), hence `CRep` and
   its inverse are deterministic and the function-level inverse law holds for
   pattern replacement (`crep-inv-cancels`).
+- `RWhileExec.agda` — **bridge to the implementation**: an EXECUTABLE
+  functional interpreter `frun` (the form `evalCom` takes — atoms are partial
+  functions, sequencing is Maybe-bind, the conditional checks its exit
+  assertion), proved EQUIVALENT to the relational semantics
+  (`frun-sound`/`frun-complete`: `frun p s ≡ just t ↔ compile p ⊢ s ⇒ t`).
+  Corollary `frun-reversible`: the executable interpreter inherits
+  reversibility. This certifies the interpreter *algorithm*, not just an
+  abstract relation.
 - `RWhileIL.agda` — **step (3)**: a reversible Intermediate Language with
   flat (list) sequencing, its own big-step semantics, a translation `trS`
   to R-WHILE proved **semantics-preserving** (`tr-soundS`/`tr-completeS`),
@@ -71,7 +79,7 @@ done by the accumulator induction `rev-rest`.
 
 ```
 cd proofs/agda
-for f in RWhileRev RWhileRevFull RWhileValStore RWhileCRep RWhileCRepDet RWhileDet RWhileDetConcrete RWhileIL; do
+for f in RWhileRev RWhileRevFull RWhileValStore RWhileCRep RWhileCRepDet RWhileDet RWhileDetConcrete RWhileExec RWhileIL; do
   agda --safe $f.agda
 done
 ```
@@ -90,9 +98,12 @@ translation with IL reversibility.
 ## Honest scope (what is NOT yet proved)
 
 These are results about an Agda **model** of R-WHILE's core, hand-written to
-mirror the OCaml. They do **not** yet certify the OCaml implementation: there
-is no formal link (extraction / equivalence) between `EvalRwhile.ml` and this
-model. Also out of scope so far: the expression language
+mirror the OCaml. `RWhileExec` closes part of the gap — it certifies the
+interpreter *algorithm* (an executable functional interpreter equivalent to
+the proven semantics) — but the *literal* OCaml is still not certified: the
+Agda `frun` is hand-written to mirror `evalCom` rather than generated from it
+(closing that fully needs extraction, or a verified parser + evaluator). Also
+out of scope so far: the expression language
 (`cons`/`hd`/`tl`/`=?`/`pair?`), macro expansion, parsing, `p2d`, the
 `all_cleared` store invariant, and functional correctness / termination
 (we prove *reversibility* and *determinism*, the properties that matter for a
