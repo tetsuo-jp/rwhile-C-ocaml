@@ -1445,6 +1445,38 @@ let test_fp1_move_clear () =
     "fp1(cross-var move+reversible clear,'a): [comp]('d) = ('a.'d)  (no-alias fix)"
     (parse_val "('a . 'd)") (fp1_roundtrip p_move_clear_rejoin "'a" (atom "'d"))
 
+(* ===== The genuine first Futamura projection via spec_av + ri_fp3 =====
+ * comp = [spec_av]((ri_fp3 . src)) specializes the self-interpreter ri_fp3
+ * w.r.t. a static source program src; the residual is the "compiled" src:
+ *   [comp](d) = [ri_fp3]((src . d)) = (src . [src](d)).
+ * This is the payoff of the no-alias fix + ri_fp3's reversible clears: the
+ * residual must be self-interpretable via ri.rwhile (no irreversible X^=X). *)
+(* Regression for ri_fp3's reversible clears (candidate C): ri_fp3 must still
+ * self-interpret correctly after replacing the irreversible V1^=V1; V2^=V2
+ * copy-then-clear with reversible pattern-moves (Prog <= V1; Data <= V2).
+ *   [ri_fp3]((src . d)) = (src . [src](d)).
+ * NOTE: the genuine fp1 [[spec_av]((ri_fp3.src))] is NOT yet green — the
+ * spec_av specialization of ri_fp3 still produces a semantically wrong residual
+ * (the interpreted operation is dropped and the static src-echo is corrupted);
+ * that is a separate, deeper specializer bug, tracked in plan_fp1_stage_c.md.
+ * Candidate C's win is that the residual now RUNS via ri (no irreversible
+ * X^=X), which it previously could not. *)
+let ri_fp3_selfinterp src_name d =
+  let ri_fp3 = parse_file_program (examples_dir ^ "/ri_fp3.rwhile") in
+  let src = parse_file_program (examples_dir ^ "/" ^ src_name ^ ".rwhile") in
+  let src_data = Program2DataRwhile.program2data src in
+  let r = EvalRwhile.evalProgram ri_fp3 (pair src_data d) in
+  let direct = EvalRwhile.evalProgram src d in
+  (r, pair src_data direct)
+
+let test_ri_fp3_selfinterp_id () =
+  let r, expected = ri_fp3_selfinterp "id" (atom "'a") in
+  Alcotest.(check valT_testable) "[ri_fp3]((id.'a)) = (id.'a)" expected r
+
+let test_ri_fp3_selfinterp_swap () =
+  let r, expected = ri_fp3_selfinterp "swap" (parse_val "('a . 'b)") in
+  Alcotest.(check valT_testable) "[ri_fp3]((swap.('a.'b))) = (swap.('b.'a))" expected r
+
 (* ===== Test runner ===== *)
 
 (* RWHILE_HYGIENIC=1 ./test-suite runs the WHOLE suite with -hygienic-macros on,
@@ -1552,6 +1584,8 @@ let () =
       Alcotest.test_case "fp1 main specializes swap" `Quick test_fp1_main_swap;
       Alcotest.test_case "fp1 split-rejoin round-trip" `Quick test_fp1_split_rejoin;
       Alcotest.test_case "fp1 cross-var move+clear (no-alias fix)" `Quick test_fp1_move_clear;
+      Alcotest.test_case "ri_fp3 reversible-clear self-interp: id" `Quick test_ri_fp3_selfinterp_id;
+      Alcotest.test_case "ri_fp3 reversible-clear self-interp: swap" `Quick test_ri_fp3_selfinterp_swap;
     ];
     "spec-av-exp", [
       Alcotest.test_case "var static" `Quick test_se_av_var_static;

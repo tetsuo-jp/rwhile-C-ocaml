@@ -257,12 +257,14 @@ read V0;
    * latter lets spec.rwhile's 'partial mode peel this rep and set Prog=static /
    * Data=dynamic for the first Futamura projection.  We then move the halves into
    * Prog/Data and clear V1,V2 (which the interpreted program may reuse).
-   * Net effect is identical to 'V1^=V1; V2^=V2; cons Prog Data <= V0'. *)
+   * Net effect is identical to 'cons Prog Data <= V0'.  We use reversible
+   * pattern-moves (<=) rather than copy-then-self-clear (Prog^=V1; V1^=V1) so
+   * that the residual of an fp1 specialization contains no irreversible X^=X
+   * clears (ri.rwhile cannot self-interpret those); a dynamic half becomes a
+   * reversible 'rep move in the residual instead. *)
   cons V1 V2 <= V0;
-  Prog ^= V1;
-  V1 ^= V1;
-  Data ^= V2;
-  V2 ^= V2;
+  Prog <= V1;
+  Data <= V2;
 
   (* Decompose Prog = (('var.I') . (Cd . ('var.J'))) *)
   cons PRead PTail <= Prog;
