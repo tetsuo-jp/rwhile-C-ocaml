@@ -30,6 +30,7 @@ let rec transExp (x : exp) : valT =
          | EHd e -> [atom "'hd"; transExp e]
          | ETl e -> [atom "'tl"; transExp e]
          | EEq (e1, e2) -> [atom "'eq"; transExp e1; transExp e2]
+         | EPair e -> [atom "'pairp"; transExp e]
          | EList _ -> assert false
          | EArrGet _ -> failwith "EArrGet cannot be translated to data")
 

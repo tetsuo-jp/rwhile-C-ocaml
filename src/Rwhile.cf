@@ -3,7 +3,7 @@
 -------------------------------------------------------------------------------
 --
 -- Variables   ∋ X, Y ::= X0 | X1 | ...
--- Expressions ∋ E, F ::= X | d | cons E F | hd E | tl E | =? E F
+-- Expressions ∋ E, F ::= X | d | cons E F | hd E | tl E | =? E F | pair? E
 --                      | get X[E]                              (extension: array read)
 --                      | [E, ..., E]                          (list notation: sugar)
 -- Patterns    ∋ Q, R ::= X | d | cons Q R
@@ -77,6 +77,7 @@ ECons.   Exp  ::= "cons" Exp1 Exp1 ;
 EHd.     Exp  ::= "hd" Exp1 ;
 ETl.     Exp  ::= "tl" Exp1 ;
 EEq.     Exp  ::= "=?" Exp1 Exp1 ;   -- Equality check
+EPair.   Exp  ::= "pair?" Exp1 ;     -- Cons test: (nil.nil) if a cons, nil otherwise
 EArrGet. Exp  ::= "get" Variable "[" Exp1 "]" ; -- Array element read (-array)
 EVar.    Exp1 ::= Variable ;
 EVal.    Exp1 ::= Val ;

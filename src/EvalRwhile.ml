@@ -231,6 +231,7 @@ and varExp : exp -> rIdent list = function
   | EHd e -> varExp e
   | ETl e -> varExp e
   | EEq (e1, e2) -> merge (varExp e1) (varExp e2)
+  | EPair e -> varExp e
   | EVar (Var x) -> [x]
   | EVal _ -> []
   | EArrGet (Var x, i) -> insert x (varExp i)
@@ -322,6 +323,7 @@ let rec evalExp s = function
                    ("No tail. Expression " ^ printTree prtExp (ETl e) ^ " has value " ^ printTree prtValT v)
 	      | VCons (_,v) -> v)
   | EEq (e1, e2) -> if evalExp s e1 = evalExp s e2 then vtrue else vfalse
+  | EPair e -> (match evalExp s e with VCons _ -> vtrue | _ -> vfalse)
   | EVar x -> evalVariable s x
   | EVal v -> desugar_val v
   | EList es -> List.fold_right (fun e acc -> VCons (evalExp s e, acc)) es VNil

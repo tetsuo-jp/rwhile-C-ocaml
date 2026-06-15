@@ -13,6 +13,7 @@ let rec substExp ss = function
   | EHd e -> EHd (substExp ss e)
   | ETl e -> ETl (substExp ss e)
   | EEq (e, f) -> EEq (substExp ss e, substExp ss f)
+  | EPair e -> EPair (substExp ss e)
   | EVar x -> EVar (substVariable ss x)
   | EVal v -> EVal v
   | EList es -> EList (List.map (substExp ss) es)
@@ -64,6 +65,7 @@ let rec varsExp = function
   | EHd e -> varsExp e
   | ETl e -> varsExp e
   | EEq (e, f) -> varsExp e @ varsExp f
+  | EPair e -> varsExp e
   | EVar (Var x) -> [x]
   | EVal _ -> []
   | EList es -> concat (map varsExp es)

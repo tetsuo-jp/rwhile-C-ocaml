@@ -177,6 +177,33 @@ let test_eval_eq_false () =
   let result = EvalRwhile.evalExp store (EEq (EVal VNil, EVal (VAtom (Atom "'a")))) in
   Alcotest.(check valT_testable) "=? nil 'a = false" vfalse result
 
+let test_eval_pair_cons () =
+  let result = EvalRwhile.evalExp [] (EPair (EVal (VCons (VNil, VNil)))) in
+  Alcotest.(check valT_testable) "pair? (nil.nil) = true" vtrue result
+
+let test_eval_pair_atom () =
+  let result = EvalRwhile.evalExp [] (EPair (EVal (VAtom (Atom "'a")))) in
+  Alcotest.(check valT_testable) "pair? 'a = false" vfalse result
+
+let test_eval_pair_nil () =
+  let result = EvalRwhile.evalExp [] (EPair (EVal VNil)) in
+  Alcotest.(check valT_testable) "pair? nil = false" vfalse result
+
+(* parse + full-program round trip: confirms `pair?` lexes/parses and the p2d
+ * encoding exists (program-to-data uses the 'pairp tag). *)
+let test_pair_program () =
+  let prog = parse_program "read X; R ^= pair? X; X ^= X; write R" in
+  Alcotest.(check valT_testable) "pair? on a cons"
+    vtrue (EvalRwhile.evalProgram prog (VCons (atom "'a", atom "'b")));
+  Alcotest.(check valT_testable) "pair? on an atom"
+    vfalse (EvalRwhile.evalProgram prog (atom "'a"));
+  (* p2d encodes pair? as ('pairp . code) *)
+  let d = Program2DataRwhile.program2data prog in
+  Alcotest.(check bool) "p2d emits 'pairp tag" true
+    (let s = show_val d in
+     let rec contains i = i + 6 <= String.length s &&
+       (String.sub s i 6 = "'pairp" || contains (i+1)) in contains 0)
+
 (* ===== Variable collection tests ===== *)
 
 let test_var_program () =
@@ -1665,6 +1692,10 @@ let () =
       Alcotest.test_case "eval tl nil fails" `Quick test_eval_tl_nil_fails;
       Alcotest.test_case "eval =? true" `Quick test_eval_eq_true;
       Alcotest.test_case "eval =? false" `Quick test_eval_eq_false;
+      Alcotest.test_case "eval pair? cons" `Quick test_eval_pair_cons;
+      Alcotest.test_case "eval pair? atom" `Quick test_eval_pair_atom;
+      Alcotest.test_case "eval pair? nil" `Quick test_eval_pair_nil;
+      Alcotest.test_case "pair? parse+program+p2d" `Quick test_pair_program;
     ];
     "var-collect", [
       Alcotest.test_case "var program" `Quick test_var_program;
