@@ -1775,6 +1775,49 @@ let test_ri_fp3_selfinterp_swap () =
 
 (* ===== Test runner ===== *)
 
+(* ===== Core IR abstraction layer (Core.ml) =====
+ * The Core IR mirrors the Agda-verified model; these tests check that (a) it
+ * AGREES with the real evaluator (so elaboration is faithful) and (b) its
+ * inversion is involutive and reverses execution (the Agda theorems, in the
+ * implementation). *)
+let check_core_agrees name prog_str input_str =
+  let p = parse_program prog_str in
+  let v = parse_val input_str in
+  Alcotest.(check valT_testable) name
+    (EvalRwhile.evalProgram p v) (Core.eval_program_core p v)
+
+let core_swap_prog = "read X; cons Y Z <= X; X <= cons Z Y; write X"
+let core_rev_prog  =
+  "read Y; from =? X nil loop cons Z Y <= Y; X <= cons Z X until =? Y nil; write X"
+let core_cond_prog =
+  "read X; cons A B <= X; if =? A 'p then B ^= 'q else B ^= 'r fi =? B 'q; X <= cons A B; write X"
+
+let test_core_agree_swap () = check_core_agrees "core = eval (swap)" core_swap_prog "('a . 'b)"
+let test_core_agree_reverse () =
+  check_core_agrees "core = eval (reverse/loop)" core_rev_prog "('a . ('b . ('c . nil)))"
+let test_core_agree_cond_then () = check_core_agrees "core = eval (cond then)" core_cond_prog "('p . nil)"
+let test_core_agree_cond_else () = check_core_agrees "core = eval (cond else)" core_cond_prog "('x . nil)"
+
+let core_body prog_str =
+  let AbsRwhile.Prog (_, _, c, _) = MacroRwhile.expMacProgram (parse_program prog_str) in
+  Core.elaborate c
+
+let test_core_inv_involution () =
+  List.iter (fun ps ->
+    let cr = core_body ps in
+    Alcotest.(check bool) ("inv_core involution: " ^ ps) true (Core.inv_core (Core.inv_core cr) = cr))
+    [core_swap_prog; core_rev_prog; core_cond_prog]
+
+let test_core_reversible_swap () =
+  let p  = parse_program core_swap_prog in
+  let cr = core_body core_swap_prog in
+  let s0 = EvalRwhile.rupdate (AbsRwhile.RIdent "X", parse_val "('a . 'b)")
+             (List.map (fun z -> (z, AbsRwhile.VNil))
+                       (EvalRwhile.varProgram (MacroRwhile.expMacProgram p))) in
+  let t  = Core.eval_core s0 cr in
+  let s' = Core.eval_core t (Core.inv_core cr) in
+  Alcotest.(check bool) "core inv_core reverses the store" true (s' = s0)
+
 (* RWHILE_HYGIENIC=1 ./test-suite runs the WHOLE suite with -hygienic-macros on,
    used to verify that the core programs (spec/ri/spec_av) are hygiene-clean.
    The hygiene-specific group below already toggles the flag per-test, so it is
@@ -1784,6 +1827,14 @@ let () =
 
 let () =
   Alcotest.run "R-WHILE Interpreter" [
+    "core-ir", [
+      Alcotest.test_case "Core agrees with eval: swap" `Quick test_core_agree_swap;
+      Alcotest.test_case "Core agrees with eval: reverse (loop)" `Quick test_core_agree_reverse;
+      Alcotest.test_case "Core agrees with eval: cond then" `Quick test_core_agree_cond_then;
+      Alcotest.test_case "Core agrees with eval: cond else" `Quick test_core_agree_cond_else;
+      Alcotest.test_case "inv_core is involutive" `Quick test_core_inv_involution;
+      Alcotest.test_case "inv_core reverses execution" `Quick test_core_reversible_swap;
+    ];
     "store", [
       Alcotest.test_case "insert empty" `Quick test_insert_empty;
       Alcotest.test_case "insert existing" `Quick test_insert_existing;
