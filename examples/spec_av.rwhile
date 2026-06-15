@@ -210,6 +210,24 @@ macro MAKE-SEQ(RCode, Cmd)
     MsC ^= MsC
   until (=? RCode nil)
 
+(* ASSEMBLE-FP1(I', J', CompSrc): build the residual program comp_src from the
+ * post-specialization store Vl and residual list RCode (both in scope).
+ *   materialize(J')  = J' <= lift(Vl[J'])   (rebuild the output var from its AV;
+ *                       runs LAST, so prepend it to the reverse-ordered RCode)
+ *   body            = MAKE-SEQ(RCode)
+ *   CompSrc         = (('var.I') . (body . ('var.J')))   (p2d program form)
+ * I' and J' are variables holding the read/write variable indices; both preserved. *)
+macro ASSEMBLE-FP1(I', J', CompSrc)
+  LOOKUP(Vl, J', AsAV);                 (* AsAV = output slot AV (copy) *)
+  AV-LIFT(AsAV, AsCode);                (* AsCode = residual code; AsAV preserved *)
+  LOOKUP(Vl, J', AsAV);                 (* clear AsAV (XOR same value -> nil) *)
+  AsJ ^= J';
+  RCode <= cons (cons 'rep (cons (cons 'var AsJ) AsCode)) RCode;
+  MAKE-SEQ(RCode, AsBody);
+  AsI ^= I';
+  AsJ2 ^= J';
+  CompSrc <= cons (cons 'var AsI) (cons AsBody (cons 'var AsJ2))
+
 (* ===== AV-based expression specializer ===== *)
 
 (* SPEC-EXP-AV(E, RE): RE := AV result of specializing expression E against the

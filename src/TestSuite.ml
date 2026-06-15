@@ -1349,6 +1349,25 @@ let test_ss_av_swap_dynamic () =
     ("((('C . (('D . ('var . (nil . (nil . nil)))) . ('D . ('var . (nil . nil))))) . (('S . nil) . (('S . nil) . nil))) . ("
      ^ rep_yzx ^ " . nil))")
 
+(* ===== fp1 residual assembly (Stage C, C2) =====
+ * End-to-end: specialize a command with a dynamic input via SPEC-CMD-AV, then
+ * ASSEMBLE-FP1 turns (Vl . RCode) into a residual program; running that residual
+ * (via ri.rwhile) must reproduce the command's effect. Validates that the
+ * structural 'rep (C1) + assembly (C2) yield ONE correct reversible residual. *)
+let test_assemble_fp1_swap () =
+  let prog = parse_macro_harness (examples_dir ^ "/spec_av.rwhile")
+    ("read In; cons Vl Cmd <= In; SPEC-CMD-AV(Cmd); "
+     ^ "ASSEMBLE-FP1(IIv, JJv, CompSrc); RCode ^= RCode; Vl ^= Vl; "
+     ^ "Out <= CompSrc; write Out") in
+  (* X=var0 dynamic, Y=var1, Z=var2 static-nil; read/write var = X (index 0=nil). *)
+  let vl = parse_val "(('D . ('var . nil)) . (('S . nil) . (('S . nil) . nil)))" in
+  let compsrc = EvalRwhile.evalProgram prog (pair vl (parse_val swap_cmd)) in
+  (* run the assembled residual on ('a.'b): must yield the swap ('b.'a) *)
+  let result = run_via_ri compsrc (parse_val "('a . 'b)") in
+  Alcotest.(check valT_testable)
+    "assembled fp1 residual for dynamic swap computes swap"
+    (parse_val "('b . 'a)") result
+
 (* ===== Test runner ===== *)
 
 (* RWHILE_HYGIENIC=1 ./test-suite runs the WHOLE suite with -hygienic-macros on,
@@ -1449,6 +1468,9 @@ let () =
       Alcotest.test_case "cond dynamic" `Quick test_ss_av_cond_dynamic;
       Alcotest.test_case "loop static unroll" `Quick test_ss_av_loop_static_unroll;
       Alcotest.test_case "loop dynamic" `Quick test_ss_av_loop_dynamic;
+    ];
+    "assemble-fp1", [
+      Alcotest.test_case "assembled residual computes swap" `Quick test_assemble_fp1_swap;
     ];
     "spec-av-exp", [
       Alcotest.test_case "var static" `Quick test_se_av_var_static;
