@@ -80,12 +80,19 @@ done by the accumulator induction `rev-rest`.
   and **IL reversibility** (`il-revS`). Demonstrates the layered-correctness
   architecture (prove in an efficient IL, transport via a verified
   translation).
+- `RWhileCoreExp.agda` — reflects the implementation's Core IR
+  expression/pattern NORMALIZATION (`src/Core.ml`: `norm_exp`/`norm_pat`/
+  `eval_cexp`) and proves it semantics-preserving: `norm-correct`
+  (`evalC σ (norm e) ≡ evalS σ e`) for expressions and `read-norm-correct`
+  (`readC σ (normP p) ≡ readS σ p`) for patterns — desugaring list sugar to
+  cons-chains keeps meaning. Certifies what the `core-ir` differential tests
+  check empirically.
 
 ## Checking
 
 ```
 cd proofs/agda
-for f in RWhileRev RWhileRevFull RWhileValStore RWhileCRep RWhileCRepDet RWhileDet RWhileDetConcrete RWhileExec RWhileExecConcrete RWhileIL RWhileFutamura RWhileFutamura2 RWhileFutamura2Inst RWhileRevFutamura RWhileRevProjPaper RWhileRevProjInst RWhileRevProjGen; do
+for f in RWhileRev RWhileRevFull RWhileValStore RWhileCRep RWhileCRepDet RWhileDet RWhileDetConcrete RWhileExec RWhileExecConcrete RWhileIL RWhileFutamura RWhileFutamura2 RWhileFutamura2Inst RWhileRevFutamura RWhileRevProjPaper RWhileRevProjInst RWhileRevProjGen RWhileCoreExp; do
   agda --safe $f.agda
 done
 ```
