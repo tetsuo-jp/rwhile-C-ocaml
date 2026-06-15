@@ -1376,6 +1376,36 @@ let test_fp1_ri_fp3_known_bug () =
     "KNOWN BUG: swap and splitjoin residual bodies identical (structural ops lost)"
     (fp1_ri_fp3_body "sx_splitjoin") (fp1_ri_fp3_body "swap")
 
+(* PAT-WRITE-ITER unit test: the worklist write handles a NESTED (depth-2) cons
+ * pattern that PAT-WRITE-STRUCT drops.  `cons (cons V1e V2e) St <= var0` with
+ * var0 = ('C.((D var0).(S nil))) must split the dynamic top into V1e,V2e
+ * (residualizing `cons V1e V2e <= var0`) and put the rest into St.  This is the
+ * core of the fp1-via-ri_fp3 fix; it is not yet wired into the 'rep path (see
+ * spec_av.rwhile note) pending ri_fp3's marker-pattern edge case. *)
+let test_pat_write_iter_nested () =
+  let store =
+    "(('C . (('D . ('var . nil)) . ('S . nil))) . (('S . nil) . (('S . nil) . (('S . nil) . nil))))" in
+  let cmd =
+    "('cons . (('cons . (('var . (nil . nil)) . ('var . (nil . (nil . nil))))) . " ^
+    "('var . (nil . (nil . (nil . nil))))))" in   (* pattern: cons (cons V1e V2e) St *)
+  let prog = parse_macro_harness (examples_dir ^ "/spec_av.rwhile")
+    ("read In; cons Vl Pr <= In; cons P WA <= Pr; PAT-WRITE-ITER(P, WA, RCode); " ^
+     "Out <= cons Vl RCode; P ^= P; write Out") in
+  (* WA = the AV at var0's slot = ('C.((D var0).(S nil))) *)
+  let wa = "('C . (('D . ('var . nil)) . ('S . nil)))" in
+  let input = pair (parse_val store) (pair (parse_val cmd) (parse_val wa)) in
+  let out = EvalRwhile.evalProgram prog input in
+  match out with
+  | VCons (vl, rcode) ->
+     Alcotest.(check (list valT_testable))
+       "PAT-WRITE-ITER splits nested pattern (V1e,V2e dynamic; St gets rest; split residualized)"
+       [parse_val "('D . ('var . (nil . nil)))";
+        parse_val "('D . ('var . (nil . (nil . nil))))";
+        parse_val "('S . nil)";
+        parse_val "(('rep . (('cons . (('var . (nil . nil)) . ('var . (nil . (nil . nil))))) . ('var . nil))) . nil)"]
+       [nth_slot vl 1; nth_slot vl 2; nth_slot vl 3; rcode]
+  | _ -> Alcotest.fail "unexpected output shape"
+
 let test_ss_av_ass_static_exec () =
   (* var0 static-nil, "var0 ^= 'a" -> executed statically, slot ('S.'a), no residual *)
   check_spec_step_av "ass static execution"
@@ -1713,7 +1743,8 @@ let () =
       Alcotest.test_case "ri_fp3 reversible-clear self-interp: swap" `Quick test_ri_fp3_selfinterp_swap;
       Alcotest.test_case "fp1-via-ri_fp3 KNOWN BUG: structural ops lost" `Quick test_fp1_ri_fp3_known_bug;
       Alcotest.test_case "fp1-via-ri_fp3 KNOWN BUG: STEP leaves opaque Result" `Quick test_fp1_step_bug_opaque_result;
-      Alcotest.test_case "PAT-WRITE-STRUCT nested split" `Quick test_pat_write_nested_split;
+      Alcotest.test_case "PAT-WRITE-STRUCT nested split (KNOWN BUG)" `Quick test_pat_write_nested_split;
+      Alcotest.test_case "PAT-WRITE-ITER handles nested split" `Quick test_pat_write_iter_nested;
     ];
     "spec-av-exp", [
       Alcotest.test_case "var static" `Quick test_se_av_var_static;

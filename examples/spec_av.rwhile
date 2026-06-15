@@ -587,6 +587,69 @@ macro PAT-WRITE-LEAF-REHOME(P, WA, RCode)
     WA ^= WA
   fi =? (hd P) 'var
 
+(* PAT-WRITE-ITER(P, WA, RCode): write AV WA into pattern P, handling cons
+ * patterns of ARBITRARY depth (PAT-WRITE-STRUCT only handled depth 1, dropping
+ * the value of any nested cons sub-pattern -- which is exactly ri_fp3's stack
+ * split `cons (cons V1e V2e) St <= St`).  Iterative worklist (macros can't
+ * recurse): a stack WW of (subPattern . subAV) pairs.  Consumes P and WA.
+ *   - subP a var leaf            -> PAT-WRITE-LEAF-REHOME (store/move, no-alias)
+ *   - subP a cons, subAV pure-D  -> residualize the whole split; clear subP's
+ *                                   (depth-1) leaves to self-referential dynamics
+ *   - subP a cons, subAV 'C/'S   -> AV-UNCONS and push the two sub-pairs (spine)
+ * Each step pushes a marker onto WW' so the loop entry test stays well-formed;
+ * WW' is discarded at the end. *)
+macro PAT-WRITE-ITER-STEP(WW, WW', RCode)
+  cons (cons WiP WiA) WW <= WW;          (* pop (WiP . WiA) *)
+  WiCons ^= =? (hd WiP) 'cons;
+  (* A cons pattern whose two immediate leaves are both 'val-literals is a
+   * CONSTANT marker pattern (e.g. ri_fp3's `cons 'consB nil`): it asserts the
+   * value, it does not bind variables.  Treat it as a leaf assertion (discard
+   * the value) rather than splitting it -- splitting would over-decompose and
+   * eventually AV-UNCONS a static atom.  (Nested constants are still split by
+   * the spine and discarded one level down.) *)
+  WiConstP ^= nil;
+  if WiCons then
+    cons WiCt WiCag <= WiP;
+    cons WiCl1 WiCl2 <= WiCag;
+    if =? (hd WiCl1) 'val then
+      if =? (hd WiCl2) 'val then WiConstP ^= (nil.nil) fi =? (hd WiCl2) 'val
+    fi =? (hd WiCl1) 'val;
+    WiCag <= cons WiCl1 WiCl2; WiP <= cons WiCt WiCag
+  fi WiCons;
+  if WiConstP then WiCons ^= WiCons fi WiConstP;  (* constant cons -> handle as leaf *)
+  if WiCons then
+    WiIsD ^= =? (hd WiA) 'D;
+    if WiIsD then
+      (* pure-D split: residualize `WiP <= code`, clear WiP's leaves *)
+      cons WiDt WiDcode <= WiA; WiDt ^= 'D;        (* WiA = ('D.code) -> consume *)
+      PAT-CLR-SIMPLE-AV(WiP);                        (* WiP leaves -> self-ref; WiP preserved *)
+      WiPc ^= WiP;                                   (* copy WiP for the residual LHS *)
+      RCode <= cons (cons 'rep (cons WiPc WiDcode)) RCode;
+      WiP ^= WiP                                     (* discard consumed WiP *)
+    else
+      (* real split along the spine: uncons WiA, push the two sub-pairs *)
+      cons WiTg WiAg <= WiP; WiTg ^= WiTg;          (* drop the 'cons tag *)
+      cons WiP1 WiP2 <= WiAg;
+      AV-UNCONS(WiA, WiA1, WiA2);
+      WW <= cons (cons WiP1 WiA1) (cons (cons WiP2 WiA2) WW)
+    fi WiIsD;
+    WiIsD ^= WiIsD
+  else
+    (* var leaf *)
+    PAT-WRITE-LEAF-REHOME(WiP, WiA, RCode);          (* WiP preserved, WiA consumed *)
+    WiP ^= WiP                                       (* discard consumed WiP *)
+  fi WiCons;
+  WiCons ^= WiCons;
+  WiConstP ^= WiConstP;
+  WW' <= cons (nil.nil) WW'                          (* marker: keep loop well-formed *)
+
+macro PAT-WRITE-ITER(P, WA, RCode)
+  WW <= cons (cons P WA) nil;            (* seed worklist; P, WA consumed *)
+  from (=? WW' nil) loop
+    PAT-WRITE-ITER-STEP(WW, WW', RCode)
+  until (=? WW nil);
+  WW' ^= WW'                             (* discard processed markers *)
+
 (* ===== AV-based command specializer (WIP: 'seq and 'ass) =====
  * SPEC-STEP-AV processes one command; residual commands accumulate in RCode
  * (reverse order).  Store slots are AVs; a dynamic slot is ('D.('var.k)). *)
@@ -659,6 +722,10 @@ macro SPEC-STEP-AV(Cd, Cd', RCode)
       * part, and a fully-dynamic value flows symbolically (lifted at output). *)
      cons RpQ RpR <= Arg;
      PAT-READ-AV(RpR, RpAV);
+     (* NOTE: PAT-WRITE-ITER (below) handles arbitrary-depth patterns and is the
+      * intended replacement, but wiring it in still trips over ri_fp3's marker
+      * machinery (a var-bearing cons pattern meets a static atom). Until that
+      * edge case is handled, keep the depth-1 PAT-WRITE-STRUCT here. *)
      PAT-WRITE-STRUCT(RpQ, RpAV, RCode);
      Arg <= cons RpQ RpR
    else
