@@ -126,6 +126,23 @@ is proved.  `mix-length-≤` shows specialisation shrinks code.
 So the interpreter→compiler transformation (fp1) is machine-checked AND runs
 as an extracted native program.
 
+## Futamura hierarchy fp2 / fp3 (modular)
+
+`RWhileFutamura2.agda` (`--safe`) proves the **second and third** Futamura
+projections modularly. With one universal type `U` and a specialiser
+`spec : U → U → U`, the whole hierarchy follows from two facts:
+
+- **H1** `spec-correct : run (spec p s) d ≡ run p ⟨ s , d ⟩` — the specialiser
+  is correct (this is fp1 in general form; realised concretely by `mix` in
+  `RWhileFutamura`).
+- **H2** `spec-impl : run specP ⟨ p , s ⟩ ≡ spec p s` — the specialiser is
+  itself a program `specP` (self-application).
+
+Then `fp2 : run compiler src ≡ target src` and
+`fp3 : run cogen p ≡ spec specP p` are each two `trans` steps. H2 (exhibiting a
+self-applicable specialiser) is the genuine remaining obligation — the
+documented hard part — so this file certifies the *logic* of the hierarchy.
+
 ## Extraction demo (verified code → native binary)
 
 `Extract.agda` imports the verified `rupdF` and compiles, via Agda's GHC
