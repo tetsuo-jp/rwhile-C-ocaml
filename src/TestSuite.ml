@@ -1320,6 +1320,35 @@ let test_fp1_step_bug_opaque_result () =
     "KNOWN BUG (STEP): swap Result half is opaque ('D.('var.0)), not structural"
     (parse_val "('D . ('var . nil))") result
 
+(* ROOT-CAUSE test: PAT-WRITE-STRUCT must handle a NESTED cons pattern.
+ * `cons (cons V1e V2e) St <= var0` with var0 = ('C.((D var0).(S nil))) (a
+ * one-element "stack" whose top is dynamic). The inner pattern (cons V1e V2e)
+ * receives the dynamic top (D var0) and must split it (residualize), leaving
+ * V1e,V2e dynamic. The BUG: PAT-WRITE-STRUCT delegates sub-patterns to
+ * PAT-WRITE-LEAF-REHOME, which only handles var leaves and DISCARDS the value
+ * for a cons sub-pattern -> V1e,V2e stay ('S.nil) and the split is lost. *)
+let test_pat_write_nested_split () =
+  (* indices: var0=0 (value), V1e=1, V2e=2, St=3 *)
+  let store =
+    "(('C . (('D . ('var . nil)) . ('S . nil))) . (('S . nil) . (('S . nil) . (('S . nil) . nil))))" in
+  let cmd =
+    "('rep . (('cons . (('cons . (('var . (nil . nil)) . ('var . (nil . (nil . nil))))) . " ^
+    "('var . (nil . (nil . (nil . nil)))))) . ('var . nil)))" in
+  let prog = parse_macro_harness (examples_dir ^ "/spec_av.rwhile")
+    "read In; cons Vl Cmd <= In; SPEC-CMD-AV(Cmd); Out <= cons Vl RCode; write Out" in
+  let out = EvalRwhile.evalProgram prog (pair (parse_val store) (parse_val cmd)) in
+  (* KNOWN BUG: nested cons sub-pattern's dynamic value is discarded, so V1e and
+   * V2e stay static-nil and nothing is residualized.  When PAT-WRITE handles
+   * nested patterns, V1e/V2e must become dynamic and a split must be emitted;
+   * this assertion will then fail (update it to the correct expectation). *)
+  match out with
+  | VCons (vl, rcode) ->
+     Alcotest.(check (list valT_testable))
+       "KNOWN BUG: nested split discards value (V1e,V2e stay static-nil, no residual)"
+       [parse_val "('S . nil)"; parse_val "('S . nil)"; VNil]
+       [nth_slot vl 1; nth_slot vl 2; rcode]
+  | _ -> Alcotest.fail "unexpected output shape"
+
 (* fp1 via ri_fp3: residual body of a source program (the "compiled" code).
  * Returns (residual_body_pretty, comp). *)
 let fp1_ri_fp3_body src_name =
@@ -1684,6 +1713,7 @@ let () =
       Alcotest.test_case "ri_fp3 reversible-clear self-interp: swap" `Quick test_ri_fp3_selfinterp_swap;
       Alcotest.test_case "fp1-via-ri_fp3 KNOWN BUG: structural ops lost" `Quick test_fp1_ri_fp3_known_bug;
       Alcotest.test_case "fp1-via-ri_fp3 KNOWN BUG: STEP leaves opaque Result" `Quick test_fp1_step_bug_opaque_result;
+      Alcotest.test_case "PAT-WRITE-STRUCT nested split" `Quick test_pat_write_nested_split;
     ];
     "spec-av-exp", [
       Alcotest.test_case "var static" `Quick test_se_av_var_static;
