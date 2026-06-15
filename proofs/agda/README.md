@@ -85,7 +85,7 @@ done by the accumulator induction `rev-rest`.
 
 ```
 cd proofs/agda
-for f in RWhileRev RWhileRevFull RWhileValStore RWhileCRep RWhileCRepDet RWhileDet RWhileDetConcrete RWhileExec RWhileExecConcrete RWhileIL RWhileFutamura; do
+for f in RWhileRev RWhileRevFull RWhileValStore RWhileCRep RWhileCRepDet RWhileDet RWhileDetConcrete RWhileExec RWhileExecConcrete RWhileIL RWhileFutamura RWhileFutamura2 RWhileFutamura2Inst; do
   agda --safe $f.agda
 done
 ```
@@ -139,9 +139,16 @@ projections modularly. With one universal type `U` and a specialiser
   itself a program `specP` (self-application).
 
 Then `fp2 : run compiler src ≡ target src` and
-`fp3 : run cogen p ≡ spec specP p` are each two `trans` steps. H2 (exhibiting a
-self-applicable specialiser) is the genuine remaining obligation — the
-documented hard part — so this file certifies the *logic* of the hierarchy.
+`fp3 : run cogen p ≡ spec specP p` are each two `trans` steps.
+
+`RWhileFutamura2Inst.agda` gives a **concrete, non-vacuous instance**: a
+universal type `U` with a closure constructor `papp` (= `spec p s`) and a
+program `mkpapp` (= `specP`) that builds it, so **both H1 and H2 hold by
+`refl`** and fp1/fp2/fp3 hold for actual distinct programs (witnessed by
+`compiler-is`, `fp2-example`, `fp3-example`). This shows a self-applicable
+specialiser *exists* (here via a built-in closure constructor); doing it for
+R-WHILE without built-in closures — residualising structurally — is the
+engineering still open.
 
 ## Extraction demo (verified code → native binary)
 
