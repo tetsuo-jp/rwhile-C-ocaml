@@ -754,9 +754,9 @@ read In;
   cons FpVJ FpJ <= FpPW;  FpVJ ^= 'var;
 
   (* init static-nil AV store (N = 3) *)
-  FpN ^= (nil.(nil.(nil.nil)));
+  FpN ^= (nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.nil))))))))))))))))))))))))))))))))))))))))))))))))));
   AV-INIT(FpN, Vl);
-  FpN ^= (nil.(nil.(nil.nil)));
+  FpN ^= (nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.nil))))))))))))))))))))))))))))))))))))))))))))))))));
 
   (* set V[I'] = ('C.(('S.Src).('D.('var.I')))): Src static, other half dynamic *)
   LOOKUP(Vl, FpI, FpOld);  UPDATE(Vl, FpI, FpOld);  FpOld ^= FpOld;
