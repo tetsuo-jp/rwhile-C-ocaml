@@ -179,9 +179,21 @@ macro AV-UNCONS(A, A1, A2)
   cons T V <= A;
   CUs ^= =? T 'S;
   if =? T 'S then
-    cons H Tl <= V;
-    A1 <= cons 'S H;
-    A2 <= cons 'S Tl;
+    (* A static value is splittable only if it is actually a cons.  Splitting a
+     * static non-cons (atom/nil) is a static pattern-match FAILURE (dead/impossible
+     * position during PE); produce a degenerate ('S.nil) split instead of crashing
+     * on `cons H Tl <= nil`. *)
+    CUp ^= pair? V;
+    if CUp then
+      cons H Tl <= V;
+      A1 <= cons 'S H;
+      A2 <= cons 'S Tl
+    else
+      V ^= V;
+      A1 <= cons 'S nil;
+      A2 <= cons 'S nil
+    fi CUp;
+    CUp ^= CUp;
     T ^= 'S
   else
     CUc ^= =? T 'C;

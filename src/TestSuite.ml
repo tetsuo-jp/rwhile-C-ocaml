@@ -1212,6 +1212,12 @@ let test_av_uncons_dynamic () =
   check_av "uncons dynamic (symbolic hd/tl)"
     "('uncons . ('D . ('var . nil)))"
     "(('D . ('hd . ('var . nil))) . ('D . ('tl . ('var . nil))))"
+let test_av_uncons_static_noncons () =
+  (* SAFETY: splitting a static non-cons (atom/nil) is a static pattern-match
+   * failure (dead position during PE); produce a degenerate ('S.nil) split
+   * instead of crashing on `cons H Tl <= nil`. *)
+  check_av "uncons static non-cons -> degenerate"
+    "('uncons . ('S . nil))" "(('S . nil) . ('S . nil))"
 
 (* ===== Garbage / size measurement (Stage A) ===== *)
 
@@ -1903,6 +1909,7 @@ let () =
       Alcotest.test_case "uncons partial-static" `Quick test_av_uncons_partial;
       Alcotest.test_case "uncons static cons" `Quick test_av_uncons_static;
       Alcotest.test_case "uncons dynamic" `Quick test_av_uncons_dynamic;
+      Alcotest.test_case "uncons static non-cons -> degenerate" `Quick test_av_uncons_static_noncons;
     ];
     "interpreter-robustness", [
       Alcotest.test_case "list-syntax input desugared" `Quick test_list_input_desugared;
