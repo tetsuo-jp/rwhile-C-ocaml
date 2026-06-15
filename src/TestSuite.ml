@@ -717,6 +717,17 @@ let run_via_ri prog_data dyn_input =
   | VCons (_, data) -> data
   | v -> v
 
+(* ri.rwhile now decodes 'pairp: self-interpreting a program that uses pair?
+ * must match direct evaluation (and stay reversible via the H history stack). *)
+let test_ri_self_interp_pairp () =
+  let prog = parse_program
+    "read X; cons A B <= X; P1 ^= pair? A; X <= cons P1 (cons A B); write X" in
+  let prog_data = Program2DataRwhile.program2data prog in
+  let input = parse_val "(('x . 'y) . 'z)" in
+  let direct = EvalRwhile.evalProgram prog input in
+  Alcotest.(check valT_testable) "ri self-interp pair? = direct" direct
+    (run_via_ri prog_data input)
+
 let test_spec_id_nil_runs () =
   let spec = parse_file_program (examples_dir ^ "/spec.rwhile") in
   let spec_input = parse_file_val (examples_dir ^ "/id_and_nil.p_val") in
@@ -1269,6 +1280,22 @@ let test_se_av_eq_static_resolves () =
    * like '=? Tag ...' specializes away) *)
   check_spec_exp_av "eq static var/literal -> static true"
     "('eq . (('var . nil) . ('val . 'a)))" "('S . (nil . nil))"
+let test_se_av_pairp_static_atom () =
+  (* pair? of a static atom (slot0 = ('S.'a)) is statically FALSE *)
+  check_spec_exp_av "pair? static atom -> static false"
+    "('pairp . ('var . nil))" "('S . nil)"
+let test_se_av_pairp_static_cons () =
+  (* pair? of a static cons literal is statically TRUE *)
+  check_spec_exp_av "pair? static cons -> static true"
+    "('pairp . ('val . ('a . 'b)))" "('S . (nil . nil))"
+let test_se_av_pairp_partial () =
+  (* pair? of a partially-static cons is statically TRUE (it IS a cons) *)
+  check_spec_exp_av "pair? partial-static cons -> static true"
+    "('pairp . ('cons . (('var . nil) . ('var . (nil . nil)))))" "('S . (nil . nil))"
+let test_se_av_pairp_dynamic () =
+  (* pair? of a dynamic var (slot1) stays dynamic: residual pair? *)
+  check_spec_exp_av "pair? dynamic -> residual pair?"
+    "('pairp . ('var . (nil . nil)))" "('D . ('pairp . ('var . (nil . nil))))"
 
 (* ===== AV-based SPEC-STEP (Stage B step 3: 'seq, 'ass, 'rep, 'cond) =====
  * Harness: input (Vl . Cmd), output (Vl' . RCode) (residual, reverse order). *)
@@ -1757,6 +1784,7 @@ let () =
       Alcotest.test_case "eval pair? atom" `Quick test_eval_pair_atom;
       Alcotest.test_case "eval pair? nil" `Quick test_eval_pair_nil;
       Alcotest.test_case "pair? parse+program+p2d" `Quick test_pair_program;
+      Alcotest.test_case "pair? self-interp via ri" `Quick test_ri_self_interp_pairp;
     ];
     "var-collect", [
       Alcotest.test_case "var program" `Quick test_var_program;
@@ -1852,6 +1880,10 @@ let () =
       Alcotest.test_case "cons -> partial-static" `Quick test_se_av_cons_partial;
       Alcotest.test_case "hd recovers static" `Quick test_se_av_hd_recovers_static;
       Alcotest.test_case "hd dynamic" `Quick test_se_av_hd_dynamic;
+      Alcotest.test_case "pair? static atom -> false" `Quick test_se_av_pairp_static_atom;
+      Alcotest.test_case "pair? static cons -> true" `Quick test_se_av_pairp_static_cons;
+      Alcotest.test_case "pair? partial-static -> true" `Quick test_se_av_pairp_partial;
+      Alcotest.test_case "pair? dynamic -> residual" `Quick test_se_av_pairp_dynamic;
       Alcotest.test_case "eq static resolves" `Quick test_se_av_eq_static_resolves;
     ];
     "av-algebra", [

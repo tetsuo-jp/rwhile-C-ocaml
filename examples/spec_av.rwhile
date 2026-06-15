@@ -85,6 +85,33 @@ macro AV-TL(A, R)
   fi CT;
   CT ^= CT
 
+(* AV-PAIRP(A, R): partial-static `pair? A`.
+ *  - static ('S.v)            -> statically known bool ('S.(nil.nil)) / ('S.nil)
+ *  - partial-static cons ('C) -> definitely a cons -> static TRUE ('S.(nil.nil))
+ *  - dynamic ('D.code)        -> residual ('D.('pairp.code))
+ * A is consumed (like AV-HD/AV-TL). *)
+macro AV-PAIRP(A, R)
+  cons T V <= A;
+  PpS ^= =? T 'S;
+  if =? T 'S then
+    PpB ^= pair? V;            (* PpB = (nil.nil) if V is a cons else nil; V preserved *)
+    R <= cons 'S PpB;          (* R = ('S . bool); PpB consumed *)
+    V ^= V;                    (* clear the static value *)
+    T ^= 'S
+  else
+    PpC ^= =? T 'C;
+    if =? T 'C then
+      V ^= V;                  (* discard (a1.a2): a 'C is always a cons *)
+      R <= cons 'S (nil.nil);  (* static TRUE *)
+      T ^= 'C
+    else
+      R <= cons 'D (cons 'pairp V);   (* dynamic: residual pair?; V consumed *)
+      T ^= 'D
+    fi PpC;
+    PpC ^= PpC
+  fi PpS;
+  PpS ^= PpS
+
 macro AV-CONS(A1, A2, R)
   cons T1 V1 <= A1;
   cons T2 V2 <= A2;
@@ -312,7 +339,20 @@ macro SPEC-EXP-AV-STEP(Cd, Cd', RSt)
              AV-EQ(R1, R2, Re);
              RSt <= cons Re RSt
            else
-             'error <= '0
+            if =? ETag 'pairp then
+              ETag ^= 'pairp; ETag ^= 'pairpB;
+              Cd <= cons EArg (cons ('pairpE . nil) Cd)
+            else
+             if =? ETag 'pairpE then
+               ETag ^= 'pairpE; ETag ^= 'pairp;
+               cons EArg (cons ('pairpB . nil) Cd') <= Cd';
+               cons R1 RSt <= RSt;
+               AV-PAIRP(R1, Rp);
+               RSt <= cons Rp RSt
+             else
+               'error <= '0
+             fi =? ETag 'pairp
+            fi =? ETag 'pairpB
            fi =? ETag 'eq
           fi =? ETag 'eqB
          fi =? ETag 'tl

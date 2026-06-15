@@ -79,7 +79,16 @@ else
           ETag ^= 'eqE; ETag ^= 'eq;  cons E2 (cons E1 (cons ('eqB.nil) Cd')) <= Cd';  cons V2 (cons V1 St) <= St;
           EArg <= cons E1 E2; V ^= =? V1 V2; St <= cons V St; H <= cons V1 (cons V2 H)
          else
-	  'error <= '0
+          if =? ETag 'pairp then
+           ETag ^= 'pairp; ETag ^= 'pairpB;  Cd <= cons EArg (cons ('pairpE.nil) Cd)
+          else
+           if =? ETag 'pairpE then
+            ETag ^= 'pairpE; ETag ^= 'pairp;  cons EArg (cons ('pairpB.nil) Cd') <= Cd';  cons V1 St <= St;
+            V ^= pair? V1; St <= cons V St; H <= cons V1 H
+           else
+	    'error <= '0
+           fi =? ETag 'pairp
+          fi =? ETag 'pairpB
          fi =? ETag 'eq
         fi =? ETag 'eqB
        fi =? ETag 'tl
