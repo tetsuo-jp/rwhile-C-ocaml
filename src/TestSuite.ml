@@ -1354,6 +1354,16 @@ let test_ss_av_swap_dynamic () =
  * ASSEMBLE-FP1 turns (Vl . RCode) into a residual program; running that residual
  * (via ri.rwhile) must reproduce the command's effect. Validates that the
  * structural 'rep (C1) + assembly (C2) yield ONE correct reversible residual. *)
+(* AV-INIT builds an N-slot store of static-nil AVs. *)
+let test_av_init () =
+  let prog = parse_macro_harness (examples_dir ^ "/spec_av.rwhile")
+    "read In; AV-INIT(In, Vl); Out <= cons Vl In; write Out" in
+  (* N = 3 = (nil.(nil.(nil.nil))); expect Vl = three ('S.nil) slots *)
+  let out = EvalRwhile.evalProgram prog (parse_val "(nil . (nil . (nil . nil)))") in
+  Alcotest.(check valT_testable) "AV-INIT 3 -> three static-nil slots"
+    (parse_val "((('S . nil) . (('S . nil) . (('S . nil) . nil))) . (nil . (nil . (nil . nil))))")
+    out
+
 let test_assemble_fp1_swap () =
   let prog = parse_macro_harness (examples_dir ^ "/spec_av.rwhile")
     ("read In; cons Vl Cmd <= In; SPEC-CMD-AV(Cmd); "
@@ -1470,6 +1480,7 @@ let () =
       Alcotest.test_case "loop dynamic" `Quick test_ss_av_loop_dynamic;
     ];
     "assemble-fp1", [
+      Alcotest.test_case "AV-INIT builds static-nil store" `Quick test_av_init;
       Alcotest.test_case "assembled residual computes swap" `Quick test_assemble_fp1_swap;
     ];
     "spec-av-exp", [

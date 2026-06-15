@@ -228,6 +228,17 @@ macro ASSEMBLE-FP1(I', J', CompSrc)
   AsJ2 ^= J';
   CompSrc <= cons (cons 'var AsI) (cons AsBody (cons 'var AsJ2))
 
+(* AV-INIT(N, Vl): Vl := a store of N AV slots, each static-nil ('S.nil).
+ * (The specialized program's variables all start nil = statically-known nil;
+ * only the read-variable slot is later overwritten with the partial input AV.)
+ * N is a unary count (0=nil, 1=(nil.nil), ...); it is preserved. *)
+macro AV-INIT(N, Vl)
+  from (=? AiK nil) loop
+    Vl <= cons (cons 'S nil) Vl;
+    AiK <= cons nil AiK
+  until (=? AiK N);
+  AiK ^= N
+
 (* ===== AV-based expression specializer ===== *)
 
 (* SPEC-EXP-AV(E, RE): RE := AV result of specializing expression E against the
