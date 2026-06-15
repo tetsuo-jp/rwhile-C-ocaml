@@ -736,11 +736,40 @@ macro SPEC-CMD-AV(Cmd)
   Cd' ^= Cd'
 
 (* ===== Main program ===== *)
-(* Default main: a test harness for SPEC-EXP-AV; input (Vl . E), output
- * (Vl . (E . RE)).  (Other harnesses are injected via parse_macro_harness.) *)
+(* First Futamura projection (fp1).
+ * Input  In = (Prog . Src), Prog = p2d of the program to specialise
+ *   (= (('var.I') . (Body . ('var.J')))), Src = the static part of its input.
+ * Output Out = comp_src, the residual program specialised to Src, with the
+ *   other input half left dynamic: [comp_src](d) = [Prog]((Src.d)).
+ * Method: init an N-slot static-nil AV store, set V[I'] to the partial input
+ *   ('C.(('S.Src).('D.('var.I')))) (Src static, the other half dynamic in var I'),
+ *   specialise Body, and assemble. N is fixed (3 for now; raise for ri_fp3). *)
 
 read In;
-  cons Vl E <= In;
-  SPEC-EXP-AV(E, RE);
-  Out <= cons Vl (cons E RE);
+  cons Prog Src <= In;
+  (* decode Prog = (('var.I') . (Body . ('var.J'))) *)
+  cons FpPR FpPT <= Prog;
+  cons FpVI FpI <= FpPR;  FpVI ^= 'var;
+  cons FpBody FpPW <= FpPT;
+  cons FpVJ FpJ <= FpPW;  FpVJ ^= 'var;
+
+  (* init static-nil AV store (N = 3) *)
+  FpN ^= (nil.(nil.(nil.nil)));
+  AV-INIT(FpN, Vl);
+  FpN ^= (nil.(nil.(nil.nil)));
+
+  (* set V[I'] = ('C.(('S.Src).('D.('var.I')))): Src static, other half dynamic *)
+  LOOKUP(Vl, FpI, FpOld);  UPDATE(Vl, FpI, FpOld);  FpOld ^= FpOld;
+  FpIc ^= FpI;
+  FpPart <= cons 'C (cons (cons 'S Src) (cons 'D (cons 'var FpIc)));
+  UPDATE(Vl, FpI, FpPart);
+  FpPart ^= FpPart;
+
+  (* specialise the body, assemble the residual *)
+  SPEC-CMD-AV(FpBody);
+  ASSEMBLE-FP1(FpI, FpJ, Out);
+  RCode ^= RCode;
+  Vl ^= Vl;
+  FpI ^= FpI;
+  FpJ ^= FpJ;
 write Out

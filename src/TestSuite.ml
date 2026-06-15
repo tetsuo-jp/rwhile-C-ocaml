@@ -1209,7 +1209,9 @@ let test_stats_spec_partial_residual () =
 let av_store = "(('S . 'a) . (('D . ('var . (nil . nil))) . nil))"
 
 let check_spec_exp_av name e_str expected_re_str =
-  let prog = parse_file_program (examples_dir ^ "/spec_av.rwhile") in
+  (* Use an explicit SPEC-EXP-AV harness (spec_av's default main is now fp1). *)
+  let prog = parse_macro_harness (examples_dir ^ "/spec_av.rwhile")
+    "read In; cons Vl E <= In; SPEC-EXP-AV(E, RE); Out <= cons Vl (cons E RE); write Out" in
   let input = pair (parse_val av_store) (parse_val e_str) in
   match EvalRwhile.evalProgram prog input with
   | VCons (_, VCons (_, re)) ->
@@ -1378,6 +1380,17 @@ let test_assemble_fp1_swap () =
     "assembled fp1 residual for dynamic swap computes swap"
     (parse_val "('b . 'a)") result
 
+(* fp1 main end-to-end on a small program: specialize Q=swap (reads/writes V0)
+ * w.r.t. a static first input component 'a; the residual must still swap, so
+ * [comp]('b) = ('b.'a). Q in p2d form = (('var.0) . (swap_body . ('var.0))). *)
+let test_fp1_main_swap () =
+  let spec_av = parse_file_program (examples_dir ^ "/spec_av.rwhile") in
+  let q = parse_val ("(('var . nil) . (" ^ swap_cmd ^ " . ('var . nil)))") in
+  let comp = EvalRwhile.evalProgram spec_av (pair q (atom "'a")) in
+  let result = run_via_ri comp (atom "'b") in
+  Alcotest.(check valT_testable) "fp1(swap,'a): [comp]('b) = ('b.'a)"
+    (parse_val "('b . 'a)") result
+
 (* ===== Test runner ===== *)
 
 (* RWHILE_HYGIENIC=1 ./test-suite runs the WHOLE suite with -hygienic-macros on,
@@ -1482,6 +1495,7 @@ let () =
     "assemble-fp1", [
       Alcotest.test_case "AV-INIT builds static-nil store" `Quick test_av_init;
       Alcotest.test_case "assembled residual computes swap" `Quick test_assemble_fp1_swap;
+      Alcotest.test_case "fp1 main specializes swap" `Quick test_fp1_main_swap;
     ];
     "spec-av-exp", [
       Alcotest.test_case "var static" `Quick test_se_av_var_static;
