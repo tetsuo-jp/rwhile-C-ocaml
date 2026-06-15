@@ -68,6 +68,12 @@ done by the accumulator induction `rev-rest`.
   Corollary `frun-reversible`: the executable interpreter inherits
   reversibility. This certifies the interpreter *algorithm*, not just an
   abstract relation.
+- `RWhileExecConcrete.agda` — removes the last abstraction: `rupdF`, the
+  reversible XOR-update as ordinary executable code (`Store → Maybe Store`,
+  mirroring `rupdate`), proved equivalent to the relational `RAss`
+  (`rupdF-sound` without funext; `rupdF-complete` with funext). So the
+  executable assignment `frun (fatom (rupdF x v))` computes exactly the
+  reversible, deterministic semantics — no abstract atom left.
 - `RWhileIL.agda` — **step (3)**: a reversible Intermediate Language with
   flat (list) sequencing, its own big-step semantics, a translation `trS`
   to R-WHILE proved **semantics-preserving** (`tr-soundS`/`tr-completeS`),
@@ -79,7 +85,7 @@ done by the accumulator induction `rev-rest`.
 
 ```
 cd proofs/agda
-for f in RWhileRev RWhileRevFull RWhileValStore RWhileCRep RWhileCRepDet RWhileDet RWhileDetConcrete RWhileExec RWhileIL; do
+for f in RWhileRev RWhileRevFull RWhileValStore RWhileCRep RWhileCRepDet RWhileDet RWhileDetConcrete RWhileExec RWhileExecConcrete RWhileIL; do
   agda --safe $f.agda
 done
 ```
