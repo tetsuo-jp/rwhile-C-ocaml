@@ -1440,10 +1440,19 @@ let test_fp1_seq_idswap () =
     (parse_val "(('id . ('swap . nil)) . ('b . 'a))")
     (fp1_seq "('id . ('swap . nil))" (parse_val "('a . 'b)"))
 
-(* KNOWN LIMIT: [swap,swap] (a value PERMUTATION = identity) makes the no-alias
- * move logic emit a naive variable swap `V4 <= V3; V3 <= V4` in the residual,
- * which conflicts at runtime (both non-nil) -> "error in update".  A proper
- * swap-via-temp residual is needed.  Sequences with <=1 swap are green. *)
+(* [swap,swap] (a value PERMUTATION = identity) used to make the no-alias move
+ * logic emit a naive variable swap `V4 <= V3; V3 <= V4` in the residual, which
+ * conflicts at runtime (both non-nil) -> "error in update".  PAT-WRITE-STRUCT now
+ * detects the two-leaf TRANSPOSITION and realizes it as a swap-via-temp
+ * (`tmp <= V4; V4 <= V3; V3 <= tmp`) via SWAP-VIA-TEMP, so value-permuting
+ * sequences are green too. *)
+let test_fp1_seq_swapswap () =
+  (* [swap,swap] = identity (two transpositions of the data pair); the residual
+   * must swap-via-temp, not emit a conflicting naive variable swap. *)
+  Alcotest.(check valT_testable)
+    "[[spec_av]((ri_seq.[swap,swap]))](('a.'b)) = ([swap,swap].('a.'b))"
+    (parse_val "(('swap . ('swap . nil)) . ('a . 'b))")
+    (fp1_seq "('swap . ('swap . nil))" (parse_val "('a . 'b)"))
 
 let test_fp1_min_swap () =
   Alcotest.(check valT_testable)
@@ -1834,6 +1843,7 @@ let () =
       Alcotest.test_case "fp1 GREEN: [[spec_av]((ri_min.'id))]('q)=('id.'q)" `Quick test_fp1_min_id;
       Alcotest.test_case "fp1 GREEN seq: [[spec_av]((ri_seq.[]))](('a.'b))" `Quick test_fp1_seq_empty;
       Alcotest.test_case "fp1 GREEN seq: [[spec_av]((ri_seq.[id,swap]))](('a.'b))=([id,swap].('b.'a))" `Quick test_fp1_seq_idswap;
+      Alcotest.test_case "fp1 GREEN seq: [[spec_av]((ri_seq.[swap,swap]))](('a.'b))=([swap,swap].('a.'b))" `Quick test_fp1_seq_swapswap;
     ];
     "spec-av-exp", [
       Alcotest.test_case "var static" `Quick test_se_av_var_static;

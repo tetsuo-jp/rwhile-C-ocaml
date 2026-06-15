@@ -512,6 +512,42 @@ macro PAT-WRITE-AV(P, WA)
     PAT-WRITE-LEAF-AV2(P, WA)
   fi =? (hd P) 'cons
 
+(* TEMP-IDX(T): T := the reserved unary temp-variable index 100, used as the
+ * scratch slot for swap-via-temp.  100 is above every interpreted program's
+ * variable indices and within ri.rwhile's store, so it never collides. *)
+macro TEMP-IDX(TmpT)
+  TmpT ^= (nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.nil))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+
+(* SET-SELF-SLOT(I): set store slot I to the self-referential dynamic ('D.('var.I)),
+ * re-establishing the no-alias invariant after a runtime move/swap.  I preserved. *)
+macro SET-SELF-SLOT(SsI)
+  LOOKUP(Vl, SsI, SsOld); UPDATE(Vl, SsI, SsOld); SsOld ^= SsOld;   (* clear slot *)
+  SsIc ^= SsI;
+  SsNew <= cons 'D (cons 'var SsIc);
+  UPDATE(Vl, SsI, SsNew);                                          (* slot := ('D.('var.I)) *)
+  cons SsN1 SsN2 <= SsNew; SsN1 ^= SsN1;
+  cons SsN3 SsN4 <= SsN2; SsN3 ^= SsN3; SsN4 ^= SsN4
+
+(* SWAP-VIA-TEMP(I1, I2, RCode): realize a runtime SWAP of variables V_I1 and V_I2
+ * (a transposition of two live dynamic values) reversibly using a temp variable
+ * 'tmp (an atom index, distinct from every unary program-variable index, so it
+ * cannot collide).  A plain `V_I1<=V_I2; V_I2<=V_I1` is irreversible (both targets
+ * are non-nil at runtime); the temp breaks the 2-cycle:
+ *     tmp <= V_I1 ;  V_I1 <= V_I2 ;  V_I2 <= tmp
+ * RCode is prepended (save, move, restore) so the global reverse yields that order.
+ * Both slots are reset to self-referential dynamics.  I1, I2 preserved. *)
+macro SWAP-VIA-TEMP(SvI1, SvI2, RCode)
+  TEMP-IDX(SvT1);
+  SvSi1 ^= SvI1;
+  RCode <= cons (cons 'rep (cons (cons 'var SvT1) (cons 'var SvSi1))) RCode;   (* tmp <= V_I1 *)
+  SvMi1 ^= SvI1; SvMi2 ^= SvI2;
+  RCode <= cons (cons 'rep (cons (cons 'var SvMi1) (cons 'var SvMi2))) RCode;  (* V_I1 <= V_I2 *)
+  TEMP-IDX(SvT2);
+  SvRi2 ^= SvI2;
+  RCode <= cons (cons 'rep (cons (cons 'var SvRi2) (cons 'var SvT2))) RCode;   (* V_I2 <= tmp *)
+  SET-SELF-SLOT(SvI1);
+  SET-SELF-SLOT(SvI2)
+
 (* ===== Structural AV pattern write (Stage C, for fp1) =====
  * Write AV WA into pattern P, residualizing into RCode the ONE case that cannot
  * be done reversibly in the AV domain: splitting a *pure dynamic* value into a
@@ -537,8 +573,41 @@ macro PAT-WRITE-STRUCT(P, WA, RCode)
       cons WStg WSag <= P;
       cons WSp1 WSp2 <= WSag;
       AV-UNCONS(WA, WSa1, WSa2);        (* WA is 'C or 'S here: real split *)
-      PAT-WRITE-LEAF-REHOME(WSp1, WSa1, RCode);
-      PAT-WRITE-LEAF-REHOME(WSp2, WSa2, RCode);
+      (* Detect a TRANSPOSITION of the two leaf variables: both leaves are vars
+       * (idx i1,i2) and each sub-AV is the dynamic reference to the OTHER leaf's
+       * variable (WSa1=('D.('var.i2)), WSa2=('D.('var.i1)), i1<>i2).  Two
+       * sequential REHOMEs would emit the broken in-place `Vi1<=Vi2; Vi2<=Vi1`
+       * (both targets non-nil at runtime); realize it as a swap via a temp var. *)
+      WSxp ^= nil;
+      if =? (hd WSp1) 'var then
+       if =? (hd WSp2) 'var then
+        if =? (hd WSa1) 'D then
+         if =? (hd (tl WSa1)) 'var then
+          if =? (hd WSa2) 'D then
+           if =? (hd (tl WSa2)) 'var then
+            if =? (tl (tl WSa1)) (tl WSp2) then
+             if =? (tl (tl WSa2)) (tl WSp1) then
+              if =? (tl WSp1) (tl WSp2) else WSxp ^= (nil.nil) fi =? (tl WSp1) (tl WSp2)
+             fi =? (tl (tl WSa2)) (tl WSp1)
+            fi =? (tl (tl WSa1)) (tl WSp2)
+           fi =? (hd (tl WSa2)) 'var
+          fi =? (hd WSa2) 'D
+         fi =? (hd (tl WSa1)) 'var
+        fi =? (hd WSa1) 'D
+       fi =? (hd WSp2) 'var
+      fi =? (hd WSp1) 'var;
+      if WSxp then
+        cons WSxt1 WSxi1 <= WSp1;
+        cons WSxt2 WSxi2 <= WSp2;
+        SWAP-VIA-TEMP(WSxi1, WSxi2, RCode);
+        WSp1 <= cons WSxt1 WSxi1;
+        WSp2 <= cons WSxt2 WSxi2;
+        WSa1 ^= WSa1; WSa2 ^= WSa2
+      else
+        PAT-WRITE-LEAF-REHOME(WSp1, WSa1, RCode);
+        PAT-WRITE-LEAF-REHOME(WSp2, WSa2, RCode)
+      fi WSxp;
+      WSxp ^= WSxp;
       WSag <= cons WSp1 WSp2;
       P <= cons WStg WSag
     fi WSisD;
