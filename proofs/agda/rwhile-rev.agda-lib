@@ -1,0 +1,3 @@
+name: rwhile-rev
+depend: standard-library
+include: .
