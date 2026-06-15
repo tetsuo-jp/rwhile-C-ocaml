@@ -85,7 +85,7 @@ done by the accumulator induction `rev-rest`.
 
 ```
 cd proofs/agda
-for f in RWhileRev RWhileRevFull RWhileValStore RWhileCRep RWhileCRepDet RWhileDet RWhileDetConcrete RWhileExec RWhileExecConcrete RWhileIL RWhileFutamura RWhileFutamura2 RWhileFutamura2Inst RWhileRevFutamura RWhileRevProjPaper; do
+for f in RWhileRev RWhileRevFull RWhileValStore RWhileCRep RWhileCRepDet RWhileDet RWhileDetConcrete RWhileExec RWhileExecConcrete RWhileIL RWhileFutamura RWhileFutamura2 RWhileFutamura2Inst RWhileRevFutamura RWhileRevProjPaper RWhileRevProjInst RWhileRevProjGen; do
   agda --safe $f.agda
 done
 ```
@@ -165,6 +165,34 @@ reversible compiled program, and the projection commutes with inversion
   is reversible.
 - `reversible-fp1` : `run (mix (invSrc src)) (run (mix src) p) ≡ p` — combining
   the above: compiling the inverse source inverts the compiled program.
+
+## Reversible projections of the IEICE 2025 paper (Okubo–Yokoyama)
+
+A faithful Agda rendering of "2025_Reversible_Projection_IEICE_D" — a fourth
+independent check beside the paper's Isabelle/HOL, Rocq and Lean developments.
+
+- `RWhileRevProjPaper.agda` — the three reversible projections from the paper's
+  assumptions `def-rint` (the reversible interpreter keeps the program in its
+  output) and `def-spec` (the mix equation, with `rspec` itself a program):
+  `rev-proj1/2/3` give `snd ∘ ⟦·⟧ ≡ ⟦src⟧_S` for `tgt''`, `comp''`, `cogen'`.
+- `RWhileRevProjInst.agda` — a concrete, **executable** instance (closure ctor
+  `papp`, specialiser-program `mkpapp`, program-preserving `rintP`); both
+  hypotheses hold by `refl`. `ExtractRevProj.agda` compiles it to a native
+  binary that **computes and runs the second reversible projection**:
+  ```
+  ./build-extract.sh ExtractRevProj && ./ExtractRevProj
+  #  comp'' = run rspec (rspec.rint)  = papp(rspec,rint)
+  #  target = comp''(swap)            = papp(rint,swap)
+  #  target((*.(*.*)))                = (swap . ((*.*).*))   (program . result)
+  #  snd                              = ((*.*).*) = srcSem swap data ✓
+  ```
+- `RWhileRevProjGen.agda` — the generalisations:
+  - general `proj` and arbitrary `srcSem` (covers **non-reversible source**):
+    `GeneralRevProjection.rev-proj1/2/3` (`snd` is the special case).
+  - **garbage dichotomy**: `garbage-necessary` — a reversible residual
+    simulating a non-injective source forces `proj` to discard information;
+    `input-preserving-inj` — keeping the input as garbage is always injective,
+    so a reversible simulation exists for any source (rint⁺).
 
 ## Extraction demo (verified code → native binary)
 
