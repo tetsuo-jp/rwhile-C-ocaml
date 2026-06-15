@@ -16,6 +16,7 @@ let () =
   let f_p2d = ref false in
   let f_exp = ref false in
   let f_stats = ref false in
+  let f_core = ref false in
   Arg.parse
     [("-inverse", Arg.Set f_inv,  "inversion");
      ("-p2d",     Arg.Set f_p2d,  "translation from programs to data");
@@ -31,10 +32,12 @@ let () =
      ("-llm-errors", Arg.Set EvalRwhile.llm_errors,
       "emit structured, machine-/LLM-friendly error messages");
      ("-stats",   Arg.Set f_stats,
-      "after evaluation, print result size (node count / bytes) to stderr")]
+      "after evaluation, print result size (node count / bytes) to stderr");
+     ("-core",    Arg.Set f_core,
+      "evaluate via the Core IR abstraction layer (Core.ml; mirrors the Agda-verified core)")]
     (fun s -> files := !files @ [s])
     ("R-WHILE Interpreter (C) Tetsuo Yokoyama\n" ^
-       Printf.sprintf "usage: %s [-inverse] [-p2d] [-exp] [-local] [-autofi] [-array] [-hygienic-macros] [-llm-errors] [-stats] program [data]"
+       Printf.sprintf "usage: %s [-inverse] [-p2d] [-exp] [-local] [-autofi] [-array] [-hygienic-macros] [-llm-errors] [-stats] [-core] program [data]"
          Sys.argv.(0));
   match !files with
   | [prog_filename] ->
@@ -54,7 +57,9 @@ let () =
      let data = parseValT channel in 
      let _ = close_in channel in
      (try
-        let result = EvalRwhile.evalProgram prog data in
+        let result =
+          if !f_core then Core.eval_program_core prog data
+          else EvalRwhile.evalProgram prog data in
         print_endline (showValT result);
         if !f_stats then
           Printf.eprintf "[RWHILE-STATS] nodes=%d bytes=%d\n%!"
