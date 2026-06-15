@@ -85,7 +85,7 @@ done by the accumulator induction `rev-rest`.
 
 ```
 cd proofs/agda
-for f in RWhileRev RWhileRevFull RWhileValStore RWhileCRep RWhileCRepDet RWhileDet RWhileDetConcrete RWhileExec RWhileExecConcrete RWhileIL RWhileFutamura RWhileFutamura2 RWhileFutamura2Inst; do
+for f in RWhileRev RWhileRevFull RWhileValStore RWhileCRep RWhileCRepDet RWhileDet RWhileDetConcrete RWhileExec RWhileExecConcrete RWhileIL RWhileFutamura RWhileFutamura2 RWhileFutamura2Inst RWhileRevFutamura; do
   agda --safe $f.agda
 done
 ```
@@ -149,6 +149,22 @@ program `mkpapp` (= `specP`) that builds it, so **both H1 and H2 hold by
 specialiser *exists* (here via a built-in closure constructor); doing it for
 R-WHILE without built-in closures — residualising structurally — is the
 engineering still open.
+
+## Reversible Futamura projection
+
+`RWhileRevFutamura.agda` (`--safe`) proves that the first Futamura projection
+is *reversible*: specialising a reversible interpreter to a source yields a
+reversible compiled program, and the projection commutes with inversion
+(`invSrc`/`invComp` = reverse the sequence + invert each step):
+
+- `mix-commute`    : `mix (invSrc src) ≡ invComp (mix src)`  — inversion
+  commutes with the projection (compile-then-invert = invert-then-compile).
+- `run-rev`        : `run (invComp cs) (run cs p) ≡ p`        — every compiled
+  program is reversible.
+- `int-rev`        : `int (invSrc src) (int src p) ≡ p`       — the interpreter
+  is reversible.
+- `reversible-fp1` : `run (mix (invSrc src)) (run (mix src) p) ≡ p` — combining
+  the above: compiling the inverse source inverts the compiled program.
 
 ## Extraction demo (verified code → native binary)
 
