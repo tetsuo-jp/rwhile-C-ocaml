@@ -1,0 +1,20 @@
+(* ri_min.rwhile - a MINIMAL self-interpreter for a tiny one-instruction
+ * language, written so the AV specializer (spec_av) can specialize it cleanly:
+ *   - depth-1 cons patterns only (no nested `cons (cons ..) ..`)
+ *   - a single STATIC dispatch (if =? Op 'swap), no loops
+ * so PAT-WRITE-STRUCT (depth-1, terminating) handles it and the first Futamura
+ * projection [[spec_av]((ri_min . op))](d) = [ri_min]((op . d)) is finite & correct.
+ *
+ * Interpreted "program" = an operation tag Op; data = X.
+ *   Op = 'swap : X = (a.b) -> (b.a)
+ *   Op = anything else ('id) : X unchanged
+ * Output = (Op . X')  (echoes the op, like ri/ri_fp3 echo the program).
+ *)
+read In;
+  cons Op X <= In;
+  if =? Op 'swap then
+    cons A B <= X;
+    X <= cons B A
+  fi =? Op 'swap;
+  In <= cons Op X;
+write In

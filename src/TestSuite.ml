@@ -1403,6 +1403,31 @@ let test_fp1_ri_fp3_known_bug () =
     "KNOWN BUG: swap and splitjoin residual bodies identical (structural ops lost)"
     (fp1_ri_fp3_body "sx_splitjoin") (fp1_ri_fp3_body "swap")
 
+(* ===== First Futamura projection, GREEN via the minimal self-interpreter =====
+ * ri_min interprets a tiny one-op language (Op = 'swap | else 'id) using only
+ * depth-1 cons patterns and a single static dispatch (no loops, no nested
+ * patterns).  spec_av therefore specializes it cleanly with the depth-1
+ * PAT-WRITE-STRUCT -- it terminates and is correct, unlike ri_fp3 whose
+ * stack-machine deep patterns make PAT-WRITE-ITER diverge.
+ *   comp = [spec_av]((ri_min . Op));  [comp](d) = [ri_min]((Op . d)) = (Op . op(d))
+ * This is a genuine fp1: specializing an INTERPRETER w.r.t. a static source. *)
+let fp1_min op_str d =
+  let spec_av = parse_file_program (examples_dir ^ "/spec_av.rwhile") in
+  let ri_min = Program2DataRwhile.program2data
+    (parse_file_program (examples_dir ^ "/ri_min.rwhile")) in
+  let comp = EvalRwhile.evalProgram spec_av (pair ri_min (parse_val op_str)) in
+  run_via_ri comp d
+
+let test_fp1_min_swap () =
+  Alcotest.(check valT_testable)
+    "[[spec_av]((ri_min.'swap))](('a.'b)) = ('swap.('b.'a))"
+    (parse_val "('swap . ('b . 'a))") (fp1_min "'swap" (parse_val "('a . 'b)"))
+
+let test_fp1_min_id () =
+  Alcotest.(check valT_testable)
+    "[[spec_av]((ri_min.'id))]('q) = ('id.'q)"
+    (parse_val "('id . 'q)") (fp1_min "'id" (atom "'q"))
+
 (* PAT-WRITE-ITER unit test: the worklist write handles a NESTED (depth-2) cons
  * pattern that PAT-WRITE-STRUCT drops.  `cons (cons V1e V2e) St <= var0` with
  * var0 = ('C.((D var0).(S nil))) must split the dynamic top into V1e,V2e
@@ -1776,6 +1801,10 @@ let () =
       Alcotest.test_case "fp1-via-ri_fp3 KNOWN BUG: STEP leaves opaque Result" `Quick test_fp1_step_bug_opaque_result;
       Alcotest.test_case "PAT-WRITE-STRUCT nested split (KNOWN BUG)" `Quick test_pat_write_nested_split;
       Alcotest.test_case "PAT-WRITE-ITER handles nested split" `Quick test_pat_write_iter_nested;
+    ];
+    "first-projection-min", [
+      Alcotest.test_case "fp1 GREEN: [[spec_av]((ri_min.'swap))](('a.'b))=('swap.('b.'a))" `Quick test_fp1_min_swap;
+      Alcotest.test_case "fp1 GREEN: [[spec_av]((ri_min.'id))]('q)=('id.'q)" `Quick test_fp1_min_id;
     ];
     "spec-av-exp", [
       Alcotest.test_case "var static" `Quick test_se_av_var_static;
