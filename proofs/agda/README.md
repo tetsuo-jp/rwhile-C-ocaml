@@ -50,6 +50,12 @@ done by the accumulator induction `rev-rest`.
 - `RWhileDetConcrete.agda` — **step (2), concrete**: `rupdate` is
   deterministic (`RAss-det`, under a `funext` hypothesis), so the concrete
   assignment's inverse cancels (`assign-inv-cancels`).
+- `RWhileCRep.agda` — **pattern replacement** `CRep`: models pattern READ
+  (`evalPat`) and WRITE (`inv_evalPat`) as independent relations, proves they
+  are mutual converses (`read-write`/`write-read`), and concludes
+  `inv (CRep q r) = CRep r q` is semantically the inverse (`crep-reversible`).
+  Broadens the concrete model from `rupdate` alone to R-WHILE's other atomic
+  reversible operation.
 - `RWhileIL.agda` — **step (3)**: a reversible Intermediate Language with
   flat (list) sequencing, its own big-step semantics, a translation `trS`
   to R-WHILE proved **semantics-preserving** (`tr-soundS`/`tr-completeS`),
@@ -61,7 +67,7 @@ done by the accumulator induction `rev-rest`.
 
 ```
 cd proofs/agda
-for f in RWhileRev RWhileRevFull RWhileValStore RWhileDet RWhileDetConcrete RWhileIL; do
+for f in RWhileRev RWhileRevFull RWhileValStore RWhileCRep RWhileDet RWhileDetConcrete RWhileIL; do
   agda --safe $f.agda
 done
 ```
@@ -77,7 +83,19 @@ Done: reversibility of `inv` (atom/seq/cond/loop); concrete `rupdate`
 instantiation; determinism + function-level inverse; a verified flat-IL → R-WHILE
 translation with IL reversibility.
 
-Next: extend the IL with loops; instantiate `rupdate` determinism without
-`funext` via a first-order store; connect the IL to R-WHILE's pattern
-replacement (`CRep`); and (broader plan) use the IL as the efficient layer in
-which to prove further properties, transported to R-WHILE by the translation.
+## Honest scope (what is NOT yet proved)
+
+These are results about an Agda **model** of R-WHILE's core, hand-written to
+mirror the OCaml. They do **not** yet certify the OCaml implementation: there
+is no formal link (extraction / equivalence) between `EvalRwhile.ml` and this
+model. Also out of scope so far: the expression language
+(`cons`/`hd`/`tl`/`=?`/`pair?`), macro expansion, parsing, `p2d`, the
+`all_cleared` store invariant, and functional correctness / termination
+(we prove *reversibility* and *determinism*, the properties that matter for a
+reversible language).
+
+Next: extend the IL with loops; instantiate determinism without `funext` via a
+first-order store; thread `CRep` (now modelled) into the determinism layer;
+and connect the model to the OCaml (extraction, or an equivalence with a
+formal model of `eval`/`inv`) so the *implementation* — not only the model —
+is certified.
