@@ -1527,6 +1527,22 @@ let test_pat_write_iter_nested () =
        [nth_slot vl 1; nth_slot vl 2; nth_slot vl 3; rcode]
   | _ -> Alcotest.fail "unexpected output shape"
 
+(* DYNAMICIZE-ALL: make every slot dynamic self-ref, materialising static/partial
+ * ones. Store: slot0=('S.'a) [materialise], slot1=('S.nil) [skip], slot2 dynamic
+ * [skip].  Output (Vl' . RCode): all slots ('D.('var.k)); RCode = one rep
+ * materialising slot0 (var0 <= 'a). *)
+let test_dynamicize_all () =
+  let prog = parse_macro_harness (examples_dir ^ "/spec_av.rwhile")
+    "read Vl; DYNAMICIZE-ALL(Vl, RCode); Out <= cons Vl RCode; write Out" in
+  let input = parse_val
+    "(('S . 'a) . (('S . nil) . (('D . ('var . (nil . (nil . nil)))) . nil)))" in
+  let expected = parse_val
+    ("((('D . ('var . nil)) . (('D . ('var . (nil . nil))) . " ^
+     "(('D . ('var . (nil . (nil . nil)))) . nil))) . " ^
+     "(('rep . (('var . nil) . ('val . 'a))) . nil))") in
+  Alcotest.(check valT_testable) "dynamicize-all materialises static, marks all dynamic"
+    expected (EvalRwhile.evalProgram prog input)
+
 let test_ss_av_ass_static_exec () =
   (* var0 static-nil, "var0 ^= 'a" -> executed statically, slot ('S.'a), no residual *)
   check_spec_step_av "ass static execution"
@@ -1871,6 +1887,7 @@ let () =
       Alcotest.test_case "fp1-via-ri_fp3 KNOWN BUG: STEP leaves opaque Result" `Quick test_fp1_step_bug_opaque_result;
       Alcotest.test_case "PAT-WRITE-STRUCT nested split (KNOWN BUG)" `Quick test_pat_write_nested_split;
       Alcotest.test_case "PAT-WRITE-ITER handles nested split" `Quick test_pat_write_iter_nested;
+      Alcotest.test_case "DYNAMICIZE-ALL materialises + marks dynamic" `Quick test_dynamicize_all;
     ];
     "first-projection-min", [
       Alcotest.test_case "fp1 GREEN: [[spec_av]((ri_min.'swap))](('a.'b))=('swap.('b.'a))" `Quick test_fp1_min_swap;

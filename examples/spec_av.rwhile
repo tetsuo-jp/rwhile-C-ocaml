@@ -278,6 +278,42 @@ macro AV-INIT(N, Vl)
   until (=? AiK N);
   AiK ^= N
 
+(* DYNAMICIZE-ALL(Vl, RCode): make every store slot dynamic & self-referential
+ * ('D.('var.k)), MATERIALISING any static-non-nil or partial-static slot first
+ * (emit `('var.k) <= lift(slot)` into RCode) so that a following residual
+ * dynamic region (a residualised cond/loop) sees the correct runtime value.
+ * Slots already static-nil or dynamic need no materialisation.  Slot order is
+ * preserved.  Conservative (dynamicises the whole store) but sound: it stops
+ * stale static values from leaking past a dynamic branch.  Vl must be non-empty. *)
+macro DYNAMICIZE-ALL(Vl, RCode)
+  DaK ^= nil;                        (* running index (unary) *)
+  DaRev ^= nil;                      (* reversed accumulator of new slots *)
+  from (=? DaRev nil) loop
+    cons DaSlot Vl <= Vl;            (* pop old slot k; Vl = rest *)
+    cons DaT DaV <= DaSlot;          (* slot = (DaT . DaV) *)
+    DaMat ^= nil;
+    if =? DaT 'S then
+      if =? DaV nil else DaMat ^= (nil.nil) fi =? DaV nil
+    fi =? DaT 'S;
+    if =? DaT 'C then DaMat ^= (nil.nil) fi =? DaT 'C;
+    DaSlot <= cons DaT DaV;          (* reassemble slot (DaT,DaV consumed) *)
+    if DaMat then
+      DaKc ^= DaK;
+      AV-LIFT(DaSlot, DaCode);       (* DaSlot preserved; DaCode = lifted code *)
+      RCode <= cons (cons 'rep (cons (cons 'var DaKc) DaCode)) RCode
+    fi DaMat;
+    DaMat ^= DaMat;
+    cons DaOt DaOv <= DaSlot; DaOt ^= DaOt; DaOv ^= DaOv;   (* clear old slot *)
+    DaKc2 ^= DaK;
+    DaRev <= cons (cons 'D (cons 'var DaKc2)) DaRev;
+    DaK <= cons nil DaK
+  until (=? Vl nil);
+  from (=? Vl nil) loop
+    cons DaRS DaRev <= DaRev;
+    Vl <= cons DaRS Vl
+  until (=? DaRev nil);
+  DaK ^= DaK
+
 (* ===== AV-based expression specializer ===== *)
 
 (* SPEC-EXP-AV(E, RE): RE := AV result of specializing expression E against the
