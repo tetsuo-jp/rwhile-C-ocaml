@@ -1584,10 +1584,12 @@ let test_ss_av_cond_static_false () =
     "(('S . 'b) . (('S . nil) . nil))" cond_cmd
     "((('S . 'b) . (('S . 'y) . nil)) . nil)"
 let test_ss_av_cond_dynamic () =
-  (* dynamic test: residualize whole cond (test lifted) *)
-  check_spec_step_av "cond dynamic test residualized"
+  (* dynamic test: residualize whole cond (test lifted) AND dynamicize the store
+   * (branches may modify any var). slot0 already dynamic, slot1 static-nil, so
+   * no materialisation; both slots become dynamic self-refs, cond unchanged. *)
+  check_spec_step_av "cond dynamic test residualized + store dynamicized"
     "(('D . ('var . nil)) . (('S . nil) . nil))" cond_cmd
-    ("((('D . ('var . nil)) . (('S . nil) . nil)) . (" ^ cond_cmd ^ " . nil))")
+    ("((('D . ('var . nil)) . (('D . ('var . (nil . nil))) . nil)) . (" ^ cond_cmd ^ " . nil))")
 
 (* counting loop: from =? I nil do (var2 ^= nil) loop I <= cons nil I until =? I (nil.nil)
  * with I = var0, var2 = var index (nil.nil) *)
@@ -1599,10 +1601,12 @@ let test_ss_av_loop_static_unroll () =
     "(('S . nil) . (('S . nil) . (('S . nil) . nil)))" loop_cmd
     "((('S . (nil . nil)) . (('S . nil) . (('S . nil) . nil))) . nil)"
 let test_ss_av_loop_dynamic () =
-  (* I dynamic: residualize the whole loop (entry test lifted, == original here) *)
-  check_spec_step_av "loop dynamic residualized"
+  (* I dynamic: residualize the whole loop (entry test lifted, == original here)
+   * AND dynamicize the store (the body may modify any var). All slots are
+   * dynamic/static-nil here, so no materialisation; all become dynamic. *)
+  check_spec_step_av "loop dynamic residualized + store dynamicized"
     "(('D . ('var . nil)) . (('S . nil) . (('S . nil) . nil)))" loop_cmd
-    ("((('D . ('var . nil)) . (('S . nil) . (('S . nil) . nil))) . (" ^ loop_cmd ^ " . nil))")
+    ("((('D . ('var . nil)) . (('D . ('var . (nil . nil))) . (('D . ('var . (nil . (nil . nil)))) . nil))) . (" ^ loop_cmd ^ " . nil))")
 
 (* var indices: X=0=nil, Y=1=(nil.nil), Z=2=(nil.(nil.nil)) *)
 let rep_yzx = "('rep . (('cons . (('var . (nil . nil)) . ('var . (nil . (nil . nil))))) . ('var . nil)))"

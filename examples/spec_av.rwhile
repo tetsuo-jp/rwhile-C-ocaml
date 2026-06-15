@@ -920,11 +920,16 @@ macro SPEC-STEP-AV(Cd, Cd', RCode)
         VT ^= VT; TT ^= 'S;
         E ^= E; F ^= F
       else
-        (* dynamic test: residualize the whole conditional with lifted test *)
+        (* dynamic test: residualize the whole conditional with lifted test.
+         * The branches may read/modify any variable, so first DYNAMICIZE the
+         * store (materialise static slots, mark all dynamic) — this runs
+         * BEFORE the residual cond (prepend it first), so the residual sees the
+         * correct runtime values and no stale static value leaks past. *)
         RE <= cons TT VT;
         AV-LIFT(RE, LE);
         RE ^= RE;
         E ^= E;
+        DYNAMICIZE-ALL(Vl, RCode);
         Arg <= cons LE (cons C (cons D (cons F nil)));
         Ccond ^= Arg;
         RCode <= cons (cons 'cond Ccond) RCode;
@@ -952,11 +957,14 @@ macro SPEC-STEP-AV(Cd, Cd', RCode)
          LpVE ^= LpVE;
          LpTE ^= 'S
        else
-         (* dynamic entry test: residualize whole loop (entry test lifted) *)
+         (* dynamic entry test: residualize whole loop (entry test lifted).
+          * The body may modify any var, so DYNAMICIZE the store first (runs
+          * before the residual loop), keeping the abstract store consistent. *)
          LpRE <= cons LpTE LpVE;
          AV-LIFT(LpRE, LpLEe);
          LpRE ^= LpRE;
          LpE ^= LpE;
+         DYNAMICIZE-ALL(Vl, RCode);
          Arg <= cons LpLEe (cons LpD (cons LpL (cons LpF nil)));
          LpCl ^= Arg;
          RCode <= cons (cons 'loop LpCl) RCode;
