@@ -627,11 +627,24 @@ macro PAT-WRITE-ITER-STEP(WW, WW', RCode)
       RCode <= cons (cons 'rep (cons WiPc WiDcode)) RCode;
       WiP ^= WiP                                     (* discard consumed WiP *)
     else
-      (* real split along the spine: uncons WiA, push the two sub-pairs *)
-      cons WiTg WiAg <= WiP; WiTg ^= WiTg;          (* drop the 'cons tag *)
-      cons WiP1 WiP2 <= WiAg;
-      AV-UNCONS(WiA, WiA1, WiA2);
-      WW <= cons (cons WiP1 WiA1) (cons (cons WiP2 WiA2) WW)
+      (* WiA is 'C or 'S.  'C is always splittable; an 'S value is splittable only
+       * if it is actually a cons.  A var-bearing cons pattern meeting a static
+       * non-cons (atom/nil) is a static pattern-match FAILURE -> dead position;
+       * discard it rather than AV-UNCONS an atom (which would crash). *)
+      WiSnc ^= nil;
+      if =? (hd WiA) 'S then
+        if pair? (tl WiA) else WiSnc ^= (nil.nil) fi pair? (tl WiA)
+      fi =? (hd WiA) 'S;
+      if WiSnc then
+        WiA ^= WiA; WiP ^= WiP                        (* static match failure: drop *)
+      else
+        (* real split along the spine: uncons WiA, push the two sub-pairs *)
+        cons WiTg WiAg <= WiP; WiTg ^= WiTg;          (* drop the 'cons tag *)
+        cons WiP1 WiP2 <= WiAg;
+        AV-UNCONS(WiA, WiA1, WiA2);
+        WW <= cons (cons WiP1 WiA1) (cons (cons WiP2 WiA2) WW)
+      fi WiSnc;
+      WiSnc ^= WiSnc
     fi WiIsD;
     WiIsD ^= WiIsD
   else
@@ -722,10 +735,12 @@ macro SPEC-STEP-AV(Cd, Cd', RCode)
       * part, and a fully-dynamic value flows symbolically (lifted at output). *)
      cons RpQ RpR <= Arg;
      PAT-READ-AV(RpR, RpAV);
-     (* NOTE: PAT-WRITE-ITER (below) handles arbitrary-depth patterns and is the
-      * intended replacement, but wiring it in still trips over ri_fp3's marker
-      * machinery (a var-bearing cons pattern meets a static atom). Until that
-      * edge case is handled, keep the depth-1 PAT-WRITE-STRUCT here. *)
+     (* PAT-WRITE-ITER (below) handles arbitrary-depth patterns and, with the
+      * pair? guard, no longer crashes on ri_fp3's static-atom positions. But
+      * wiring it makes full-ri_fp3 fp1 DIVERGE (a static loop in ri_fp3's stack
+      * machine unrolls forever during specialization). It is correct for small
+      * fp1 programs (assemble-fp1 2/3/4 pass when wired). Until the divergence is
+      * fixed, keep PAT-WRITE-STRUCT here so the suite does not hang. *)
      PAT-WRITE-STRUCT(RpQ, RpAV, RCode);
      Arg <= cons RpQ RpR
    else
