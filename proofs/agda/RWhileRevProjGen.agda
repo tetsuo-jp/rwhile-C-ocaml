@@ -29,6 +29,22 @@ Inj : {A B : Set} → (A → B) → Set
 Inj f = ∀ {x y} → f x ≡ f y → x ≡ y
 
 ------------------------------------------------------------------------
+-- Motivation (paper Thm proj1_fail): the ORDINARY first Futamura projection
+-- with a reversible-implementation interpreter exists only for a TRIVIAL
+-- source.  An interpreter that realises the source directly and is reversible
+-- (injective) forces the source semantics to be injective.
+--   srcMap ⟨p,d⟩ = ⟦p⟧_S d (the uncurried source semantics);
+--   i = ⟦lint'⟧ (reversible interpreter), realising srcMap directly.
+-- Contrapositive: a non-trivial (non-injective) source has NO such reversible
+-- ordinary interpreter — hence the reversible *projection* (with rint) is
+-- needed instead.
+proj1-needs-trivial :
+  ∀ {U : Set} {srcMap i : U → U}
+  → Inj i → (∀ x → srcMap x ≡ i x) → Inj srcMap
+proj1-needs-trivial inj-i eq sx≡sy =
+  inj-i (trans (sym (eq _)) (trans sx≡sy (eq _)))
+
+------------------------------------------------------------------------
 -- (a) Generalised reversible projections: arbitrary `proj`, arbitrary srcSem.
 
 module GeneralRevProjection

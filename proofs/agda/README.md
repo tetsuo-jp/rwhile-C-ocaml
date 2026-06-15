@@ -186,7 +186,10 @@ independent check beside the paper's Isabelle/HOL, Rocq and Lean developments.
   #  target((*.(*.*)))                = (swap . ((*.*).*))   (program . result)
   #  snd                              = ((*.*).*) = srcSem swap data ✓
   ```
-- `RWhileRevProjGen.agda` — the generalisations:
+- `RWhileRevProjGen.agda` — the motivation and generalisations:
+  - `proj1-needs-trivial` (paper Thm proj1_fail): a reversible interpreter that
+    realises the source directly forces the source semantics to be injective
+    (trivial) — so non-trivial sources need the reversible *projection* (rint).
   - general `proj` and arbitrary `srcSem` (covers **non-reversible source**):
     `GeneralRevProjection.rev-proj1/2/3` (`snd` is the special case).
   - **garbage dichotomy**: `garbage-necessary` — a reversible residual
