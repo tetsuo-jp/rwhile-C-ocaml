@@ -1273,6 +1273,53 @@ let rec pp_cmd v =
   | VCons (VAtom (Atom "'loop"), rest) -> sprintf "loop(%s)" (show_val rest)
   | other -> show_val other
 
+(* DIAGNOSTIC: run fp1 main up to (not incl.) ASSEMBLE, dump the abstract store
+ * V[FpJ] (ri_fp3's output var) to decide STEP-bug vs lift-bug. *)
+let unary_lit n =
+  let rec go n = if n = 0 then "nil" else "(nil." ^ go (n - 1) ^ ")" in go n
+
+let rec nth_slot vl k = match vl, k with
+  | VCons (s, _), 0 -> s
+  | VCons (_, rest), n -> nth_slot rest (n - 1)
+  | _ -> VNil
+
+(* Run fp1 main up to (not incl.) ASSEMBLE; return the abstract store slot
+ * V[FpJ] (ri_fp3's output var) after the STEP loop. *)
+let fp1_store_out_slot src_name =
+  let n = unary_lit 50 in
+  let body =
+    "read In; cons Prog Src <= In;" ^
+    "cons FpPR FpPT <= Prog; cons FpVI FpI <= FpPR; FpVI ^= 'var;" ^
+    "cons FpBody FpPW <= FpPT; cons FpVJ FpJ <= FpPW; FpVJ ^= 'var;" ^
+    "FpN ^= " ^ n ^ "; AV-INIT(FpN, Vl); FpN ^= " ^ n ^ ";" ^
+    "LOOKUP(Vl, FpI, FpOld); UPDATE(Vl, FpI, FpOld); FpOld ^= FpOld;" ^
+    "FpIc ^= FpI; FpPart <= cons 'C (cons (cons 'S Src) (cons 'D (cons 'var FpIc)));" ^
+    "UPDATE(Vl, FpI, FpPart); FpPart ^= FpPart;" ^
+    "SPEC-CMD-AV(FpBody);" ^
+    "FpIc2 ^= FpI; Out <= cons Vl (cons FpJ (cons FpIc2 RCode)); FpI ^= FpI; write Out" in
+  let prog = parse_macro_harness (examples_dir ^ "/spec_av.rwhile") body in
+  let ri_fp3 = Program2DataRwhile.program2data
+    (parse_file_program (examples_dir ^ "/ri_fp3.rwhile")) in
+  let src = parse_file_program (examples_dir ^ "/" ^ src_name ^ ".rwhile") in
+  let src_data = Program2DataRwhile.program2data src in
+  match EvalRwhile.evalProgram prog (pair ri_fp3 src_data) with
+  | VCons (vl, VCons (fpj, _)) -> nth_slot vl (unary_to_int fpj)
+  | _ -> VNil
+
+(* CHARACTERIZATION: the bug is in STEP, not in lift/assemble.  After STEP, the
+ * output slot V[FpJ] for swap is a partial-static cons whose Result half (tl) is
+ * a PLAIN opaque dynamic ('D.('var.0)) -- NOT the swapped structure
+ * ('C.((D tl).(D hd))).  ri_fp3's stack machine lets the dynamic value flow
+ * through opaquely; the hd/tl/cons are never tracked symbolically during STEP.
+ * When the STEP bug is fixed this assertion SHOULD fail (Result must become a
+ * structural cons); update it then. *)
+let test_fp1_step_bug_opaque_result () =
+  let slot = fp1_store_out_slot "swap" in
+  let result = (match slot with VCons (_, VCons (_, tl)) -> tl | _ -> slot) in
+  Alcotest.(check valT_testable)
+    "KNOWN BUG (STEP): swap Result half is opaque ('D.('var.0)), not structural"
+    (parse_val "('D . ('var . nil))") result
+
 (* fp1 via ri_fp3: residual body of a source program (the "compiled" code).
  * Returns (residual_body_pretty, comp). *)
 let fp1_ri_fp3_body src_name =
@@ -1636,6 +1683,7 @@ let () =
       Alcotest.test_case "ri_fp3 reversible-clear self-interp: id" `Quick test_ri_fp3_selfinterp_id;
       Alcotest.test_case "ri_fp3 reversible-clear self-interp: swap" `Quick test_ri_fp3_selfinterp_swap;
       Alcotest.test_case "fp1-via-ri_fp3 KNOWN BUG: structural ops lost" `Quick test_fp1_ri_fp3_known_bug;
+      Alcotest.test_case "fp1-via-ri_fp3 KNOWN BUG: STEP leaves opaque Result" `Quick test_fp1_step_bug_opaque_result;
     ];
     "spec-av-exp", [
       Alcotest.test_case "var static" `Quick test_se_av_var_static;
