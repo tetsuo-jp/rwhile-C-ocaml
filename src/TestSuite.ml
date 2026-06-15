@@ -1418,6 +1418,33 @@ let fp1_min op_str d =
   let comp = EvalRwhile.evalProgram spec_av (pair ri_min (parse_val op_str)) in
   run_via_ri comp d
 
+(* fp1 via ri_seq: specialize the sequence interpreter w.r.t. a static op LIST.
+ * Exercises a STATIC loop (unrolled by spec_av) over the op list, plus depth-1
+ * swaps on the dynamic data.  Output = (Prog . result). *)
+let fp1_seq proglist_str d =
+  let spec_av = parse_file_program (examples_dir ^ "/spec_av.rwhile") in
+  let ri_seq = Program2DataRwhile.program2data
+    (parse_file_program (examples_dir ^ "/ri_seq.rwhile")) in
+  let comp = EvalRwhile.evalProgram spec_av (pair ri_seq (parse_val proglist_str)) in
+  run_via_ri comp d
+
+let test_fp1_seq_empty () =
+  Alcotest.(check valT_testable)
+    "[[spec_av]((ri_seq.[]))](('a.'b)) = ([].('a.'b))"
+    (parse_val "(nil . ('a . 'b))") (fp1_seq "nil" (parse_val "('a . 'b)"))
+
+let test_fp1_seq_idswap () =
+  (* a 2-element program [id,swap]: static loop runs twice; net effect = one swap *)
+  Alcotest.(check valT_testable)
+    "[[spec_av]((ri_seq.[id,swap]))](('a.'b)) = ([id,swap].('b.'a))"
+    (parse_val "(('id . ('swap . nil)) . ('b . 'a))")
+    (fp1_seq "('id . ('swap . nil))" (parse_val "('a . 'b)"))
+
+(* KNOWN LIMIT: [swap,swap] (a value PERMUTATION = identity) makes the no-alias
+ * move logic emit a naive variable swap `V4 <= V3; V3 <= V4` in the residual,
+ * which conflicts at runtime (both non-nil) -> "error in update".  A proper
+ * swap-via-temp residual is needed.  Sequences with <=1 swap are green. *)
+
 let test_fp1_min_swap () =
   Alcotest.(check valT_testable)
     "[[spec_av]((ri_min.'swap))](('a.'b)) = ('swap.('b.'a))"
@@ -1805,6 +1832,8 @@ let () =
     "first-projection-min", [
       Alcotest.test_case "fp1 GREEN: [[spec_av]((ri_min.'swap))](('a.'b))=('swap.('b.'a))" `Quick test_fp1_min_swap;
       Alcotest.test_case "fp1 GREEN: [[spec_av]((ri_min.'id))]('q)=('id.'q)" `Quick test_fp1_min_id;
+      Alcotest.test_case "fp1 GREEN seq: [[spec_av]((ri_seq.[]))](('a.'b))" `Quick test_fp1_seq_empty;
+      Alcotest.test_case "fp1 GREEN seq: [[spec_av]((ri_seq.[id,swap]))](('a.'b))=([id,swap].('b.'a))" `Quick test_fp1_seq_idswap;
     ];
     "spec-av-exp", [
       Alcotest.test_case "var static" `Quick test_se_av_var_static;

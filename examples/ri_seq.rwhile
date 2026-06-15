@@ -1,0 +1,34 @@
+(* ri_seq.rwhile - minimal self-interpreter for a SEQUENCE of ops, written so the
+ * AV specializer (spec_av) specializes it cleanly:
+ *   - depth-1 cons patterns only (no nested `cons (cons ..) ..`)
+ *   - control is a STATIC loop over the (static) op list -> spec_av unrolls it
+ * so the depth-1 PAT-WRITE-STRUCT handles everything and the first Futamura
+ * projection is finite & correct (unlike ri_fp3's diverging stack machine).
+ *
+ * Interpreted program = a list of ops [op1, ..., opn]; data = X.
+ *   op 'swap : X = (a.b) -> (b.a)
+ *   op else  : 'id (no-op)
+ * Applying [o1,...,on] runs o1 then o2 ... then on on X.
+ * Output = (Prog . X')  (Prog is restored/echoed, like ri/ri_fp3). *)
+
+macro APPLY-OP(Op, X)
+  if =? Op 'swap then
+    cons A B <= X;
+    X <= cons B A
+  fi =? Op 'swap
+
+read In;
+  cons Prog X <= In;
+  (* run each op in Prog on X, accumulating consumed ops (reversed) in Done *)
+  from (=? Done nil) loop
+    cons Op Prog <= Prog;
+    APPLY-OP(Op, X);
+    Done <= cons Op Done
+  until (=? Prog nil);
+  (* restore Prog = reverse(Done) so it can be echoed (keeps everything reversible) *)
+  from (=? Prog nil) loop
+    cons Op2 Done <= Done;
+    Prog <= cons Op2 Prog
+  until (=? Done nil);
+  In <= cons Prog X;
+write In
