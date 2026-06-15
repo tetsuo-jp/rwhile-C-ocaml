@@ -9,6 +9,8 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
+mod="${1:-Extract}"   # module to compile (default: Extract)
+
 ffi_dir=""
 for d in /home/linuxbrew/.linuxbrew/lib /usr/lib/x86_64-linux-gnu /usr/lib /usr/local/lib; do
   if ls "$d"/libffi.so* >/dev/null 2>&1; then ffi_dir="$d"; break; fi
@@ -20,5 +22,5 @@ if [ -n "$ffi_dir" ]; then
   flags+=("--ghc-flag=-L${ffi_dir}" "$rpath_flag")
 fi
 
-agda "${flags[@]}" Extract.agda
-echo "Built ./Extract — run it with: ./Extract"
+agda "${flags[@]}" "${mod}.agda"
+echo "Built ./${mod} — run it with: ./${mod}"

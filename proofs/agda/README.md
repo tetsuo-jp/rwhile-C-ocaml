@@ -85,7 +85,7 @@ done by the accumulator induction `rev-rest`.
 
 ```
 cd proofs/agda
-for f in RWhileRev RWhileRevFull RWhileValStore RWhileCRep RWhileCRepDet RWhileDet RWhileDetConcrete RWhileExec RWhileExecConcrete RWhileIL; do
+for f in RWhileRev RWhileRevFull RWhileValStore RWhileCRep RWhileCRepDet RWhileDet RWhileDetConcrete RWhileExec RWhileExecConcrete RWhileIL RWhileFutamura; do
   agda --safe $f.agda
 done
 ```
@@ -100,6 +100,31 @@ module hypothesis in `RWhileDetConcrete`).
 Done: reversibility of `inv` (atom/seq/cond/loop); concrete `rupdate`
 instantiation; determinism + function-level inverse; a verified flat-IL → R-WHILE
 translation with IL reversibility.
+
+## First Futamura projection (verified + extracted)
+
+`RWhileFutamura.agda` (`--safe`) realises the **first Futamura projection** for
+the small reversible op-language used in R-WHILE's fp1 (the `ri_seq`/swap
+language): `mix` specialises the interpreter `int` to a source op-program,
+producing a residual in which the interpretive dispatch is gone, and
+
+```
+fp1 : ∀ src p → run (mix src) p ≡ int src p
+```
+
+is proved.  `mix-length-≤` shows specialisation shrinks code.
+`ExtractFutamura.agda` compiles `mix`/`int`/`run` to a native binary:
+
+```
+./build-extract.sh ExtractFutamura && ./ExtractFutamura
+#  source program     [swap,id,swap,id]  (len 4)
+#  compiled residual  [doSwap,doSwap]    (len 2)  -- dispatch & id removed
+#  int src dat       = (nil , (nil.nil))
+#  runC (mix src) dat = (nil , (nil.nil))         (equal, by the proved fp1)
+```
+
+So the interpreter→compiler transformation (fp1) is machine-checked AND runs
+as an extracted native program.
 
 ## Extraction demo (verified code → native binary)
 
