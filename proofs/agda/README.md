@@ -100,9 +100,13 @@ done by the accumulator induction `rev-rest`.
   formal parameters RENAMED to the actual variables. Proves the SUBSTITUTION
   LEMMA for expressions, `subst-exp : evalC σ (ren ρ e) ≡ evalC (σ ∘ ρ) e` —
   renaming a term equals renaming the store — for ANY `ρ` (expressions only
-  READ, so inlining their expressions is unconditionally sound). The command/
-  write side needs `ρ` injective on live variables = R-WHILE's hygiene
-  condition (`-hygienic-macros`); that is the remaining step.
+  READ, so inlining their expressions is unconditionally sound). For the WRITE
+  side (`subst-upd`) it proves a store write commutes with renaming EXACTLY when
+  `ρ` is injective on the live variables — precisely R-WHILE's hygiene condition
+  (`-hygienic-macros`) — and `capture` exhibits the converse: a collapsing
+  rename (merging two variables) breaks the commutation, i.e. variable capture
+  really does change meaning. So expMacProgram is sound iff expansion is
+  hygienic, now a theorem rather than a caveat.
 
 ## Checking
 
