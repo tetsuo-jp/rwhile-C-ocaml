@@ -112,3 +112,24 @@ bug-reproduces-'10 s ¬eq = idiom-drift buggy-lift s (λ eq → ¬eq (sym eq))
 -- ASSEMBLE step round-trip for EVERY output value — the precise repair B needs.
 fix-roundtrips : ∀ s → liftThenClear (λ x → x) s ≡ just nothing
 fix-roundtrips = idiom-ok
+
+------------------------------------------------------------------------
+-- (5) A FALSE fix, refuted.  One might try to dodge the '10 by clearing the
+-- scratch with its OWN current value (`AsAV ^= AsAV`) instead of re-reading the
+-- store slot:  selfClear le s = xor (just (le s)) (le s).  This was tried on the
+-- real spec_av: fp2 then TERMINATES (no '10) but emits a BROKEN compiler
+-- (`error in update: var=Vl` when run).  The reason, made precise here: the
+-- self-clear succeeds for ANY `le` — it is INSENSITIVE to the drift — so it
+-- removes the symptom without restoring the value `lift` corrupted upstream.
+selfClear : (V → V) → V → Maybe Slot
+selfClear le s = xor (just (le s)) (le s)
+
+selfClear-masks : ∀ le s → selfClear le s ≡ just nothing
+selfClear-masks le s with (le s) ≟V (le s)
+... | yes _  = refl
+... | no ¬p  = ⊥-elim (¬p refl)
+
+-- Contrast: the genuine clear (re-read slot `s`) DETECTS drift (idiom-drift
+-- raises '10), whereas selfClear never can.  So the only correct repair is to
+-- restore lift-preservation (idiom-ok / fix-roundtrips), not to silence the
+-- check — exactly what the spec_av experiment confirmed.

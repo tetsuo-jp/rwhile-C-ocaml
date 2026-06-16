@@ -117,7 +117,11 @@ done by the accumulator induction `rev-rest`.
   own `(LfTag.LfPay)`), and states the repair as a theorem (`fix-roundtrips`).
   So: making AV-LIFT preserve its operand's abstract slot is necessary AND
   sufficient — the precise fix the production specialiser needs (see
-  `../../plan_fp1_stage_c.md` 6.3.2).
+  `../../plan_fp1_stage_c.md` 6.3.2). Also refutes a tempting FALSE fix
+  (`selfClear-masks`): clearing the scratch with its own value (`AsAV ^= AsAV`)
+  succeeds for ANY drift, so it only silences the `'10` while leaving the
+  corrupted residual — confirmed on the real spec_av (fp2 then emits a broken
+  compiler), so the only correct repair is restoring lift-preservation.
 
 ## Checking
 
