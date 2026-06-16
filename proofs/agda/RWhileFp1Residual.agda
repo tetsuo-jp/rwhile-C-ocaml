@@ -73,3 +73,47 @@ residual s = rep3 (rep2 (rep1 s))
 
 fp1-swap-correct : ∀ a b → output (residual (input (cons a b))) ≡ cons swap (cons b a)
 fp1-swap-correct a b = refl
+
+------------------------------------------------------------------------
+-- ri_min `id` residual:  V0 <= V2;  V0 ^= nil;  V2 <= cons 'id V0
+-- (the `^= nil` is XOR with nil = identity, so it is modelled as a no-op).
+
+idT : V
+idT = at 2
+
+res-id : St → St
+res-id s = let s1 = rep1 s in              -- V0 := input, V2 := nil
+           st nilV (cons idT (V0 s1)) (V3 s1) (V4 s1)   -- V2 <= cons 'id V0
+
+fp1-id-correct : ∀ d → output (res-id (input d)) ≡ cons idT d
+fp1-id-correct d = refl
+
+------------------------------------------------------------------------
+-- ri_seq single-swap residuals (net), parameterised by the op-list tag `prog`:
+--   V0 <= V2;  (^= nil)*;  cons V4 V3 <= V0;  (^= nil)*;  V2 <= cons prog (cons V3 V4)
+-- (the `^= nil` ops are identities; variable renaming vs ri_min is irrelevant.)
+
+split-build : V → St → St
+split-build prog s with V0 s
+... | cons a b = st nilV (cons prog (cons b a)) nilV nilV
+... | at _     = s
+
+res-seq-swap : V → St → St
+res-seq-swap prog s = split-build prog (rep1 s)
+
+fp1-seq-swap-correct : ∀ prog a b →
+  output (res-seq-swap prog (input (cons a b))) ≡ cons prog (cons b a)
+fp1-seq-swap-correct prog a b = refl
+
+-- concrete op-list tags ([swap] and [id,swap], both net to one data swap)
+seq-swap-tag   : V
+seq-swap-tag   = cons swap nilV                  -- [swap]
+seq-idswap-tag : V
+seq-idswap-tag = cons idT (cons swap nilV)        -- [id,swap]
+
+fp1-ri_seq-swap   : ∀ a b →
+  output (res-seq-swap seq-swap-tag   (input (cons a b))) ≡ cons seq-swap-tag   (cons b a)
+fp1-ri_seq-swap   a b = refl
+fp1-ri_seq-idswap : ∀ a b →
+  output (res-seq-swap seq-idswap-tag (input (cons a b))) ≡ cons seq-idswap-tag (cons b a)
+fp1-ri_seq-idswap a b = refl
