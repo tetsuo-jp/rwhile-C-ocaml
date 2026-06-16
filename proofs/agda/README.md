@@ -95,12 +95,20 @@ done by the accumulator induction `rev-rest`.
   `RWhileCoreExp` (exp/pat), the whole surface→core translation is now proved
   semantics-preserving — completing the "small verified core + meaning-
   preserving translation" methodology.
+- `RWhileMacroSubst.agda` — towards `expMacProgram` correctness (R-WHILE-M →
+  R-WHILE). Macros expand by INLINING: a call is replaced by the body with the
+  formal parameters RENAMED to the actual variables. Proves the SUBSTITUTION
+  LEMMA for expressions, `subst-exp : evalC σ (ren ρ e) ≡ evalC (σ ∘ ρ) e` —
+  renaming a term equals renaming the store — for ANY `ρ` (expressions only
+  READ, so inlining their expressions is unconditionally sound). The command/
+  write side needs `ρ` injective on live variables = R-WHILE's hygiene
+  condition (`-hygienic-macros`); that is the remaining step.
 
 ## Checking
 
 ```
 cd proofs/agda
-for f in RWhileRev RWhileRevFull RWhileValStore RWhileCRep RWhileCRepDet RWhileDet RWhileDetConcrete RWhileExec RWhileExecConcrete RWhileIL RWhileFutamura RWhileFutamura2 RWhileFutamura2Inst RWhileRevFutamura RWhileRevProjPaper RWhileRevProjInst RWhileRevProjGen RWhileCoreExp RWhileFp1Residual RWhileElabCom; do
+for f in RWhileRev RWhileRevFull RWhileValStore RWhileCRep RWhileCRepDet RWhileDet RWhileDetConcrete RWhileExec RWhileExecConcrete RWhileIL RWhileFutamura RWhileFutamura2 RWhileFutamura2Inst RWhileRevFutamura RWhileRevProjPaper RWhileRevProjInst RWhileRevProjGen RWhileCoreExp RWhileFp1Residual RWhileElabCom RWhileMacroSubst; do
   agda --safe $f.agda
 done
 ```
