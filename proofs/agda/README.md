@@ -87,12 +87,20 @@ done by the accumulator induction `rev-rest`.
   (`readC σ (normP p) ≡ readS σ p`) for patterns — desugaring list sugar to
   cons-chains keeps meaning. Certifies what the `core-ir` differential tests
   check empirically.
+- `RWhileElabCom.agda` — command-level translation correctness (the CONTROL
+  layer of R-WHILE → R-CORE): models source commands with OPTIONAL branches
+  (omitted branch = skip), elaborates them to the core (empty branch → `atom
+  Id`), and proves the elaboration preserves the big-step semantics both ways
+  (`elab-sound`/`elab-complete`) for atom / seq / cond / loop. Together with
+  `RWhileCoreExp` (exp/pat), the whole surface→core translation is now proved
+  semantics-preserving — completing the "small verified core + meaning-
+  preserving translation" methodology.
 
 ## Checking
 
 ```
 cd proofs/agda
-for f in RWhileRev RWhileRevFull RWhileValStore RWhileCRep RWhileCRepDet RWhileDet RWhileDetConcrete RWhileExec RWhileExecConcrete RWhileIL RWhileFutamura RWhileFutamura2 RWhileFutamura2Inst RWhileRevFutamura RWhileRevProjPaper RWhileRevProjInst RWhileRevProjGen RWhileCoreExp RWhileFp1Residual; do
+for f in RWhileRev RWhileRevFull RWhileValStore RWhileCRep RWhileCRepDet RWhileDet RWhileDetConcrete RWhileExec RWhileExecConcrete RWhileIL RWhileFutamura RWhileFutamura2 RWhileFutamura2Inst RWhileRevFutamura RWhileRevProjPaper RWhileRevProjInst RWhileRevProjGen RWhileCoreExp RWhileFp1Residual RWhileElabCom; do
   agda --safe $f.agda
 done
 ```
