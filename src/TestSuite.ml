@@ -1521,6 +1521,28 @@ let test_fp1_min_exhaustive () =
          (pair (atom "'swap") (pair b a)) (run_via_ri comp_swap d)
     | _ -> ()) small_vals
 
+(* fp1 for ri_seq, exhaustive over many op-lists x many cons inputs: the
+ * residual must reversibly simulate running the whole op-sequence. *)
+let test_fp1_seq_exhaustive () =
+  let spec_av = parse_file_program (examples_dir ^ "/spec_av.rwhile") in
+  let ri_seq  = Program2DataRwhile.program2data
+                  (parse_file_program (examples_dir ^ "/ri_seq.rwhile")) in
+  let oplist_data ops = List.fold_right (fun op acc -> pair (atom ("'" ^ op)) acc) ops VNil in
+  let apply_op v = function
+    | "swap" -> (match v with VCons (a, b) -> VCons (b, a) | _ -> v)
+    | _      -> v in
+  let apply_ops ops v = List.fold_left apply_op v ops in
+  let oplists = [ []; ["id"]; ["swap"]; ["id";"swap"]; ["swap";"id"];
+                  ["swap";"swap"]; ["id";"id"]; ["swap";"swap";"swap"] ] in
+  let cons_inputs = List.map parse_val
+    [ "('a . 'b)"; "(('a . 'b) . 'c)"; "('a . ('b . 'c))"; "(('a . 'b) . ('c . 'd))" ] in
+  List.iter (fun ops ->
+    let prog = oplist_data ops in
+    let comp = EvalRwhile.evalProgram spec_av (pair ri_seq prog) in
+    List.iter (fun d ->
+      Alcotest.(check valT_testable) "fp1 ri_seq (exhaustive)"
+        (pair prog (apply_ops ops d)) (run_via_ri comp d)) cons_inputs) oplists
+
 (* PAT-WRITE-ITER unit test: the worklist write handles a NESTED (depth-2) cons
  * pattern that PAT-WRITE-STRUCT drops.  `cons (cons V1e V2e) St <= var0` with
  * var0 = ('C.((D var0).(S nil))) must split the dynamic top into V1e,V2e
@@ -1978,6 +2000,7 @@ let () =
       Alcotest.test_case "fp1 GREEN seq: [[spec_av]((ri_seq.[id,swap]))](('a.'b))=([id,swap].('b.'a))" `Quick test_fp1_seq_idswap;
       Alcotest.test_case "fp1 GREEN seq: [[spec_av]((ri_seq.[swap,swap]))](('a.'b))=([swap,swap].('a.'b))" `Quick test_fp1_seq_swapswap;
       Alcotest.test_case "fp1 ri_min correct on ALL small inputs (exhaustive)" `Slow test_fp1_min_exhaustive;
+      Alcotest.test_case "fp1 ri_seq correct on many op-lists x inputs (exhaustive)" `Slow test_fp1_seq_exhaustive;
     ];
     "spec-av-exp", [
       Alcotest.test_case "var static" `Quick test_se_av_var_static;
