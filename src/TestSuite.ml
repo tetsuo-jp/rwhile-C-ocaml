@@ -1497,6 +1497,30 @@ let test_fp1_min_id () =
     "[[spec_av]((ri_min.'id))]('q) = ('id.'q)"
     (parse_val "('id . 'q)") (fp1_min "'id" (atom "'q"))
 
+(* Strengthen fp1 correctness from a few hand-picked inputs to EXHAUSTIVE over a
+ * set of small input shapes: the residual must reversibly simulate the source
+ * (snd = result, fst = src) on every input.  comp is computed ONCE per source. *)
+let small_vals = List.map parse_val
+  [ "nil"; "'a"; "('a . 'b)"; "(nil . nil)"; "('a . ('b . 'c))";
+    "(('a . 'b) . 'c)"; "(('a . 'b) . ('c . 'd))"; "('x . ('y . ('z . nil)))" ]
+
+let test_fp1_min_exhaustive () =
+  let spec_av = parse_file_program (examples_dir ^ "/spec_av.rwhile") in
+  let ri_min  = Program2DataRwhile.program2data
+                  (parse_file_program (examples_dir ^ "/ri_min.rwhile")) in
+  let comp op = EvalRwhile.evalProgram spec_av (pair ri_min (parse_val op)) in
+  let comp_id = comp "'id" and comp_swap = comp "'swap" in
+  (* id: [comp_id](d) = (id . d) for EVERY input d *)
+  List.iter (fun d ->
+    Alcotest.(check valT_testable) "fp1 ri_min id (exhaustive)"
+      (pair (atom "'id") d) (run_via_ri comp_id d)) small_vals;
+  (* swap: [comp_swap]((a.b)) = (swap . (b.a)) for every cons input *)
+  List.iter (fun d -> match d with
+    | VCons (a, b) ->
+       Alcotest.(check valT_testable) "fp1 ri_min swap (exhaustive)"
+         (pair (atom "'swap") (pair b a)) (run_via_ri comp_swap d)
+    | _ -> ()) small_vals
+
 (* PAT-WRITE-ITER unit test: the worklist write handles a NESTED (depth-2) cons
  * pattern that PAT-WRITE-STRUCT drops.  `cons (cons V1e V2e) St <= var0` with
  * var0 = ('C.((D var0).(S nil))) must split the dynamic top into V1e,V2e
@@ -1953,6 +1977,7 @@ let () =
       Alcotest.test_case "fp1 GREEN seq: [[spec_av]((ri_seq.[]))](('a.'b))" `Quick test_fp1_seq_empty;
       Alcotest.test_case "fp1 GREEN seq: [[spec_av]((ri_seq.[id,swap]))](('a.'b))=([id,swap].('b.'a))" `Quick test_fp1_seq_idswap;
       Alcotest.test_case "fp1 GREEN seq: [[spec_av]((ri_seq.[swap,swap]))](('a.'b))=([swap,swap].('a.'b))" `Quick test_fp1_seq_swapswap;
+      Alcotest.test_case "fp1 ri_min correct on ALL small inputs (exhaustive)" `Slow test_fp1_min_exhaustive;
     ];
     "spec-av-exp", [
       Alcotest.test_case "var static" `Quick test_se_av_var_static;
