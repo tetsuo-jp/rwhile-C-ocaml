@@ -1189,6 +1189,35 @@ let test_av_lift_nested () =
   check_av "lift nested partial-static"
     "('lift . ('C . (('S . 'a) . ('C . (('S . 'b) . ('D . ('var . nil)))))))"
     "('cons . (('val . 'a) . ('cons . (('val . 'b) . ('var . nil)))))"
+(* AV-LIFT must PRESERVE its input AV (the comment in spec_av.rwhile promises
+   "AsAV preserved").  ASSEMBLE-FP1 relies on this: it does
+     LOOKUP(Vl,J',AsAV); AV-LIFT(AsAV,AsCode); LOOKUP(Vl,J',AsAV)
+   where the second LOOKUP only clears AsAV (XOR same value -> nil) if AV-LIFT
+   left AsAV exactly as the first LOOKUP set it.  Drift here is the root cause of
+   the fp2 '10 (the OUTER specializer's abstract slot for AsAV ends up holding
+   AV-LIFT internals (LfTag.LfPay) instead of the original slot value; see
+   plan_fp1_stage_c.md 6.3.2).  This guards the concrete preservation property
+   the fix must keep. *)
+let check_av_lift_preserves name av_str =
+  let prog = parse_macro_harness (examples_dir ^ "/spec_av.rwhile")
+    "read A; AV-LIFT(A, Code); Out <= cons A Code; write Out" in
+  let av = parse_val av_str in
+  let result = EvalRwhile.evalProgram prog av in
+  (* result = (A_after . Code); A_after must equal the input AV *)
+  let a_after = match result with VCons (a, _) -> a | _ -> result in
+  Alcotest.(check valT_testable) name av a_after
+
+let test_av_lift_preserves_static () =
+  check_av_lift_preserves "lift preserves static input" "('S . 'a)"
+let test_av_lift_preserves_dynamic () =
+  check_av_lift_preserves "lift preserves dynamic input" "('D . ('var . nil))"
+let test_av_lift_preserves_partial () =
+  check_av_lift_preserves "lift preserves partial-static input"
+    "('C . (('S . 'a) . ('D . ('var . nil))))"
+let test_av_lift_preserves_nested () =
+  check_av_lift_preserves "lift preserves nested partial-static input"
+    "('C . (('S . 'a) . ('C . (('S . 'b) . ('D . ('var . nil))))))"
+
 let test_av_eq_static_true () =
   check_av "eq static equal -> static true"
     "('eq . (('S . 'a) . ('S . 'a)))" "('S . (nil . nil))"
@@ -2026,6 +2055,10 @@ let () =
       Alcotest.test_case "lift dynamic" `Quick test_av_lift_dynamic;
       Alcotest.test_case "lift partial-static" `Quick test_av_lift_partial;
       Alcotest.test_case "lift nested" `Quick test_av_lift_nested;
+      Alcotest.test_case "lift preserves static input" `Quick test_av_lift_preserves_static;
+      Alcotest.test_case "lift preserves dynamic input" `Quick test_av_lift_preserves_dynamic;
+      Alcotest.test_case "lift preserves partial input" `Quick test_av_lift_preserves_partial;
+      Alcotest.test_case "lift preserves nested input" `Quick test_av_lift_preserves_nested;
       Alcotest.test_case "eq static true" `Quick test_av_eq_static_true;
       Alcotest.test_case "eq static false" `Quick test_av_eq_static_false;
       Alcotest.test_case "eq mixed dynamic" `Quick test_av_eq_mixed_dynamic;
