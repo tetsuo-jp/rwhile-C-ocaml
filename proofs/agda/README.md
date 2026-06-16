@@ -107,12 +107,23 @@ done by the accumulator induction `rev-rest`.
   rename (merging two variables) breaks the commutation, i.e. variable capture
   really does change meaning. So expMacProgram is sound iff expansion is
   hygienic, now a theorem rather than a caveat.
+- `RWhileRevProj2Lift.agda` — C-layer hint for the B-layer 2nd reversible
+  projection (compiler generation by self-application). Models the reversible
+  XOR-assign of the real specialiser (spec_av's `'10` check: set / clear /
+  rupdate-different) and the `lift`-then-clear idiom that closes the residual
+  (`ASSEMBLE-FP1`). Proves the idiom round-trips IFF `lift` preserves its
+  operand (`idiom-ok` / `idiom-drift`), reproduces the actual fp2 `'10` with the
+  observed drift (`bug-reproduces-'10` — scratch left as the lift machinery's
+  own `(LfTag.LfPay)`), and states the repair as a theorem (`fix-roundtrips`).
+  So: making AV-LIFT preserve its operand's abstract slot is necessary AND
+  sufficient — the precise fix the production specialiser needs (see
+  `../../plan_fp1_stage_c.md` 6.3.2).
 
 ## Checking
 
 ```
 cd proofs/agda
-for f in RWhileRev RWhileRevFull RWhileValStore RWhileCRep RWhileCRepDet RWhileDet RWhileDetConcrete RWhileExec RWhileExecConcrete RWhileIL RWhileFutamura RWhileFutamura2 RWhileFutamura2Inst RWhileRevFutamura RWhileRevProjPaper RWhileRevProjInst RWhileRevProjGen RWhileCoreExp RWhileFp1Residual RWhileElabCom RWhileMacroSubst; do
+for f in RWhileRev RWhileRevFull RWhileValStore RWhileCRep RWhileCRepDet RWhileDet RWhileDetConcrete RWhileExec RWhileExecConcrete RWhileIL RWhileFutamura RWhileFutamura2 RWhileFutamura2Inst RWhileRevFutamura RWhileRevProjPaper RWhileRevProjInst RWhileRevProjGen RWhileCoreExp RWhileFp1Residual RWhileElabCom RWhileMacroSubst RWhileRevProj2Lift; do
   agda --safe $f.agda
 done
 ```
