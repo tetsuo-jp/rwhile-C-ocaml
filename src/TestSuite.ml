@@ -1488,6 +1488,26 @@ let test_fp1_ri_fp3_known_bug () =
     "KNOWN BUG: swap and splitjoin residual bodies identical (structural ops lost)"
     (fp1_ri_fp3_body "sx_splitjoin") (fp1_ri_fp3_body "swap")
 
+(* KNOWN BUG / fp2 root cause, FAST repro (sub-second; cf. real fp2 ~4 min).
+ * spec_av residualizes a conditional with a DYNAMIC test (the DYNAMICIZE-ALL
+ * path) UNSOUNDLY: examples/fp_dyncond_bug.rwhile is a valid reversible program
+ * ([prog]((nil.d)) = 'one), and comp = [spec_av]((prog.('S.nil))) is produced
+ * fine, but running [comp](d) raises "error in update" (a non-reversible
+ * residual `^=`) instead of returning 'one.  This is the general form of the
+ * 2nd-projection var=Elem failure (under self-application spec_av's own
+ * conditionals become dynamic and hit this path).  When dynamic-cond
+ * residualization is fixed this test SHOULD fail; replace it with an assertion
+ * that [comp](d) = 'one.  See HANDOFF_fp2.md and the example header. *)
+let test_fp1_dyncond_known_bug () =
+  let spec_av = parse_file_program (examples_dir ^ "/spec_av.rwhile") in
+  let prog = Program2DataRwhile.program2data
+    (parse_file_program (examples_dir ^ "/fp_dyncond_bug.rwhile")) in
+  let comp = EvalRwhile.evalProgram spec_av (spec_in prog VNil) in
+  Alcotest.check_raises
+    "KNOWN BUG: dynamic-cond residual is non-reversible (error in update)"
+    (Failure "error in update")
+    (fun () -> ignore (run_via_ri comp (atom "'q")))
+
 (* ===== First Futamura projection, GREEN via the minimal self-interpreter =====
  * ri_min interprets a tiny one-op language (Op = 'swap | else 'id) using only
  * depth-1 cons patterns and a single static dispatch (no loops, no nested
@@ -2040,6 +2060,7 @@ let () =
       Alcotest.test_case "ri_fp3 reversible-clear self-interp: id" `Quick test_ri_fp3_selfinterp_id;
       Alcotest.test_case "ri_fp3 reversible-clear self-interp: swap" `Quick test_ri_fp3_selfinterp_swap;
       Alcotest.test_case "fp1-via-ri_fp3 KNOWN BUG: structural ops lost" `Quick test_fp1_ri_fp3_known_bug;
+      Alcotest.test_case "dynamic-cond residual KNOWN BUG (fp2 root cause, fast repro)" `Quick test_fp1_dyncond_known_bug;
       Alcotest.test_case "fp1-via-ri_fp3 KNOWN BUG: STEP leaves opaque Result" `Quick test_fp1_step_bug_opaque_result;
       Alcotest.test_case "PAT-WRITE-STRUCT nested split (KNOWN BUG)" `Quick test_pat_write_nested_split;
       Alcotest.test_case "PAT-WRITE-ITER handles nested split" `Quick test_pat_write_iter_nested;
