@@ -47,8 +47,14 @@
 - **道具**：`make d2p`＋`Program2DataRwhile.data2program` で残余を直接評価（判定は run_via_ri でなく
   これを使う）。
 
-**次タスク**：(1) ri.rwhile bug2 修正＝EVAL-EXP の変数読み保存値逆転。(2) spec_av fp2 残余化未完
-(vars not nil) を direct eval で再現→修正（self-app 本体）。
+**bug2 本質(2026-06-17(7))**：`X^=X` は**非可逆**(forward v→nil、逆も nil→nil)。rupdate は第2引数のみ
+involutive。⇒ 可逆自己解釈器 ri.rwhile は原理的に `X^=X` を逆クリアできず、局所パッチ不可。検証：
+遅延クリア `C^=A; A^=C`(SC3)は ri で通る／自己クリア `A^=A`(SC1)は落ちる。ri_min 残余が通るのは
+自己クリアを含まない(CRep move)から。修正筋：(a) spec_av を遅延クリア化(大規模・原理的)、
+(b) ri を前方のみ忠実化(可逆性犠牲・ハック、不採用)、(c) **判定を direct eval(d2p) に**(採用済)。
+
+**次タスク**：(1) spec_av fp2 残余化未完 (vars not nil) を **direct eval(d2p/data2program)** で再現→修正
+（self-app 本体。run_via_ri は bug2 のため判定に使わない）。(2) 任意で spec_av の遅延クリア化。
 
 ---
 
