@@ -35,7 +35,25 @@
   区分の導入）＝大規模研究。⇒ 現実解は研究方針どおり R-CORE で小 self-applicable specializer を
   作り意味保存翻訳で橋渡し（option 2）。memory: `second-futamura-projection-status` 更新済。
 
-## 0d. 2026-06-17(4) 高速最小再現を確立（最新・最重要・ここから直せる）
+## 0e. 2026-06-17(5) 重大訂正：var=Elem は主に ri.rwhile のバグ（最新・最重要）
+
+`data2program`(Program2DataRwhile)＋`d2p`(`make d2p`)で残余 comp を**直接評価**できる。判明：
+- **`fp_dyncond_bug.rwhile` の comp は正しい**：`[comp](d)` 直接評価＝'one/'two。失敗は
+  **run_via_ri 経由のときだけ＝ri.rwhile の 'cond バグ**。ri.rwhile は入口テスト値 W を出口表明値 V で
+  `Arg ^= V`(ri.rwhile ~L187) クリア → **W==V ビット一致**を要求。R-WHILE は**真偽一致**のみ要求。
+  compare.rwhile が通るのは test/assertion が同一述語(W==V)だから。入口≠出口で値が異なる残余
+  (`if v0 ... fi (=? v3 'one)`)は ri.rwhile で落ちる。
+- **⇒ run_via_ri（fp2 成功判定）は信頼不可。判定は direct eval(data2program) で行うこと。**
+- **本当の spec_av fp2 バグは別**：fp2 comp を直接評価すると `Some variables are not nil`
+  （v3/v7 に B 相当断片＝アセンブル/クリア未完）。これが残余化の真の未達。
+- テスト `test_fp1_dyncond_known_bug` は comp 直接評価=正答＋run_via_ri=raise の両方を固定(6f8a534)。
+
+**次の2タスク（独立）**：(1) ri.rwhile 'cond を真偽比較に修正→run_via_ri 信頼化。
+(2) spec_av fp2 残余化未完(vars not nil)を direct eval で再現→修正（self-app 本体）。
+
+---
+
+## 0d. 2026-06-17(4) 高速最小再現を確立（ただし上記 0e で再解釈）
 
 - **`examples/fp_dyncond_bug.rwhile`**（コミット f61fdab）＝正当な可逆プログラム
   (`[prog]((nil.d))='one`)。`comp=[spec_av]((prog.('S.nil)))` 生成成功・`[comp](d)` が
