@@ -1,8 +1,22 @@
-# 引継ぎ: 第2可逆射影 (fp2) を本番 spec_av で通す（専用セッション向け）
+# 引継ぎ: 第2可逆射影 (fp2) — ★達成済（2026-06-17）★
 
-最終更新 2026-06-17。前セッションで **症状→真因→修正仕様→構成的実現→移植計画** を全て Agda で
-確定。本番 spec_av は**無変更**（全グリーン 162 OK）。このセッションの目的は **本番 spec_av の
-二段階化（BTA）** を実装し fp2 を正しく通すこと。
+## ☆結論: fp2 は GREEN☆（コミット 3cdfb1d）
+`comp = [spec_av]((spec_av . ('S . ri_min)))`（3.3MB）。**d2p 直接評価**で
+`[comp](('S.'swap)) == B(436B, byte一致)`、`[comp](('S.'id)) == B_id`、end-to-end も正答。
+**決め手＝`PAT-READ-ITER`**（深さ一般の読みパターン残余化。`PAT-READ-AV` は深さ1でネスト cons を静的
+リテラル化していた＝`ASSEMBLE-FP1` のネスト出力パターンで露呈）。fp1 不変・hygiene-clean。
+
+**判定は必ず `d2p`/`data2program` 直接評価**（`run_via_ri` は ri.rwhile bug2＝自己クリア `X^=X` 非可逆
+のため残余の判定に使えない）。`make d2p`、`./d2p comp.val [data.val]`。
+
+**再現**（4分）: `./ri -p2d examples/spec_av.rwhile >/tmp/inner.val`；outer=spec_av の FpN を 300 に；
+`fp2.val=(inner . ('S . rimin))`；`./ri outer.rwhile fp2.val >comp`；`./d2p comp <(echo "('S.'swap)")`。
+
+**残**: (任意) fp2 を自動テスト化（N=300、~4分・slow）。**fp3**=`[spec_av]((spec_av.spec_av))` 未検証。
+高速回帰 `test_fp1_nested_read`（depth-general read）が修正を固定。
+
+---
+（以下は到達までの調査履歴。最新が上）
 
 ---
 
