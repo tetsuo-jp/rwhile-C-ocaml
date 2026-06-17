@@ -35,7 +35,24 @@
   区分の導入）＝大規模研究。⇒ 現実解は研究方針どおり R-CORE で小 self-applicable specializer を
   作り意味保存翻訳で橋渡し（option 2）。memory: `second-futamura-projection-status` 更新済。
 
-## 0c. 2026-06-17(3) var=Elem 局所診断 ＝ '10 と同一真因（最新）
+## 0d. 2026-06-17(4) 高速最小再現を確立（最新・最重要・ここから直せる）
+
+- **`examples/fp_dyncond_bug.rwhile`**（コミット f61fdab）＝正当な可逆プログラム
+  (`[prog]((nil.d))='one`)。`comp=[spec_av]((prog.('S.nil)))` 生成成功・`[comp](d)` が
+  `error in update` で落ちる＝**fp2 var=Elem を fp1 規模・1秒未満で再現**。テスト
+  `test_fp1_dyncond_known_bug`(assemble-fp1 群、緑 characterization。修正後は `[comp](d)='one` に反転)。
+- **真因の一般化**：条件なし／**静的テスト**条件は正しく特殊化される。**動的入力をテストする条件**だけが
+  発症（SPEC-STEP-AV 'cond, L922- の **DYNAMICIZE-ALL + 残余 cond が可逆性を壊す**）。ri_min/ri_seq の
+  fp1 が通るのは条件が静的 op を分岐するから。fp2 の var=Elem はその一般形（自己適用で spec_av 自身の
+  条件 MKAV 等が動的化）。
+- **次の作業**：MKAV/index 固有ではなく **spec_av の動的テスト条件残余化** を可逆に直す。手順：
+  `./ri -p2d examples/fp_dyncond_bug.rwhile >/tmp/p.val; printf '('; cat /tmp/p.val; printf " . ('S . nil))"`
+  を spec_av に渡して comp 生成→ ri.rwhile で `[comp]('q)` 実行が `'one` になるまで DYNAMICIZE-ALL／
+  'cond 残余化を修正。緑判定＝`test_fp1_dyncond_known_bug` を正答主張に反転して通す。
+
+---
+
+## 0c. 2026-06-17(3) var=Elem 局所診断 ＝ '10 と同一真因
 
 - **op 非依存**：`[comp](('S.'id))` も `'swap` と**同一エラー・同一 index(cur=2,new=1)**。基準
   `B_id=[spec_av]((ri_min.('S.'id)))`=268B は健全。⇒ var=Elem は comp の**共有プロローグ**
