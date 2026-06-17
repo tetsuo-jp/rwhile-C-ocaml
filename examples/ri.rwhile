@@ -43,6 +43,17 @@ macro AUX(Vl,J,Elem,Rest,Rev,Cnt)
   until (=? Cnt J);
   cons Elem Rest <= Vl
 
+(* CANON(V, B): set B (nil on entry) to the CANONICAL boolean of V's truthiness
+ * ((nil.nil) if V is non-nil, else nil), leaving V unchanged.  Involutive: a
+ * second CANON(V,B) restores B to nil.  Used by the conditional so the saved
+ * entry-test value is cleared against the exit-assertion value by TRUTHINESS,
+ * not bit-equality -- R-WHILE conditionals only require matching truthiness,
+ * so e.g. test `X`=('a) and assertion `=? Z 'one`=(nil.nil) must agree. *)
+macro CANON(V, B)
+  CanT ^= =? V nil;
+  B ^= =? CanT nil;
+  CanT ^= =? V nil
+
 macro EVAL-EXP-STEP(Cd,Cd',St,H)
 cons (cons ETag EArg) Cd <= Cd;
 if =? ETag 'var then
@@ -171,7 +182,7 @@ else
      Tag ^= 'cond; Tag ^= 'condB;
      cons E (cons C (cons D (cons F nil))) <= Arg;
      EVAL-EXP(E,V,H);         (* Set the value of E to V, the garbage values to H *)
-     W ^= V;
+     CANON(V,W);              (* W := canonical truthiness of the test (not raw V) *)
      INV-EVAL-EXP(E,V,H);     (* Clear V and H *)
      if W then Cd1 ^= C else Cd1 ^= D fi W;
      Arg <= cons E (cons C (cons D (cons F nil)));
@@ -184,7 +195,9 @@ else
       C' <= cons E (cons C (cons D (cons F nil)));
       cons E (cons C (cons D (cons F nil))) <= C';
       EVAL-EXP(F,V,H);     (* Set the value of F to V, the garbage values to H *)
-      Arg ^= V;               (* Clear Arg *)
+      CANON(V,Wc);            (* Wc := canonical truthiness of the exit assertion *)
+      Arg ^= Wc;              (* Clear Arg (= canon entry test) by truthiness match *)
+      CANON(V,Wc);            (* uncompute Wc (involution) *)
       INV-EVAL-EXP(F,V,H); (* Clear V and H *)
       Arg <= cons E (cons C (cons D (cons F nil)))
      else

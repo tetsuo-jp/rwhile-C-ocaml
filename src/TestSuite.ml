@@ -1497,16 +1497,23 @@ let run_comp_direct comp d =
 (* CORRECTED DIAGNOSIS (was mislabelled "spec_av dynamic-cond residualization").
  * For examples/fp_dyncond_bug.rwhile, spec_av's residual comp is actually
  * CORRECT: comp = [spec_av]((prog.('S.nil))) and [comp](d) evaluated DIRECTLY
- * gives 'one (resp. 'two).  The failure only appears through run_via_ri:
- * ri.rwhile mis-interprets a conditional whose entry-test value differs from
- * its exit-assertion value.  ri.rwhile's 'cond saves the entry-test value W and
- * later clears it with the exit-assertion value V via `Arg ^= V` (ri.rwhile
- * ~L187), which requires W == V BIT-FOR-BIT; R-WHILE only requires equal
- * TRUTHINESS.  compare.rwhile etc. work only because they reuse the same
- * predicate for test and assertion.  Hence run_via_ri (the fp2 success
- * criterion) is unreliable; direct decode+eval (run_comp_direct) is reliable.
- * This test pins BOTH facts; flip the check_raises to a value check once
- * ri.rwhile's 'cond is fixed.  See HANDOFF_fp2.md and the example header. *)
+ * gives 'one (resp. 'two).  The failure only appears through run_via_ri: the
+ * ri.rwhile self-interpreter is unfaithful here.  Two distinct ri.rwhile bugs
+ * were found:
+ *   BUG 1 (FIXED): 'cond cleared the saved entry-test value W against the
+ *     exit-assertion value V by bit-equality (`Arg ^= V`), but R-WHILE only
+ *     requires equal TRUTHINESS.  Fixed via the CANON macro in ri.rwhile.
+ *   BUG 2 (OPEN, dominant): the reversible self-clear `X ^= X` (and any
+ *     `X ^= E` whose E reads X) is mis-interpreted.  'ass does
+ *     EVAL-EXP(E); DUPDATE(K); INV-EVAL-EXP(E); the DUPDATE changes what E
+ *     reads, so INV-EVAL-EXP (which re-reads the store) cannot clear its temp
+ *     -> "error in update".  Minimal repros: `A ^= A`, `Y ^= 'k; Y ^= Y`.
+ *     fp_dyncond_bug.rwhile uses `D ^= D`, so run_via_ri still raises.  Fixing
+ *     it needs EVAL-EXP to reverse store-reads via saved values, not re-reads.
+ * So run_via_ri (the fp2 success criterion) is unreliable; direct decode+eval
+ * (run_comp_direct) is reliable.  This test pins BOTH facts (comp correct
+ * directly; raises via run_via_ri).  Flip the check_raises to a value check
+ * once BUG 2 is fixed.  See HANDOFF_fp2.md and the example header. *)
 let test_fp1_dyncond_known_bug () =
   let spec_av = parse_file_program (examples_dir ^ "/spec_av.rwhile") in
   let prog = Program2DataRwhile.program2data
@@ -1517,9 +1524,10 @@ let test_fp1_dyncond_known_bug () =
     (atom "'one") (run_comp_direct comp (atom "'q"));
   Alcotest.(check valT_testable) "dyn-cond comp correct directly: [comp](nil)='two"
     (atom "'two") (run_comp_direct comp VNil);
-  (* (2) KNOWN BUG: the SAME correct comp fails through ri.rwhile (run_via_ri) *)
+  (* (2) KNOWN BUG 2 (self-clear `X ^= X`): the SAME correct comp still fails
+   *     through ri.rwhile (run_via_ri) -- the residual uses `D ^= D` *)
   Alcotest.check_raises
-    "KNOWN BUG (ri.rwhile 'cond): correct comp fails via run_via_ri"
+    "KNOWN BUG (ri.rwhile self-clear X^=X): correct comp fails via run_via_ri"
     (Failure "error in update")
     (fun () -> ignore (run_via_ri comp (atom "'q")))
 
