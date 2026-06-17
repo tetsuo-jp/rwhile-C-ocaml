@@ -12,8 +12,17 @@
 **再現**（4分）: `./ri -p2d examples/spec_av.rwhile >/tmp/inner.val`；outer=spec_av の FpN を 300 に；
 `fp2.val=(inner . ('S . rimin))`；`./ri outer.rwhile fp2.val >comp`；`./d2p comp <(echo "('S.'swap)")`。
 
-**残**: (任意) fp2 を自動テスト化（N=300、~4分・slow）。**fp3**=`[spec_av]((spec_av.spec_av))` 未検証。
-高速回帰 `test_fp1_nested_read`（depth-general read）が修正を固定。
+**fp2 自動テスト済**: `second-projection` 群 `test_fp2_second_projection`（N 自動採寸 ~13s, `Slow）。
+高速回帰 `test_fp1_nested_read`（depth-general read）も修正を固定。
+
+## fp3 (cogen) 挑戦結果(2026-06-18)＝生成成功も未完。次は WRITE 側
+`comp3=[spec_av]((spec_av.('S.spec_av)))` は生成成功(6.6MB)だが `[comp3](('S.ri_min))`(d2p) が
+`Cannot match cons pattern cons 10 1 against non-cons value nil` で落ちる＝cogen が壊れたコンパイラ。
+真因＝**WRITE 側ネスト書きパターン**（read 側 PAT-READ-ITER と対称、PAT-WRITE-STRUCT が深さ1）。
+高速再現 `/tmp/mw.rwhile`（`cons (cons A B) C <= ...`）。`PAT-WRITE-ITER`（既存・深さ一般）を 'rep に
+naive 配線すると mw は通るが fp1 退行（PAT-WRITE-STRUCT の swap-via-temp 転置検出/no-alias REHOME を
+欠く, L664-698）。**fp3 の筋**：PAT-WRITE-ITER に転置→SWAP-VIA-TEMP 検出を取り込んで配線（read 側と
+同様の作業）。判定 d2p：`[comp3](('S.ri_min)) == comp2`(byte一致) で成立。
 
 ---
 （以下は到達までの調査履歴。最新が上）
