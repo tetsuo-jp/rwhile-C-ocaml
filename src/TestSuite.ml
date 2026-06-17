@@ -1551,33 +1551,25 @@ let test_fp1_nested_read () =
   Alcotest.(check valT_testable) "nested-read comp correct (via ri.rwhile)"
     expected (run_via_ri comp (parse_val "('y . 'z)"))
 
-(* ===== Second reversible Futamura projection (fp2) — SLOW =====
- * comp = [spec_av]((spec_av . ('S . ri_min))) is a COMPILER: it maps each source
- * op to its fp1 residual.  Correctness: [comp](('S.op)) == B = [spec_av]((ri_min
- * . ('S.op))).  spec_av's AV store needs one slot per variable of the program
- * being specialized (= spec_av, ~230 vars), so we bump AV-INIT's N (the FpN
- * literal) to the actual variable count.  Judged by DIRECT eval (data2program):
- * run_via_ri is unfaithful on the self-clears the residual contains (ri.rwhile
- * cannot reverse-interpret X^=X; see test_fp1_dyncond_known_bug).  ~minutes. *)
-let nbump_spec_av n =
-  let rec lit k = if k = 0 then "nil" else "(nil." ^ lit (k-1) ^ ")" in
-  let rec replace_all s sub by =
-    match find_substring s sub with
-    | None -> s
-    | Some i ->
-       String.sub s 0 i ^ by
-       ^ replace_all (String.sub s (i + String.length sub)
-                        (String.length s - i - String.length sub)) sub by in
-  parse_program (replace_all (read_file (examples_dir ^ "/spec_av.rwhile")) (lit 50) (lit n))
-
+(* ===== Reversible Futamura projections 2 & 3 (fp2 = compiler, fp3 = cogen) =====
+ * fp2: comp2 = [spec_av]((spec_av . ('S . ri_min))) is a COMPILER mapping each
+ *      source op to its fp1 residual: [comp2](('S.op)) == B = [spec_av]((ri_min
+ *      . ('S.op))).
+ * fp3: comp3 = [spec_av]((spec_av . ('S . spec_av))) is a COGEN: [comp3](('S.p))
+ *      == [spec_av]((spec_av . ('S.p))).  In particular [comp3](('S.ri_min)) is
+ *      the ri_min compiler comp2, so [[comp3]('S.ri_min)](('S.op)) == B.
+ * spec_av's AV store (AV-INIT N = FpN) must cover the variable count of the
+ * program being specialized; for fp3 that program is spec_av itself (~223 vars),
+ * so FpN is set to 256 in the source (the temp-var index TmpT=250 is above the
+ * program vars too).  Judged by DIRECT eval (data2program): run_via_ri is
+ * unfaithful on the self-clears the residual contains (ri.rwhile cannot
+ * reverse-interpret X^=X; see test_fp1_dyncond_known_bug).  SLOW (~minutes). *)
 let test_fp2_second_projection () =
   let spec_av = parse_file_program (examples_dir ^ "/spec_av.rwhile") in
-  let nvars = List.length (EvalRwhile.varProgram (MacroRwhile.expMacProgram spec_av)) in
-  let outer = nbump_spec_av (nvars + 5) in
   let inner = Program2DataRwhile.program2data spec_av in
   let rimin = Program2DataRwhile.program2data
       (parse_file_program (examples_dir ^ "/ri_min.rwhile")) in
-  let comp = EvalRwhile.evalProgram outer (spec_in inner rimin) in
+  let comp = EvalRwhile.evalProgram spec_av (spec_in inner rimin) in
   (* [comp](('S.op)) must equal the fp1 residual B = [spec_av]((ri_min.('S.op))) *)
   let check_op op =
     let b = EvalRwhile.evalProgram spec_av (spec_in rimin (atom op)) in
@@ -1590,6 +1582,25 @@ let test_fp2_second_projection () =
   (* end-to-end: the compiled swap actually swaps, the compiled id is identity *)
   Alcotest.(check valT_testable) "fp2 end-to-end: [[comp]'swap](('a.'b)) = ('swap.('b.'a))"
     (parse_val "('swap . ('b . 'a))") (run_comp_direct comp_swap (parse_val "('a . 'b)"))
+
+(* fp3 (cogen): comp3 = [spec_av]((spec_av . ('S . spec_av))).  [comp3](('S.ri_min))
+ * is the ri_min compiler comp2, and [comp2](('S.op)) == B.  Verified end-to-end
+ * by DIRECT eval.  VERY SLOW (self-application of the full specialiser). *)
+let test_fp3_cogen () =
+  let spec_av = parse_file_program (examples_dir ^ "/spec_av.rwhile") in
+  let inner = Program2DataRwhile.program2data spec_av in
+  let rimin = Program2DataRwhile.program2data
+      (parse_file_program (examples_dir ^ "/ri_min.rwhile")) in
+  (* comp3 = cogen; comp2' = [comp3](('S.ri_min)) = the ri_min compiler *)
+  let comp3  = EvalRwhile.evalProgram spec_av (spec_in inner inner) in
+  let comp2' = run_comp_direct comp3 (VCons (atom "'S", rimin)) in
+  let check_op op =
+    let b = EvalRwhile.evalProgram spec_av (spec_in rimin (atom op)) in
+    Alcotest.(check valT_testable)
+      (Printf.sprintf "fp3: [[comp3]('S.ri_min)](('S.%s)) == fp1 residual B" op)
+      b (run_comp_direct comp2' (VCons (atom "'S", atom op))) in
+  check_op "'swap";
+  check_op "'id"
 
 (* ===== First Futamura projection, GREEN via the minimal self-interpreter =====
  * ri_min interprets a tiny one-op language (Op = 'swap | else 'id) using only
@@ -2164,6 +2175,7 @@ let () =
        * is a correct compiler ([comp](('S.op))==fp1 residual B).  SLOW (~minutes,
        * specializes spec_av by self-application); skipped under `./test-suite -q`. *)
       Alcotest.test_case "fp2 GREEN: [spec_av]((spec_av.ri_min)) compiles ri_min (comp==B)" `Slow test_fp2_second_projection;
+      Alcotest.test_case "fp3 GREEN: [spec_av]((spec_av.spec_av)) = cogen ([comp3]('S.ri_min)=comp2)" `Slow test_fp3_cogen;
     ];
     "spec-av-exp", [
       Alcotest.test_case "var static" `Quick test_se_av_var_static;
