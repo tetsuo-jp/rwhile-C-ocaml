@@ -11,14 +11,18 @@
  *
  * The failure appears ONLY when the (correct) comp is run through the ri.rwhile
  * self-interpreter (run_via_ri):  [comp](d) via ri raises "error in update".
- * Root cause is in ri.rwhile, not spec_av: its 'cond handling saves the
- * entry-test value W and later clears it with the exit-assertion value V via
- * `Arg ^= V` (ri.rwhile ~L187), which requires W == V BIT-FOR-BIT.  R-WHILE
- * semantics only require equal TRUTHINESS (both nil or both non-nil).  Here the
- * conditional `if D` has entry value d (e.g. 'q) but exit assertion (=? R 'one)
- * value (nil.nil) -> 'q ^= (nil.nil) -> error.  Programs like compare.rwhile
- * work via ri only because they reuse the SAME predicate for test and assertion
- * (W and V are then identical).
+ * The root cause is in ri.rwhile, not spec_av.  Two distinct ri.rwhile bugs:
+ *   BUG 1 (FIXED via the CANON macro): 'cond cleared the saved entry-test value
+ *     against the exit-assertion value by BIT-equality, but R-WHILE only needs
+ *     equal TRUTHINESS (here entry `if D` value 'q vs assertion (=? R 'one)
+ *     value (nil.nil)).  compare.rwhile etc. were unaffected (same predicate
+ *     for test and assertion).
+ *   BUG 2 (OPEN, dominant): the reversible self-clear `X ^= X` (this program's
+ *     `D ^= D`) is mis-self-interpreted.  'ass does EVAL-EXP(E); DUPDATE(K);
+ *     INV-EVAL-EXP(E); when E reads K the DUPDATE changes the store, so the
+ *     re-reading INV-EVAL-EXP cannot clear its temp -> "error in update".
+ *     Minimal isolations: `A ^= A`; `Y ^= 'k; Y ^= Y`.  The fix needs EVAL-EXP
+ *     to reverse store-reads via SAVED values, not re-reads.
  *
  * Consequence: run_via_ri (the fp2 success criterion in HANDOFF_fp2.md) is
  * UNRELIABLE -- it can fail on a correct comp.  Evaluate residuals with

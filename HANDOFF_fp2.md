@@ -35,7 +35,24 @@
   区分の導入）＝大規模研究。⇒ 現実解は研究方針どおり R-CORE で小 self-applicable specializer を
   作り意味保存翻訳で橋渡し（option 2）。memory: `second-futamura-projection-status` 更新済。
 
-## 0e. 2026-06-17(5) 重大訂正：var=Elem は主に ri.rwhile のバグ（最新・最重要）
+## 0f. 2026-06-17(6) ri.rwhile cond バグ修正(bug1)＋自己クリアバグ特定(bug2)（最新）
+
+- **bug1 修正済(ffd9c8b)**：ri.rwhile 'cond の入口/出口値クリアを**ビット一致→真偽一致**に
+  (involutive `CANON(V,B)` マクロ)。P9 で検証、reverse/compare/rint/全非rint群 green。
+- **bug2(未修正・支配的)**：可逆自己クリア `X ^= X`（E が X を読む `X ^= E`）を ri.rwhile が誤解釈。
+  'ass=`EVAL-EXP(E); DUPDATE(K); INV-EVAL-EXP(E)`、DUPDATE が store を変え再読 INV が temp を消せず
+  "error in update"。最小再現 `A ^= A` / `Y ^= 'k; Y ^= Y`。残余は自己クリア多用＝run_via_ri を壊す主因。
+  修正は EVAL-EXP の変数読みを**保存値で逆転**（再読でなく）する設計変更。fp_dyncond_bug は `D ^= D`
+  を含み run_via_ri は依然 raise（test_fp1_dyncond_known_bug は両事実を固定）。
+- **道具**：`make d2p`＋`Program2DataRwhile.data2program` で残余を直接評価（判定は run_via_ri でなく
+  これを使う）。
+
+**次タスク**：(1) ri.rwhile bug2 修正＝EVAL-EXP の変数読み保存値逆転。(2) spec_av fp2 残余化未完
+(vars not nil) を direct eval で再現→修正（self-app 本体）。
+
+---
+
+## 0e. 2026-06-17(5) 重大訂正：var=Elem は主に ri.rwhile のバグ
 
 `data2program`(Program2DataRwhile)＋`d2p`(`make d2p`)で残余 comp を**直接評価**できる。判明：
 - **`fp_dyncond_bug.rwhile` の comp は正しい**：`[comp](d)` 直接評価＝'one/'two。失敗は
