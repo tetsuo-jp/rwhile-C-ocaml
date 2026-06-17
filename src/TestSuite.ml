@@ -1248,6 +1248,26 @@ let test_av_uncons_static_noncons () =
   check_av "uncons static non-cons -> degenerate"
     "('uncons . ('S . nil))" "(('S . nil) . ('S . nil))"
 
+(* MKAV: the binding-time-aware partial-input builder (the fp2 fix; mirrors
+ * RWhileRevProj2BT.agda `mkAV`).  Harness input = (BT . (Src . Ic)).
+ *   BT='S -> ('C.(('S.Src).('D.('var.Ic))))  (fp1 partial-static, as before)
+ *   BT='D -> ('D.('var.Ic))                  (whole input dynamic; Src dropped) *)
+let check_mkav name in_str expected_str =
+  let prog = parse_macro_harness (examples_dir ^ "/spec_av.rwhile")
+    "read In; cons BT Rest <= In; cons Src Ic <= Rest; MKAV(BT, Src, Ic, Out); write Out" in
+  let result = EvalRwhile.evalProgram prog (parse_val in_str) in
+  Alcotest.(check valT_testable) name (parse_val expected_str) result
+
+let test_mkav_static () =
+  check_mkav "MKAV 'S -> partial-static cons AV (= the old unconditional build)"
+    "('S . ('a . nil))" "('C . (('S . 'a) . ('D . ('var . nil))))"
+let test_mkav_static_idx1 () =
+  check_mkav "MKAV 'S keeps the residual var index"
+    "('S . ('a . (nil . nil)))" "('C . (('S . 'a) . ('D . ('var . (nil . nil)))))"
+let test_mkav_dynamic () =
+  check_mkav "MKAV 'D -> fully-dynamic AV (Src dropped)"
+    "('D . ('a . nil))" "('D . ('var . nil))"
+
 (* ===== Garbage / size measurement (Stage A) ===== *)
 
 (* Assert a value's node count is within [limit] (regression guard on residual /
@@ -2066,6 +2086,9 @@ let () =
       Alcotest.test_case "uncons static cons" `Quick test_av_uncons_static;
       Alcotest.test_case "uncons dynamic" `Quick test_av_uncons_dynamic;
       Alcotest.test_case "uncons static non-cons -> degenerate" `Quick test_av_uncons_static_noncons;
+      Alcotest.test_case "mkav static" `Quick test_mkav_static;
+      Alcotest.test_case "mkav static idx1" `Quick test_mkav_static_idx1;
+      Alcotest.test_case "mkav dynamic" `Quick test_mkav_dynamic;
     ];
     "interpreter-robustness", [
       Alcotest.test_case "list-syntax input desugared" `Quick test_list_input_desugared;

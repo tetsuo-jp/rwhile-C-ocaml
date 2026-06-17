@@ -1022,6 +1022,28 @@ macro SPEC-CMD-AV(Cmd)
   until (=? Cd nil);
   Cd' ^= Cd'
 
+(* MKAV(BT, Src, Ic, AVout): build the partial-input AV for the read variable,
+ * BINDING-TIME-AWARE (the fp2 fix; mirrors RWhileRevProj2BT.agda `mkAV`).
+ *   BT = 'S (static input half):  AVout = ('C.(('S.Src).('D.('var.Ic))))
+ *        car static (folded), cdr dynamic (the other input half) -- as in fp1.
+ *   BT = 'D (dynamic input half): AVout = ('D.('var.Ic))
+ *        the whole input variable is dynamic; Src carries no static info.
+ * Consumes BT, Src, Ic.  Under self-application (fp2) BT is itself dynamic, so
+ * the OUTER specializer RESIDUALIZES this branch instead of statically baking
+ * 'S -- exactly the two-level discipline that makes spec_av self-applicable
+ * (the unconditional 'S tag was the fp2 root cause; see RWhileRevProj2BT). *)
+macro MKAV(BT, Src, Ic, AVout)
+  MkS ^= =? BT 'S;
+  if MkS then
+    BT ^= 'S;
+    AVout <= cons 'C (cons (cons 'S Src) (cons 'D (cons 'var Ic)))
+  else
+    BT ^= 'D;
+    Src ^= Src;
+    AVout <= cons 'D (cons 'var Ic)
+  fi MkS;
+  MkS ^= MkS
+
 (* ===== Main program ===== *)
 (* First Futamura projection (fp1).
  * Input  In = (Prog . Src), Prog = p2d of the program to specialise
