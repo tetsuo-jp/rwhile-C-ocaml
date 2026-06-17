@@ -21,8 +21,21 @@
 真因＝**WRITE 側ネスト書きパターン**（read 側 PAT-READ-ITER と対称、PAT-WRITE-STRUCT が深さ1）。
 高速再現 `/tmp/mw.rwhile`（`cons (cons A B) C <= ...`）。`PAT-WRITE-ITER`（既存・深さ一般）を 'rep に
 naive 配線すると mw は通るが fp1 退行（PAT-WRITE-STRUCT の swap-via-temp 転置検出/no-alias REHOME を
-欠く, L664-698）。**fp3 の筋**：PAT-WRITE-ITER に転置→SWAP-VIA-TEMP 検出を取り込んで配線（read 側と
-同様の作業）。判定 d2p：`[comp3](('S.ri_min)) == comp2`(byte一致) で成立。
+欠く, L664-698）。
+
+### 続報：fp3 は write 側だけでは未達（多層）。試作は revert 済（tree=fp2-green）
+- **転置対応 PAT-WRITE-ITER を試作**：PAT-WRITE-ITER-STEP の split に PAT-WRITE-STRUCT L664-698 の
+  転置検出を移植（転置→SWAP-VIA-TEMP、葉は対称消費 `WiP1^=WiP1;WiP2^=WiP2`）し 'rep に配線。
+  結果＝**mw 通る／fp2 緑(~20s)／first-projection-min 緑**。だが **test 11(nested split)・test 7
+  (fp1-via-ri_fp3) が flip**：test 11 は注記通り「直れば flip」で OK。**test 7 は flip するが
+  fp1-via-ri_fp3 は依然不正**（`[comp(ri_fp3,swap)](('a.'b))=('a.'b)` で swap せず）＝「変化したが
+  未修正」で綺麗に flip 不可。そして **fp3 は同じ `cons 10 1 vs nil` で依然落ちる**。
+- ⇒ fp3 残バグは **write 側とは別**。`cons V10 V1 <= E` で実行時 E=nil（静的に cons と判断したが
+  実行時 nil）＝**深さ1 write の束縛時刻/構造ミスマッチ(over-static 系)**、ネストではない。fp1 規模
+  再現は未取得。
+- **fp3 の筋（多層）**：(a) write 側深さ一般化（転置対応・試作済 fp2 安全） ＋ (b) cons-vs-nil 束縛時刻
+  バグ修正、＋ test 7/11 作り直し（fp1-via-ri_fp3 の正しさは別途）。fp2 同様の独立調査。判定 d2p
+  `[comp3](('S.ri_min)) == comp2`(byte一致)。
 
 ---
 （以下は到達までの調査履歴。最新が上）
