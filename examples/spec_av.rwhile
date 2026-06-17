@@ -573,6 +573,48 @@ macro PAT-READ-AV(P, RA)
     PAT-READ-LEAF-AV2(P, RA)
   fi =? (hd P) 'cons
 
+(* PAT-READ-ITER(P, RA): like PAT-READ-AV but for ARBITRARY-DEPTH (nested)
+ * patterns.  Macros cannot recurse, so this is an iterative worklist tree-fold
+ * (modeled on AV-LIFT's begin/end markers): it reads pattern P (preserved) and
+ * builds its AV RA bottom-up, combining nested conses via AV-CONS.  Depth-1
+ * PAT-READ-AV mis-reads a nested sub-cons as a static literal ('S.(tl P)) via
+ * PAT-READ-LEAF-AV2's leaf else-branch; ASSEMBLE-FP1's nested output pattern
+ * (cons (cons 'var I) (cons Body (cons 'var J))) needs the depth-general read,
+ * else the residual bakes the inner cons as a constant and never assembles. *)
+macro PAT-READ-ITER-STEP(Wk, Wk', PrSt)
+  cons PrP Wk <= Wk;
+  if =? (hd PrP) 'cons then
+    cons PrTg PrAg <= PrP;
+    PrTg ^= 'cons; PrTg ^= 'consB;            (* tag 'cons -> 'consB (placeholder) *)
+    cons PrX PrY <= PrAg;
+    Wk <= cons PrX (cons PrY (cons (cons 'consE nil) Wk));
+    PrX ^= PrX; PrY ^= PrY;
+    PrP <= cons PrTg PrAg                       (* PrP = ('consB . nil) *)
+  else
+   if =? (hd PrP) 'consE then
+    cons PrTg2 PrAg2 <= PrP;                    (* PrTg2='consE, PrAg2=nil *)
+    PrTg2 ^= 'consE; PrTg2 ^= 'cons;            (* tag 'consE -> 'cons *)
+    cons PrY (cons PrX (cons (cons 'consB nil) Wk')) <= Wk';
+    PrAg2 <= cons PrX PrY;
+    PrP <= cons PrTg2 PrAg2;                    (* reassembled ('cons.(PrX.PrY)) *)
+    cons PrA2 (cons PrA1 PrSt) <= PrSt;         (* pop child AVs (Y on top, then X) *)
+    AV-CONS(PrA1, PrA2, PrAc);
+    PrSt <= cons PrAc PrSt
+   else
+    PAT-READ-LEAF-AV2(PrP, PrLa);               (* var/val leaf; PrP preserved *)
+    PrSt <= cons PrLa PrSt
+   fi =? (hd PrP) 'cons                         (* after 'consE: tag='cons (T); leaf: var/val (F) *)
+  fi =? (hd PrP) 'consB;                        (* after 'cons: tag='consB (T); else (F) *)
+  Wk' <= cons PrP Wk'
+
+macro PAT-READ-ITER(P, RA)
+  P <= cons P nil;
+  from (=? P' nil) loop
+    PAT-READ-ITER-STEP(P, P', PrSt)
+  until (=? P nil);
+  cons P nil <= P';
+  cons RA nil <= PrSt
+
 macro PAT-WRITE-LEAF-AV2(P, WA)
   if =? (hd P) 'var then
     cons PWLt PWLi <= P;
@@ -891,7 +933,7 @@ macro SPEC-STEP-AV(Cd, Cd', RCode)
       * static structure (e.g. (prog.data)) is split without losing the static
       * part, and a fully-dynamic value flows symbolically (lifted at output). *)
      cons RpQ RpR <= Arg;
-     PAT-READ-AV(RpR, RpAV);
+     PAT-READ-ITER(RpR, RpAV);   (* depth-general read (was PAT-READ-AV, depth-1) *)
      (* PAT-WRITE-ITER (below) handles arbitrary-depth patterns and, with the
       * pair? guard, no longer crashes on ri_fp3's static-atom positions. But
       * wiring it makes full-ri_fp3 fp1 DIVERGE (a static loop in ri_fp3's stack

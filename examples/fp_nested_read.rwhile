@@ -1,0 +1,22 @@
+(* Regression for depth-general read-pattern residualization (PAT-READ-ITER).
+ *
+ * A dynamic conditional (test on the dynamic input half) forces DYNAMICIZE-ALL,
+ * after which the output is assembled from a DEEPLY NESTED read pattern
+ *   Out <= cons R (cons (cons Sv H) Tl)
+ * whose components are dynamic.  The old depth-1 PAT-READ-AV mis-read the nested
+ * sub-conses as static literals (baking ('var.k) AVs as constants), so the
+ * residual never assembled the pieces into the output (the variables stayed
+ * non-nil).  PAT-READ-ITER reads arbitrary depth, so the residual is correct.
+ *
+ * This is the same shape (and the same fix) that makes the 2nd reversible
+ * Futamura projection produce a correct compiler: spec_av's own ASSEMBLE-FP1
+ * builds a nested output pattern (cons (cons 'var I) (cons Body (cons 'var J))).
+ *
+ * [fp_nested_read]((nil . (h . t))) = ('one . ((nil . h) . t))   (h non-nil)
+ * No self-clear, so it runs both via direct eval and via ri.rwhile. *)
+read X;
+  cons Sv D <= X;
+  cons H Tl <= D;
+  if H then R ^= 'one else R ^= 'two fi (=? R 'one);
+  Out <= cons R (cons (cons Sv H) Tl);
+write Out

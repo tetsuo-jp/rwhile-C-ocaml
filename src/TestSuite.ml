@@ -1531,6 +1531,26 @@ let test_fp1_dyncond_known_bug () =
     (Failure "error in update")
     (fun () -> ignore (run_via_ri comp (atom "'q")))
 
+(* Depth-general read-pattern residualization (PAT-READ-ITER).  After a dynamic
+ * conditional (DYNAMICIZE-ALL), the output is assembled from a deeply nested
+ * read pattern `cons R (cons (cons Sv H) Tl)` of dynamic components.  The old
+ * depth-1 PAT-READ-AV baked the nested sub-conses as static-literal AVs, so the
+ * residual never assembled them (variables left non-nil).  PAT-READ-ITER reads
+ * arbitrary depth -> the residual is correct.  This is the same fix that makes
+ * the 2nd reversible Futamura projection produce a correct compiler (spec_av's
+ * own ASSEMBLE-FP1 builds such a nested output pattern).  No self-clear, so it
+ * is checked via BOTH direct eval and run_via_ri. *)
+let test_fp1_nested_read () =
+  let spec_av = parse_file_program (examples_dir ^ "/spec_av.rwhile") in
+  let prog = Program2DataRwhile.program2data
+    (parse_file_program (examples_dir ^ "/fp_nested_read.rwhile")) in
+  let comp = EvalRwhile.evalProgram spec_av (spec_in prog VNil) in
+  let expected = parse_val "('one . ((nil . 'y) . 'z))" in
+  Alcotest.(check valT_testable) "nested-read comp correct (direct eval)"
+    expected (run_comp_direct comp (parse_val "('y . 'z)"));
+  Alcotest.(check valT_testable) "nested-read comp correct (via ri.rwhile)"
+    expected (run_via_ri comp (parse_val "('y . 'z)"))
+
 (* ===== First Futamura projection, GREEN via the minimal self-interpreter =====
  * ri_min interprets a tiny one-op language (Op = 'swap | else 'id) using only
  * depth-1 cons patterns and a single static dispatch (no loops, no nested
@@ -2084,6 +2104,7 @@ let () =
       Alcotest.test_case "ri_fp3 reversible-clear self-interp: swap" `Quick test_ri_fp3_selfinterp_swap;
       Alcotest.test_case "fp1-via-ri_fp3 KNOWN BUG: structural ops lost" `Quick test_fp1_ri_fp3_known_bug;
       Alcotest.test_case "dyn-cond comp correct directly; KNOWN ri.rwhile 'cond bug via run_via_ri" `Quick test_fp1_dyncond_known_bug;
+      Alcotest.test_case "depth-general nested read residualizes (PAT-READ-ITER)" `Quick test_fp1_nested_read;
       Alcotest.test_case "fp1-via-ri_fp3 KNOWN BUG: STEP leaves opaque Result" `Quick test_fp1_step_bug_opaque_result;
       Alcotest.test_case "PAT-WRITE-STRUCT nested split (KNOWN BUG)" `Quick test_pat_write_nested_split;
       Alcotest.test_case "PAT-WRITE-ITER handles nested split" `Quick test_pat_write_iter_nested;
