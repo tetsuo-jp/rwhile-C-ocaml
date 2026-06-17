@@ -1602,6 +1602,26 @@ let test_fp3_cogen () =
   check_op "'swap";
   check_op "'id"
 
+(* Refactoring gate: examples/spec_av_clean.rwhile (the readability/paper rewrite)
+ * MUST stay behaviorally identical to the canonical examples/spec_av.rwhile
+ * (git tag spec_av-fp123-working).  Asserts byte-identical fp1 residuals for
+ * ri_min and ri_seq.  While refactoring spec_av_clean, keep this green; when the
+ * refactor touches the deeper machinery, also re-check fp2/fp3 by direct eval. *)
+let test_clean_equiv_spec_av () =
+  let spec_av = parse_file_program (examples_dir ^ "/spec_av.rwhile") in
+  let clean   = parse_file_program (examples_dir ^ "/spec_av_clean.rwhile") in
+  let p2d f = Program2DataRwhile.program2data
+      (parse_file_program (examples_dir ^ "/" ^ f ^ ".rwhile")) in
+  let ri_min = p2d "ri_min" and ri_seq = p2d "ri_seq" in
+  let check name prog src =
+    Alcotest.(check valT_testable) ("spec_av_clean == spec_av: " ^ name)
+      (EvalRwhile.evalProgram spec_av (spec_in prog src))
+      (EvalRwhile.evalProgram clean   (spec_in prog src)) in
+  check "ri_min swap" ri_min (atom "'swap");
+  check "ri_min id"   ri_min (atom "'id");
+  check "ri_seq [id,swap]"   ri_seq (parse_val "('id . ('swap . nil))");
+  check "ri_seq [swap,swap]" ri_seq (parse_val "('swap . ('swap . nil))")
+
 (* ===== First Futamura projection, GREEN via the minimal self-interpreter =====
  * ri_min interprets a tiny one-op language (Op = 'swap | else 'id) using only
  * depth-1 cons patterns and a single static dispatch (no loops, no nested
@@ -2176,6 +2196,9 @@ let () =
        * specializes spec_av by self-application); skipped under `./test-suite -q`. *)
       Alcotest.test_case "fp2 GREEN: [spec_av]((spec_av.ri_min)) compiles ri_min (comp==B)" `Slow test_fp2_second_projection;
       Alcotest.test_case "fp3 GREEN: [spec_av]((spec_av.spec_av)) = cogen ([comp3]('S.ri_min)=comp2)" `Slow test_fp3_cogen;
+    ];
+    "refactor-gate", [
+      Alcotest.test_case "spec_av_clean == spec_av (fp1 residuals identical)" `Quick test_clean_equiv_spec_av;
     ];
     "spec-av-exp", [
       Alcotest.test_case "var static" `Quick test_se_av_var_static;
