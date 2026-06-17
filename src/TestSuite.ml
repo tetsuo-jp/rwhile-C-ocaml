@@ -49,6 +49,9 @@ let vtrue = VCons (VNil, VNil)
 let vfalse = VNil
 let atom s = VAtom (Atom s)
 let pair a b = VCons (a, b)
+(* spec_av's main now takes a binding-time-aware input In = (Prog . (BT . Src)).
+ * fp1 always supplies BT = 'S (the static-input half is genuinely static). *)
+let spec_in prog src = VCons (prog, VCons (atom "'S", src))
 let idx0 = VNil
 let idx1 = VCons (VNil, VNil)
 let idx2 = VCons (VNil, idx1)
@@ -1466,7 +1469,7 @@ let fp1_ri_fp3_body src_name =
     (parse_file_program (examples_dir ^ "/ri_fp3.rwhile")) in
   let src = parse_file_program (examples_dir ^ "/" ^ src_name ^ ".rwhile") in
   let src_data = Program2DataRwhile.program2data src in
-  let comp = EvalRwhile.evalProgram spec_av (pair ri_fp3 src_data) in
+  let comp = EvalRwhile.evalProgram spec_av (spec_in ri_fp3 src_data) in
   match comp with
   | VCons (_, VCons (body, _)) -> pp_cmd body
   | _ -> "unexpected comp shape"
@@ -1497,7 +1500,7 @@ let fp1_min op_str d =
   let spec_av = parse_file_program (examples_dir ^ "/spec_av.rwhile") in
   let ri_min = Program2DataRwhile.program2data
     (parse_file_program (examples_dir ^ "/ri_min.rwhile")) in
-  let comp = EvalRwhile.evalProgram spec_av (pair ri_min (parse_val op_str)) in
+  let comp = EvalRwhile.evalProgram spec_av (spec_in ri_min (parse_val op_str)) in
   run_via_ri comp d
 
 (* fp1 via ri_seq: specialize the sequence interpreter w.r.t. a static op LIST.
@@ -1507,7 +1510,7 @@ let fp1_seq proglist_str d =
   let spec_av = parse_file_program (examples_dir ^ "/spec_av.rwhile") in
   let ri_seq = Program2DataRwhile.program2data
     (parse_file_program (examples_dir ^ "/ri_seq.rwhile")) in
-  let comp = EvalRwhile.evalProgram spec_av (pair ri_seq (parse_val proglist_str)) in
+  let comp = EvalRwhile.evalProgram spec_av (spec_in ri_seq (parse_val proglist_str)) in
   run_via_ri comp d
 
 let test_fp1_seq_empty () =
@@ -1557,7 +1560,7 @@ let test_fp1_min_exhaustive () =
   let spec_av = parse_file_program (examples_dir ^ "/spec_av.rwhile") in
   let ri_min  = Program2DataRwhile.program2data
                   (parse_file_program (examples_dir ^ "/ri_min.rwhile")) in
-  let comp op = EvalRwhile.evalProgram spec_av (pair ri_min (parse_val op)) in
+  let comp op = EvalRwhile.evalProgram spec_av (spec_in ri_min (parse_val op)) in
   let comp_id = comp "'id" and comp_swap = comp "'swap" in
   (* id: [comp_id](d) = (id . d) for EVERY input d *)
   List.iter (fun d ->
@@ -1587,7 +1590,7 @@ let test_fp1_seq_exhaustive () =
     [ "('a . 'b)"; "(('a . 'b) . 'c)"; "('a . ('b . 'c))"; "(('a . 'b) . ('c . 'd))" ] in
   List.iter (fun ops ->
     let prog = oplist_data ops in
-    let comp = EvalRwhile.evalProgram spec_av (pair ri_seq prog) in
+    let comp = EvalRwhile.evalProgram spec_av (spec_in ri_seq prog) in
     List.iter (fun d ->
       Alcotest.(check valT_testable) "fp1 ri_seq (exhaustive)"
         (pair prog (apply_ops ops d)) (run_via_ri comp d)) cons_inputs) oplists
@@ -1781,7 +1784,7 @@ let test_assemble_fp1_swap () =
 let test_fp1_main_swap () =
   let spec_av = parse_file_program (examples_dir ^ "/spec_av.rwhile") in
   let q = parse_val ("(('var . nil) . (" ^ swap_cmd ^ " . ('var . nil)))") in
-  let comp = EvalRwhile.evalProgram spec_av (pair q (atom "'a")) in
+  let comp = EvalRwhile.evalProgram spec_av (spec_in q (atom "'a")) in
   let result = run_via_ri comp (atom "'b") in
   Alcotest.(check valT_testable) "fp1(swap,'a): [comp]('b) = ('b.'a)"
     (parse_val "('b . 'a)") result
@@ -1793,7 +1796,7 @@ let test_fp1_main_swap () =
  * V3=(nil.(nil.(nil.nil))). *)
 let fp1_roundtrip p_str src_str d =
   let spec_av = parse_file_program (examples_dir ^ "/spec_av.rwhile") in
-  let comp = EvalRwhile.evalProgram spec_av (pair (parse_val p_str) (parse_val src_str)) in
+  let comp = EvalRwhile.evalProgram spec_av (spec_in (parse_val p_str) (parse_val src_str)) in
   run_via_ri comp d
 
 (* rung 1: split V0 into V1,V2 then rejoin into V0 (= identity on a pair).
