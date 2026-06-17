@@ -122,12 +122,24 @@ done by the accumulator induction `rev-rest`.
   succeeds for ANY drift, so it only silences the `'10` while leaving the
   corrupted residual — confirmed on the real spec_av (fp2 then emits a broken
   compiler), so the only correct repair is restoring lift-preservation.
+- `RWhileRevProj2BT.agda` — the design spec for the fp2 fix: BINDING-TIME
+  correctness. After ruling out every clear-side fix, the true root cause was
+  localised to the specialiser tagging its own static input `'S`
+  UNCONDITIONALLY (spec_av.rwhile:1051 `cons 'S Src`). Models a minimal
+  specialisation step over annotated values and proves: `fp1-ok` (static input —
+  the unconditional tag agrees with a binding-time-aware one), `fp2-buggy-mistags`
+  (under self-application the input is dynamic, so the unconditional `'S`
+  mis-tags), and the consequence `buggy-ignores-input` / `correct-uses-input` /
+  `overstatic-wrong` (a statically-committed residual bakes a constant and
+  ignores its runtime input — the observed over-static degeneration — whereas a
+  binding-time-aware residual uses it). So the precise repair is a binding-time-
+  aware (BTA / two-level) partial input, the self-applicability requirement.
 
 ## Checking
 
 ```
 cd proofs/agda
-for f in RWhileRev RWhileRevFull RWhileValStore RWhileCRep RWhileCRepDet RWhileDet RWhileDetConcrete RWhileExec RWhileExecConcrete RWhileIL RWhileFutamura RWhileFutamura2 RWhileFutamura2Inst RWhileRevFutamura RWhileRevProjPaper RWhileRevProjInst RWhileRevProjGen RWhileCoreExp RWhileFp1Residual RWhileElabCom RWhileMacroSubst RWhileRevProj2Lift; do
+for f in RWhileRev RWhileRevFull RWhileValStore RWhileCRep RWhileCRepDet RWhileDet RWhileDetConcrete RWhileExec RWhileExecConcrete RWhileIL RWhileFutamura RWhileFutamura2 RWhileFutamura2Inst RWhileRevFutamura RWhileRevProjPaper RWhileRevProjInst RWhileRevProjGen RWhileCoreExp RWhileFp1Residual RWhileElabCom RWhileMacroSubst RWhileRevProj2Lift RWhileRevProj2BT; do
   agda --safe $f.agda
 done
 ```
