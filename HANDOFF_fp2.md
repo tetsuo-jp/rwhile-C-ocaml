@@ -53,8 +53,14 @@ involutive。⇒ 可逆自己解釈器 ri.rwhile は原理的に `X^=X` を逆�
 自己クリアを含まない(CRep move)から。修正筋：(a) spec_av を遅延クリア化(大規模・原理的)、
 (b) ri を前方のみ忠実化(可逆性犠牲・ハック、不採用)、(c) **判定を direct eval(d2p) に**(採用済)。
 
-**次タスク**：(1) spec_av fp2 残余化未完 (vars not nil) を **direct eval(d2p/data2program)** で再現→修正
-（self-app 本体。run_via_ri は bug2 のため判定に使わない）。(2) 任意で spec_av の遅延クリア化。
+**fp2 comp 未完の具体局在(2026-06-17(8))**：d2p 直接評価で fp2 comp(3MB)を実行＝"variables not nil"。
+read var≈index36、**write var=v5**。**v5(出力)=nil**のまま、B の部品が v3(=('seq.('rep…))=B body)・
+v7(=('cons.(('val.'swap)…))=swap 断片)に取り残され、index カウンタ v2/v4/v6=2 も残る。⇒ **comp は
+B の部品を計算するが出力変数にアセンブルしない**＝OUTER が inner の **ASSEMBLE-FP1／最終 write** を
+動的化下で残余化する所が壊れている（生成 3MB は成功＝計算はできている）。
+
+**次タスク**：(1) ASSEMBLE-FP1／出力の残余化を修正（comp が結果を write var v5 へ組み立てる）。
+判定は d2p 直接評価で `[comp](('S.'swap)) == B(436B)`。(2) 任意で spec_av 遅延クリア化。
 
 ---
 
