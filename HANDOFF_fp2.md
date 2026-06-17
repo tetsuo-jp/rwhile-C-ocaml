@@ -6,6 +6,37 @@
 
 ---
 
+## 0b. 2026-06-17(2) セッション結果 ＝ BTA を実装し「必要だが不十分」を実証（最新・先に読む）
+
+**やったこと（コミット 2 本、fp1 全 spec_av 群 green 維持）**
+- `2c8d23f` MKAV マクロ追加（`examples/spec_av.rwhile`）。`MKAV(BT,Src,Ic,AVout)`：
+  `BT='S → ('C.(('S.Src).('D.('var.Ic))))`（従来 fp1）／`BT='D → ('D.('var.Ic))`（全動的・Src 破棄）。
+  単体テスト 3 本を av-algebra 群に追加（mkav static / static-idx1 / dynamic）。
+- `f798880` main を BTA 契約へ：`read In; cons Prog FpBTS <= In; cons FpBT Src <= FpBTS;`、
+  旧 L1051 を `MKAV(FpBT,Src,FpIc,FpPart)` に。TestSuite の fp1 呼出 7 箇所を
+  新ヘルパ `spec_in p src = (p.('S.src))` でラップ。**fp1 不変（spec_av 群全 green）**。
+
+**fp2 の結果（前進したが未達）**
+- 入力は新契約：`fp2.val = (p2d(spec_av) . ('S . p2d(ri_min)))`（再現 §4 を更新のこと）。
+- **`'10` を脱出**：旧 baseline は生成中に `'10`。BTA 後は**生成成功＝comp 3.19MB**
+  （偽修正の 1158B 過剰静的退化では**ない**）。
+- **だが compiler はまだ壊れ**：`[comp](('S.'swap))` を ri 経由実行で
+  **`error in update: var=Elem cur=(nil.(nil.nil)) new=(nil.nil)`**。
+  基準 B=`[spec_av]((ri_min.('S.'swap)))`=436B は正答（[B](('a.'b))=('swap.('b.'a))）。
+
+**新しい真因（局在）・次の壁**
+- fp2 では BT が OUTER から動的 → MKAV の `if MkS` が **comp に残余化**され、その残余条件
+  （then=構造化 AVout／else=Src クリア＋'D、両枝で store 効果発散）の**可逆化が壊れ var=Elem**。
+  fp1 は BT 静的→条件静的消去で無傷（静的 BT='D の fp1 は 694B でクリーン＝動的枝自体は健全）。
+- **BT を静的側 `((Prog.BT).Src)` に移す案は不可**：条件は静的化できるが fp2 で `('S.<動的Src>)`
+  の過剰静的ミスタグに逆戻り。根本は **AV が静的“値”を運ぶ設計**で、自己適用下では 'S-AV が
+  動的(記号)値を運ぶ必要があり下流(AV-LIFT/AV-EQ/AV-HD)が具体値前提で破綻＝online 値運搬 AV と
+  offline 二段階 BT の本質的不整合。真の修正は AV 代数の offline 化（「静的・存在保証だが記号的」
+  区分の導入）＝大規模研究。⇒ 現実解は研究方針どおり R-CORE で小 self-applicable specializer を
+  作り意味保存翻訳で橋渡し（option 2）。memory: `second-futamura-projection-status` 更新済。
+
+---
+
 ## 0. 結論サマリ（これだけ読めば文脈が分かる）
 
 - **fp1 は green**：`[spec_av]((ri_min . op))` / `[spec_av]((ri_seq . oplist))` は正しく動作（テスト・Agda 証明済）。
@@ -71,11 +102,15 @@ s=open("../examples/spec_av.rwhile").read()
 lit=lambda n:("nil" if n==0 else "(nil."+lit(n-1)+")")
 open("/tmp/outer.rwhile","w").write(re.sub(r"FpN \^= \([^;]*\);","FpN ^= "+lit(300)+";",s))
 PY
+# 新契約（BTA, 2026-06-17(2) 以降）: outer 入力 = (inner . ('S . rimin))
 printf '(' > /tmp/fp2.val; tr -d '\n' </tmp/inner.val >>/tmp/fp2.val
-printf ' . ' >>/tmp/fp2.val; tr -d '\n' </tmp/rimin.val >>/tmp/fp2.val; printf ')\n' >>/tmp/fp2.val
+printf " . ('S . " >>/tmp/fp2.val; tr -d '\n' </tmp/rimin.val >>/tmp/fp2.val; printf '))\n' >>/tmp/fp2.val
 
-# 現状（未修正）はここで '10:
-timeout 200 ./ri /tmp/outer.rwhile /tmp/fp2.val | tail -3
+# 旧 baseline はここで '10。BTA 後は生成成功＝comp 3MB（>/tmp/fp2_fixed.out）。
+timeout 280 ./ri /tmp/outer.rwhile /tmp/fp2.val > /tmp/fp2_fixed.out 2>&1; wc -c /tmp/fp2_fixed.out
+# comp の正しさ判定: comp_swap=[comp](('S.'swap)) を ri 経由で。現状は var=Elem で落ちる（未達）。
+#   B=[spec_av]((ri_min.('S.'swap))) を基準に比較（B は 436B で正答）。
+#   printf '('; cat fp2_fixed.out; printf " . ('S . 'swap))"  を ri.rwhile に渡し cdr を取る。
 ```
 
 ## 5. 成功判定（修正が正しいことの確認）
