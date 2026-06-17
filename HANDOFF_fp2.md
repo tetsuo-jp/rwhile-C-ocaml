@@ -23,7 +23,12 @@
   N(=FpN)=50 固定 → AUX が index~223 まで歩いて溢れ `cons U Vl<=Vl`(Vl=nil)。
 - **修正＝FpN 50→256 ＋ TmpT(swap-via-temp index) 100→250**（特殊化対象の変数 index より上に）。
   write 側修正は不要（転置 PAT-WRITE-ITER 試作は revert 済で正解）。fp1 不変・hygiene-clean。
-- 注意：N 固定大(256)。256変数超の自己適用には更に拡大要（理想は動的算定）。
+- 注意：spec_av の N は固定(FpN=256)。**動的サイズ化ツール `specsize`(`make specsize`)** で解決：
+  `./specsize <spec.rwhile> <subject.rwhile> [margin]` → subject の変数数から FpN=count+margin・
+  TmpT=count+2 にリサイズした spec を stdout 出力（`-n <file>` で変数数のみ）。fp1=小N(高速)、
+  fp3=spec_av(223)に合わせた N。`[specsize spec_av spec_av]` の FpN=231 で fp3 検証済（==B）。コミット 851dba0。
+- 論文用リファクタは `spec_av_clean.rwhile`(別ファイル, 現状コピー)で開発。ゲート `test_clean_equiv_spec_av`
+  (refactor-gate 群)が spec_av と byte 同一残余を保証。現バージョンは git tag `spec_av-fp123-working`。
 
 以下は到達までの履歴（旧）：
 
