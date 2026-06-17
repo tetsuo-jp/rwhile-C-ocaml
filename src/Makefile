@@ -26,6 +26,10 @@ run-tests: test-suite
 d2p: BNFC_Util.ml AbsRwhile.ml PrintRwhile.ml ParRwhile.mli ParRwhile.ml LexRwhile.ml InvRwhile.ml Subst.ml MacroRwhile.ml EvalRwhile.ml Program2DataRwhile.ml Core.ml d2p.ml
 	$(OCAMLC) -o $@ $^
 
+# specsize: size spec_av's AV store (FpN) to a subject program's variable count.
+specsize: BNFC_Util.ml AbsRwhile.ml PrintRwhile.ml ParRwhile.mli ParRwhile.ml LexRwhile.ml InvRwhile.ml Subst.ml MacroRwhile.ml EvalRwhile.ml Program2DataRwhile.ml Core.ml specsize.ml
+	$(OCAMLC) -o $@ $^
+
 clean:
 	-rm -f *.cmi *.cmo *.o *.mli *.cmx ri test-suite
 
