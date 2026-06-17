@@ -35,6 +35,24 @@
   区分の導入）＝大規模研究。⇒ 現実解は研究方針どおり R-CORE で小 self-applicable specializer を
   作り意味保存翻訳で橋渡し（option 2）。memory: `second-futamura-projection-status` 更新済。
 
+## 0c. 2026-06-17(3) var=Elem 局所診断 ＝ '10 と同一真因（最新）
+
+- **op 非依存**：`[comp](('S.'id))` も `'swap` と**同一エラー・同一 index(cur=2,new=1)**。基準
+  `B_id=[spec_av]((ri_min.('S.'id)))`=268B は健全。⇒ var=Elem は comp の**共有プロローグ**
+  （入力デコード＋MKAV 残余条件）に局在し、op 本体とは無関係。
+- **DYNAMICIZE-ALL が必須**：MKAV を分岐なし版
+  `AVout <= cons 'C (cons (cons BT Src) (cons 'D (cons 'var Ic)))` にすると fp2 生成が
+  **'10 に逆戻り**（78B）。分岐版（=現コミット）は DYNAMICIZE-ALL で '10 を脱出し 3MB 生成まで
+  到達＝**現コミットの分岐版が最良**。動的化は必要だがその後が壊れる。
+- **var=Elem の正体**：`UPDATE(Vl,J,X)`=`AUX; Elem ^= X; INV-AUX`、AUX は動的 index J の
+  `from..until(=? Cnt J)` ループ。fp2 全動的化で残余化された **`Elem ^= X`(可逆 XOR 代入)** が
+  実行時 Elem=index2・X=index1（nil でも等しくもない）で可逆性違反。
+- **結論**：`'10`(L849 static-assign) と `var=Elem`(L869-883/UPDATE dynamic-assign) は**同一根**＝
+  自己適用の全動的化下で spec_av が **reversible-update(`^=`)/index 歩行(AUX/LOOKUP/UPDATE) を
+  可逆に残余化できない**（動的化レベルが違うだけ）。一行修正不可。次手は SWAP-VIA-TEMP 系の
+  「可逆代入を保存する残余化」を 'ass 残余化＋index コードへ拡張＝実質 self-app 本体／または R-CORE
+  option 2。memory: `second-futamura-projection-status` に全詳細。
+
 ---
 
 ## 0. 結論サマリ（これだけ読めば文脈が分かる）
