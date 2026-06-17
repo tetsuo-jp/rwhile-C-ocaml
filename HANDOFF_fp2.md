@@ -15,7 +15,19 @@
 **fp2 自動テスト済**: `second-projection` 群 `test_fp2_second_projection`（N 自動採寸 ~13s, `Slow）。
 高速回帰 `test_fp1_nested_read`（depth-general read）も修正を固定。
 
-## fp3 (cogen) 挑戦結果(2026-06-18)＝生成成功も未完。次は WRITE 側
+## ★★ fp3 (cogen) も達成（2026-06-18, コミット 278296b）★★
+`comp3=[spec_av]((spec_av.('S.spec_av)))`（6.6MB）。d2p 直接評価で
+`[comp3](('S.ri_min))`=ri_min コンパイラ、`[それ](('S.'swap))==B(436B)`、`('S.'id)==B_id`。
+テスト `test_fp3_cogen`（second-projection 群, fp2+fp3 ~28s）。
+- **真因＝store サイズ不足**（残余化バグではない）：comp3 は spec_av(223変数)を特殊化するが AV-INIT の
+  N(=FpN)=50 固定 → AUX が index~223 まで歩いて溢れ `cons U Vl<=Vl`(Vl=nil)。
+- **修正＝FpN 50→256 ＋ TmpT(swap-via-temp index) 100→250**（特殊化対象の変数 index より上に）。
+  write 側修正は不要（転置 PAT-WRITE-ITER 試作は revert 済で正解）。fp1 不変・hygiene-clean。
+- 注意：N 固定大(256)。256変数超の自己適用には更に拡大要（理想は動的算定）。
+
+以下は到達までの履歴（旧）：
+
+## fp3 (cogen) 挑戦結果(2026-06-18・旧)＝生成成功も未完。次は WRITE 側
 `comp3=[spec_av]((spec_av.('S.spec_av)))` は生成成功(6.6MB)だが `[comp3](('S.ri_min))`(d2p) が
 `Cannot match cons pattern cons 10 1 against non-cons value nil` で落ちる＝cogen が壊れたコンパイラ。
 真因＝**WRITE 側ネスト書きパターン**（read 側 PAT-READ-ITER と対称、PAT-WRITE-STRUCT が深さ1）。
