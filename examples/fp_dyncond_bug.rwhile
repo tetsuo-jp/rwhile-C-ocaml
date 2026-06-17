@@ -1,30 +1,30 @@
-(* FAST reproduction of the spec_av residualization bug that blocks fp2.
+(* FAST probe that disentangled the fp2 "var=Elem / error in update" failure.
  *
  * This is a VALID reversible program:  [fp_dyncond_bug]((nil . d)) = 'one
  * (for any non-nil d; 'two for d = nil), with the store cleared at the end.
  *
- * But specializing it with spec_av and running the residual FAILS:
- *   comp = [spec_av]((fp_dyncond_bug . ('S . nil)))    -- succeeds, small comp
- *   [comp](d)                                          -- raises "error in update"
- * although the correct answer is 'one.
+ * spec_av specializes it CORRECTLY:
+ *   comp = [spec_av]((fp_dyncond_bug . ('S . nil)))
+ *   [comp](d) evaluated DIRECTLY (data2program + evalProgram) = 'one / 'two.
+ * So the residual is fine -- spec_av's dynamic-cond residualization is NOT the
+ * culprit here.
  *
- * Root cause: the conditional `if D ...` tests the DYNAMIC input half, so
- * spec_av takes the dynamic-test branch (SPEC-STEP-AV 'cond, L922-) and
- * DYNAMICIZE-ALL's the store, then residualises the conditional.  That
- * residualisation is UNSOUND: it produces a non-reversible residual (a
- * reversible-update `^=` whose runtime slot is neither nil nor equal to the
- * assigned value -> rupdate "error in update").
+ * The failure appears ONLY when the (correct) comp is run through the ri.rwhile
+ * self-interpreter (run_via_ri):  [comp](d) via ri raises "error in update".
+ * Root cause is in ri.rwhile, not spec_av: its 'cond handling saves the
+ * entry-test value W and later clears it with the exit-assertion value V via
+ * `Arg ^= V` (ri.rwhile ~L187), which requires W == V BIT-FOR-BIT.  R-WHILE
+ * semantics only require equal TRUTHINESS (both nil or both non-nil).  Here the
+ * conditional `if D` has entry value d (e.g. 'q) but exit assertion (=? R 'one)
+ * value (nil.nil) -> 'q ^= (nil.nil) -> error.  Programs like compare.rwhile
+ * work via ri only because they reuse the SAME predicate for test and assertion
+ * (W and V are then identical).
  *
- * This is the GENERAL form of the 2nd-projection (fp2) `var=Elem` failure:
- * under self-application spec_av's own conditionals (e.g. MKAV's `if MkS`)
- * become dynamic, hit this same path, and produce a broken compiler.  Unlike
- * the real fp2 (~4 min), this reproduces at fp1 scale in well under a second,
- * so it is the iteration harness for fixing dynamic-cond residualisation.
- *
- * spec_av specializes programs of the form (('var.I).(Body.('var.J))) whose
- * input variable holds (Src . d): here Src (the static half) is unused (nil)
- * and the conditional dispatches on d (dynamic).  Contrast ri_min/ri_seq,
- * whose conditionals test the STATIC op, so they avoid this path and fp1 works.
+ * Consequence: run_via_ri (the fp2 success criterion in HANDOFF_fp2.md) is
+ * UNRELIABLE -- it can fail on a correct comp.  Evaluate residuals with
+ * data2program+evalProgram instead.  Using that, the REAL fp2 spec_av bug is
+ * separately visible: the fp2 comp is incomplete (leaves variables non-nil)
+ * even under direct eval.
  *
  * See HANDOFF_fp2.md and memory second-futamura-projection-status. *)
 read X;

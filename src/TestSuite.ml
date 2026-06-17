@@ -1488,23 +1488,38 @@ let test_fp1_ri_fp3_known_bug () =
     "KNOWN BUG: swap and splitjoin residual bodies identical (structural ops lost)"
     (fp1_ri_fp3_body "sx_splitjoin") (fp1_ri_fp3_body "swap")
 
-(* KNOWN BUG / fp2 root cause, FAST repro (sub-second; cf. real fp2 ~4 min).
- * spec_av residualizes a conditional with a DYNAMIC test (the DYNAMICIZE-ALL
- * path) UNSOUNDLY: examples/fp_dyncond_bug.rwhile is a valid reversible program
- * ([prog]((nil.d)) = 'one), and comp = [spec_av]((prog.('S.nil))) is produced
- * fine, but running [comp](d) raises "error in update" (a non-reversible
- * residual `^=`) instead of returning 'one.  This is the general form of the
- * 2nd-projection var=Elem failure (under self-application spec_av's own
- * conditionals become dynamic and hit this path).  When dynamic-cond
- * residualization is fixed this test SHOULD fail; replace it with an assertion
- * that [comp](d) = 'one.  See HANDOFF_fp2.md and the example header. *)
+(* Evaluate a program-as-data value (a spec residual / comp) DIRECTLY by
+ * decoding it back to an AST -- the reliable alternative to run_via_ri, which
+ * routes through the ri.rwhile self-interpreter (see the known bug below). *)
+let run_comp_direct comp d =
+  EvalRwhile.evalProgram (Program2DataRwhile.data2program comp) d
+
+(* CORRECTED DIAGNOSIS (was mislabelled "spec_av dynamic-cond residualization").
+ * For examples/fp_dyncond_bug.rwhile, spec_av's residual comp is actually
+ * CORRECT: comp = [spec_av]((prog.('S.nil))) and [comp](d) evaluated DIRECTLY
+ * gives 'one (resp. 'two).  The failure only appears through run_via_ri:
+ * ri.rwhile mis-interprets a conditional whose entry-test value differs from
+ * its exit-assertion value.  ri.rwhile's 'cond saves the entry-test value W and
+ * later clears it with the exit-assertion value V via `Arg ^= V` (ri.rwhile
+ * ~L187), which requires W == V BIT-FOR-BIT; R-WHILE only requires equal
+ * TRUTHINESS.  compare.rwhile etc. work only because they reuse the same
+ * predicate for test and assertion.  Hence run_via_ri (the fp2 success
+ * criterion) is unreliable; direct decode+eval (run_comp_direct) is reliable.
+ * This test pins BOTH facts; flip the check_raises to a value check once
+ * ri.rwhile's 'cond is fixed.  See HANDOFF_fp2.md and the example header. *)
 let test_fp1_dyncond_known_bug () =
   let spec_av = parse_file_program (examples_dir ^ "/spec_av.rwhile") in
   let prog = Program2DataRwhile.program2data
     (parse_file_program (examples_dir ^ "/fp_dyncond_bug.rwhile")) in
   let comp = EvalRwhile.evalProgram spec_av (spec_in prog VNil) in
+  (* (1) the residual is CORRECT under direct evaluation *)
+  Alcotest.(check valT_testable) "dyn-cond comp correct directly: [comp]('q)='one"
+    (atom "'one") (run_comp_direct comp (atom "'q"));
+  Alcotest.(check valT_testable) "dyn-cond comp correct directly: [comp](nil)='two"
+    (atom "'two") (run_comp_direct comp VNil);
+  (* (2) KNOWN BUG: the SAME correct comp fails through ri.rwhile (run_via_ri) *)
   Alcotest.check_raises
-    "KNOWN BUG: dynamic-cond residual is non-reversible (error in update)"
+    "KNOWN BUG (ri.rwhile 'cond): correct comp fails via run_via_ri"
     (Failure "error in update")
     (fun () -> ignore (run_via_ri comp (atom "'q")))
 
@@ -2060,7 +2075,7 @@ let () =
       Alcotest.test_case "ri_fp3 reversible-clear self-interp: id" `Quick test_ri_fp3_selfinterp_id;
       Alcotest.test_case "ri_fp3 reversible-clear self-interp: swap" `Quick test_ri_fp3_selfinterp_swap;
       Alcotest.test_case "fp1-via-ri_fp3 KNOWN BUG: structural ops lost" `Quick test_fp1_ri_fp3_known_bug;
-      Alcotest.test_case "dynamic-cond residual KNOWN BUG (fp2 root cause, fast repro)" `Quick test_fp1_dyncond_known_bug;
+      Alcotest.test_case "dyn-cond comp correct directly; KNOWN ri.rwhile 'cond bug via run_via_ri" `Quick test_fp1_dyncond_known_bug;
       Alcotest.test_case "fp1-via-ri_fp3 KNOWN BUG: STEP leaves opaque Result" `Quick test_fp1_step_bug_opaque_result;
       Alcotest.test_case "PAT-WRITE-STRUCT nested split (KNOWN BUG)" `Quick test_pat_write_nested_split;
       Alcotest.test_case "PAT-WRITE-ITER handles nested split" `Quick test_pat_write_iter_nested;

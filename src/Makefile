@@ -22,6 +22,10 @@ test-suite: BNFC_Util.ml AbsRwhile.ml PrintRwhile.ml ParRwhile.mli ParRwhile.ml 
 run-tests: test-suite
 	./test-suite
 
+# d2p: decode/evaluate a program-as-data value (residual inspector).
+d2p: BNFC_Util.ml AbsRwhile.ml PrintRwhile.ml ParRwhile.mli ParRwhile.ml LexRwhile.ml InvRwhile.ml Subst.ml MacroRwhile.ml EvalRwhile.ml Program2DataRwhile.ml Core.ml d2p.ml
+	$(OCAMLC) -o $@ $^
+
 clean:
 	-rm -f *.cmi *.cmo *.o *.mli *.cmx ri test-suite
 
