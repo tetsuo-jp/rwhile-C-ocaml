@@ -134,12 +134,22 @@ done by the accumulator induction `rev-rest`.
   ignores its runtime input — the observed over-static degeneration — whereas a
   binding-time-aware residual uses it). So the precise repair is a binding-time-
   aware (BTA / two-level) partial input, the self-applicability requirement.
+- `RWhileRevProj2Self.agda` — the CONSTRUCTIVE counterpart: a small self-
+  applicable specialiser for the op-list language where the 2nd projection
+  actually goes through, with REAL residualisation. The residual `uComp ops` is
+  a genuine compiled program (it carries the source ops and runs them on the
+  RUNTIME data — the interpreter is ELIMINATED, not re-run via a closure as in
+  `RWhileFutamura2Inst`). Binding-time discipline is built in (source static,
+  data dynamic). `fp1`/`fp2`/`fp3` all hold by `refl`, and
+  `compiler-residual-uses-input` / `fp2-correct` witness that the generated
+  compiler's residual USES its runtime input (no over-static degeneration) —
+  the small-core realisation of the fix `RWhileRevProj2BT` specifies.
 
 ## Checking
 
 ```
 cd proofs/agda
-for f in RWhileRev RWhileRevFull RWhileValStore RWhileCRep RWhileCRepDet RWhileDet RWhileDetConcrete RWhileExec RWhileExecConcrete RWhileIL RWhileFutamura RWhileFutamura2 RWhileFutamura2Inst RWhileRevFutamura RWhileRevProjPaper RWhileRevProjInst RWhileRevProjGen RWhileCoreExp RWhileFp1Residual RWhileElabCom RWhileMacroSubst RWhileRevProj2Lift RWhileRevProj2BT; do
+for f in RWhileRev RWhileRevFull RWhileValStore RWhileCRep RWhileCRepDet RWhileDet RWhileDetConcrete RWhileExec RWhileExecConcrete RWhileIL RWhileFutamura RWhileFutamura2 RWhileFutamura2Inst RWhileRevFutamura RWhileRevProjPaper RWhileRevProjInst RWhileRevProjGen RWhileCoreExp RWhileFp1Residual RWhileElabCom RWhileMacroSubst RWhileRevProj2Lift RWhileRevProj2BT RWhileRevProj2Self; do
   agda --safe $f.agda
 done
 ```
