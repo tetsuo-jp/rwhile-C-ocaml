@@ -1,0 +1,1178 @@
+(*
+ * spec_av_rev.rwhile - REVERSIBLE variant (dead-path garbage embedding).
+ * Prototype of step (b): CLEAR no longer erases (X^=X); it PUSHES the discarded
+ * value onto a garbage stack GARB, which main embeds into the residual's DEAD
+ * branch via EMBED-GARB.  So spec runs with NO irreversible erasure (garbage
+ * exits through the output), and [comp](d) is unchanged (the dead branch never
+ * runs).  Derived from spec_av_clean.rwhile.
+ *
+ * This is a behavior-preserving, human-readable rewrite of spec_av.rwhile,
+ * intended for the paper.  The canonical CORRECT version is spec_av.rwhile
+ * (git tag spec_av-fp123-working: fp1/fp2/fp3 all green); the test suite still
+ * uses THAT.  This file is developed separately and MUST stay behaviorally
+ * identical to spec_av.rwhile -- the regression gate `test_clean_equiv_spec_av`
+ * (TestSuite.ml) asserts both produce byte-identical residuals on fp1 subjects
+ * (ri_min / ri_seq).  Refactor here freely as long as that gate (and ideally
+ * fp2/fp3 via direct eval) stays green.  Started as an exact copy of
+ * spec_av.rwhile; refactoring proceeds incrementally (docs/invariants first,
+ * then naming/structure -- never the residualisation/reversibility cores).
+ *
+ * ---- original header (spec_av.rwhile) ----
+ * AV-based (partially-static) specializer for R-WHILE.
+ *
+ * Developed in parallel with spec.rwhile (the working baseline) so the rewrite
+ * to partially-static values does not break it.  See
+ * analysis_partial_static_design.md.  This file currently contains:
+ *   - the partial store ops (AUX / LOOKUP / UPDATE), same as spec.rwhile
+ *   - the AV algebra (AV-CONS/HD/TL/LIFT/EQ), same as av.rwhile
+ *   - SPEC-EXP-AV: an AV-based expression specializer (the step-2 deliverable)
+ *
+ * Annotated value (AV):
+ *   ('S . v)            static value v
+ *   ('D . code)         dynamic, residual expression code
+ *   ('C . (av1 . av2))  partially-static cons
+ * Store slot Vl[k] holds an AV (dynamic slots are ('D . ('var . k))).
+ *)
+
+(* ===== Partial store ops (identical to spec.rwhile) ===== *)
+
+(* Hygiene-clean: AUX's working set is threaded through parameters (Elem, Rest,
+   Rev, Cnt) instead of shared locals. U is a true per-iteration local. *)
+(* CLEAR(X): REVERSIBLE discard -- instead of X^=X (irreversible), PUSH X onto
+ * the garbage stack GARB (X is consumed -> nil; its value is preserved in GARB).
+ * GARB is later embedded into the residual's dead branch by EMBED-GARB, so spec
+ * loses no information and runs store-clean.  GARB is shared (declared in main). *)
+macro CLEAR(X)
+  GARB <= cons X GARB
+
+macro LOOKUP(Vl,J,X)
+  AUX(Vl,J,Elem,Rest,Rev,Cnt);
+  X ^= Elem;
+  INV-AUX(Vl,J,Elem,Rest,Rev,Cnt)
+
+macro UPDATE(Vl,J,X)
+  AUX(Vl,J,Elem,Rest,Rev,Cnt);
+  Elem ^= X;
+  INV-AUX(Vl,J,Elem,Rest,Rev,Cnt)
+
+macro AUX(Vl,J,Elem,Rest,Rev,Cnt)
+  from (=? Cnt nil) loop
+    cons U Vl <= Vl;
+    Rev <= cons U Rev;
+    Cnt <= cons nil Cnt
+  until (=? Cnt J);
+  cons Elem Rest <= Vl
+
+(* ===== AV algebra (identical to av.rwhile) ===== *)
+
+macro AV-HD(A, R)
+  cons T V <= A;
+  CT ^= =? T 'S;
+  if =? T 'S then
+    cons H Tl <= V;
+    CLEAR(Tl);
+    R <= cons 'S H;
+    T ^= 'S
+  else
+    CC ^= =? T 'C;
+    if =? T 'C then
+      cons A1 A2 <= V;
+      CLEAR(A2);
+      R <= A1;
+      T ^= 'C
+    else
+      R <= cons 'D (cons 'hd V);
+      T ^= 'D
+    fi CC;
+    CLEAR(CC)
+  fi CT;
+  CLEAR(CT)
+
+macro AV-TL(A, R)
+  cons T V <= A;
+  CT ^= =? T 'S;
+  if =? T 'S then
+    cons H Tl <= V;
+    CLEAR(H);
+    R <= cons 'S Tl;
+    T ^= 'S
+  else
+    CC ^= =? T 'C;
+    if =? T 'C then
+      cons A1 A2 <= V;
+      CLEAR(A1);
+      R <= A2;
+      T ^= 'C
+    else
+      R <= cons 'D (cons 'tl V);
+      T ^= 'D
+    fi CC;
+    CLEAR(CC)
+  fi CT;
+  CLEAR(CT)
+
+(* AV-PAIRP(A, R): partial-static `pair? A`.
+ *  - static ('S.v)            -> statically known bool ('S.(nil.nil)) / ('S.nil)
+ *  - partial-static cons ('C) -> definitely a cons -> static TRUE ('S.(nil.nil))
+ *  - dynamic ('D.code)        -> residual ('D.('pairp.code))
+ * A is consumed (like AV-HD/AV-TL). *)
+macro AV-PAIRP(A, R)
+  cons T V <= A;
+  PpS ^= =? T 'S;
+  if =? T 'S then
+    PpB ^= pair? V;            (* PpB = (nil.nil) if V is a cons else nil; V preserved *)
+    R <= cons 'S PpB;          (* R = ('S . bool); PpB consumed *)
+    CLEAR(V);                    (* clear the static value *)
+    T ^= 'S
+  else
+    PpC ^= =? T 'C;
+    if =? T 'C then
+      CLEAR(V);                  (* discard (a1.a2): a 'C is always a cons *)
+      R <= cons 'S (nil.nil);  (* static TRUE *)
+      T ^= 'C
+    else
+      R <= cons 'D (cons 'pairp V);   (* dynamic: residual pair?; V consumed *)
+      T ^= 'D
+    fi PpC;
+    CLEAR(PpC)
+  fi PpS;
+  CLEAR(PpS)
+
+macro AV-CONS(A1, A2, R)
+  cons T1 V1 <= A1;
+  cons T2 V2 <= A2;
+  S1 ^= =? T1 'S;
+  S2 ^= =? T2 'S;
+  Both ^= nil;
+  if S1 then
+    if S2 then Both ^= (nil.nil) fi S2
+  fi S1;
+  CBoth ^= Both;
+  if Both then
+    R <= cons 'S (cons V1 V2);
+    T1 ^= 'S; T2 ^= 'S
+  else
+    A1 <= cons T1 V1;
+    A2 <= cons T2 V2;
+    R <= cons 'C (cons A1 A2)
+  fi CBoth;
+  CLEAR(CBoth);
+  CLEAR(Both);
+  CLEAR(S1);
+  CLEAR(S2)
+
+macro AV-LIFT(A, Code)
+  A <= cons A nil;
+  from (=? A' nil) loop
+    AV-LIFT-STEP(A, A', RSt)
+  until (=? A nil);
+  cons A nil <= A';
+  cons Code nil <= RSt
+
+macro AV-LIFT-STEP(Wk, Wk', RSt)
+  cons (cons LfTag LfPay) Wk <= Wk;
+  if =? LfTag 'S then
+    LfPayC ^= LfPay;
+    RSt <= cons (cons 'val LfPayC) RSt
+  else
+   if =? LfTag 'D then
+     LfPayC ^= LfPay;
+     RSt <= cons LfPayC RSt
+   else
+    if =? LfTag 'C then
+      LfTag ^= 'C; LfTag ^= 'CB;
+      cons LfX LfY <= LfPay;
+      Wk <= cons LfX (cons LfY (cons ('CE . nil) Wk));
+      CLEAR(LfX); CLEAR(LfY)
+    else
+     if =? LfTag 'CE then
+       LfTag ^= 'CE; LfTag ^= 'C;
+       cons LfY (cons LfX (cons ('CB . nil) Wk')) <= Wk';
+       LfPay <= cons LfX LfY;
+       cons LfQ (cons LfP RSt) <= RSt;
+       RSt <= cons (cons 'cons (cons LfP LfQ)) RSt
+     else
+       'error <= '9
+     fi =? LfTag 'C
+    fi =? LfTag 'CB
+   fi =? LfTag 'D
+  fi =? LfTag 'S;
+  Wk' <= cons (cons LfTag LfPay) Wk'
+
+(* AV-UNCONS(A, A1, A2): split a cons-shaped AV into its two components
+ * ('C/'S-cons split; 'D symbolic). Used for partially-static pattern reads. *)
+macro AV-UNCONS(A, A1, A2)
+  cons T V <= A;
+  CUs ^= =? T 'S;
+  if =? T 'S then
+    (* A static value is splittable only if it is actually a cons.  Splitting a
+     * static non-cons (atom/nil) is a static pattern-match FAILURE (dead/impossible
+     * position during PE); produce a degenerate ('S.nil) split instead of crashing
+     * on `cons H Tl <= nil`. *)
+    CUp ^= pair? V;
+    if CUp then
+      cons H Tl <= V;
+      A1 <= cons 'S H;
+      A2 <= cons 'S Tl
+    else
+      CLEAR(V);
+      A1 <= cons 'S nil;
+      A2 <= cons 'S nil
+    fi CUp;
+    CLEAR(CUp);
+    T ^= 'S
+  else
+    CUc ^= =? T 'C;
+    if =? T 'C then
+      cons A1 A2 <= V;
+      T ^= 'C
+    else
+      Vc ^= V;
+      A1 <= cons 'D (cons 'hd V);
+      A2 <= cons 'D (cons 'tl Vc);
+      T ^= 'D
+    fi CUc;
+    CLEAR(CUc)
+  fi CUs;
+  CLEAR(CUs)
+
+macro AV-EQ(A1, A2, R)
+  cons T1 V1 <= A1;
+  cons T2 V2 <= A2;
+  BothS ^= nil;
+  if =? T1 'S then
+    if =? T2 'S then BothS ^= (nil.nil) fi =? T2 'S
+  fi =? T1 'S;
+  CBothS ^= BothS;
+  if BothS then
+    EqRes ^= =? V1 V2;
+    R <= cons 'S EqRes;
+    CLEAR(V1); CLEAR(V2);
+    T1 ^= 'S; T2 ^= 'S
+  else
+    A1 <= cons T1 V1;
+    A2 <= cons T2 V2;
+    AV-LIFT(A1, C1);
+    AV-LIFT(A2, C2);
+    CLEAR(A1); CLEAR(A2);
+    R <= cons 'D (cons 'eq (cons C1 C2))
+  fi CBothS;
+  CLEAR(CBothS);
+  CLEAR(BothS)
+
+(* MAKE-SEQ(RCode, Cmd): fold a reverse-ordered residual list into one 'seq
+ * command (execution order = oldest first). RCode must be non-empty. *)
+macro MAKE-SEQ(RCode, Cmd)
+  from (=? Cmd nil) loop
+    cons MsC RCode <= RCode;
+    MsNil ^= =? Cmd nil;
+    if =? Cmd nil then
+      Cmd ^= MsC
+    else
+      Cmd <= cons 'seq (cons MsC Cmd)
+    fi MsNil;
+    CLEAR(MsNil);
+    CLEAR(MsC)
+  until (=? RCode nil)
+
+(* ASSEMBLE-FP1(I', J', CompSrc): build the residual program comp_src from the
+ * post-specialization store Vl and residual list RCode (both in scope).
+ *   materialize(J')  = J' <= lift(Vl[J'])   (rebuild the output var from its AV;
+ *                       runs LAST, so prepend it to the reverse-ordered RCode)
+ *   body            = MAKE-SEQ(RCode)
+ *   CompSrc         = (('var.I') . (body . ('var.J')))   (p2d program form)
+ * I' and J' are variables holding the read/write variable indices; both preserved. *)
+macro ASSEMBLE-FP1(I', J', CompSrc)
+  LOOKUP(Vl, J', AsAV);                 (* AsAV = output slot AV (copy) *)
+  AV-LIFT(AsAV, AsCode);                (* AsCode = residual code; AsAV preserved *)
+  LOOKUP(Vl, J', AsAV);                 (* clear AsAV (XOR same value -> nil) *)
+  AsJ ^= J';
+  RCode <= cons (cons 'rep (cons (cons 'var AsJ) AsCode)) RCode;
+  MAKE-SEQ(RCode, AsBody);
+  AsI ^= I';
+  AsJ2 ^= J';
+  CompSrc <= cons (cons 'var AsI) (cons AsBody (cons 'var AsJ2))
+
+(* AV-INIT(N, Vl): Vl := a store of N AV slots, each static-nil ('S.nil).
+ * (The specialized program's variables all start nil = statically-known nil;
+ * only the read-variable slot is later overwritten with the partial input AV.)
+ * N is a unary count (0=nil, 1=(nil.nil), ...); it is preserved. *)
+macro AV-INIT(N, Vl)
+  from (=? AiK nil) loop
+    Vl <= cons (cons 'S nil) Vl;
+    AiK <= cons nil AiK
+  until (=? AiK N);
+  AiK ^= N
+
+(* DYNAMICIZE-ALL(Vl, RCode): make every store slot dynamic & self-referential
+ * ('D.('var.k)), MATERIALISING any static-non-nil or partial-static slot first
+ * (emit `('var.k) <= lift(slot)` into RCode) so that a following residual
+ * dynamic region (a residualised cond/loop) sees the correct runtime value.
+ * Slots already static-nil or dynamic need no materialisation.  Slot order is
+ * preserved.  Conservative (dynamicises the whole store) but sound: it stops
+ * stale static values from leaking past a dynamic branch.  Vl must be non-empty. *)
+macro DYNAMICIZE-ALL(Vl, RCode)
+  DaK ^= nil;                        (* running index (unary) *)
+  DaRev ^= nil;                      (* reversed accumulator of new slots *)
+  from (=? DaRev nil) loop
+    cons DaSlot Vl <= Vl;            (* pop old slot k; Vl = rest *)
+    cons DaT DaV <= DaSlot;          (* slot = (DaT . DaV) *)
+    DaMat ^= nil;
+    if =? DaT 'S then
+      if =? DaV nil else DaMat ^= (nil.nil) fi =? DaV nil
+    fi =? DaT 'S;
+    if =? DaT 'C then DaMat ^= (nil.nil) fi =? DaT 'C;
+    DaSlot <= cons DaT DaV;          (* reassemble slot (DaT,DaV consumed) *)
+    if DaMat then
+      DaKc ^= DaK;
+      AV-LIFT(DaSlot, DaCode);       (* DaSlot preserved; DaCode = lifted code *)
+      RCode <= cons (cons 'rep (cons (cons 'var DaKc) DaCode)) RCode
+    fi DaMat;
+    CLEAR(DaMat);
+    cons DaOt DaOv <= DaSlot; CLEAR(DaOt); CLEAR(DaOv);   (* clear old slot *)
+    DaKc2 ^= DaK;
+    DaRev <= cons (cons 'D (cons 'var DaKc2)) DaRev;
+    DaK <= cons nil DaK
+  until (=? Vl nil);
+  from (=? Vl nil) loop
+    cons DaRS DaRev <= DaRev;
+    Vl <= cons DaRS Vl
+  until (=? DaRev nil);
+  CLEAR(DaK)
+
+(* ===== AV-based expression specializer ===== *)
+
+(* SPEC-EXP-AV(E, RE): RE := AV result of specializing expression E against the
+ * AV store Vl.  E is preserved (shell reconstructed), like spec.rwhile's
+ * SPEC-EXP. Stack machine: Cd = work stack, Cd' = done stack, RSt = AV results. *)
+macro SPEC-EXP-AV(E, RE)
+  E <= cons E nil;
+  from (=? E' nil) loop
+    SPEC-EXP-AV-STEP(E, E', RSt)
+  until (=? E nil);
+  cons E nil <= E';
+  cons RE nil <= RSt
+
+macro SPEC-EXP-AV-STEP(Cd, Cd', RSt)
+  cons (cons ETag EArg) Cd <= Cd;
+  if =? ETag 'var then
+    (* variable: push its store AV (LOOKUP is non-destructive) *)
+    LOOKUP(Vl, EArg, SX);
+    RSt <= cons SX RSt
+  else
+   if =? ETag 'val then
+     (* literal: static AV ('S . v) *)
+     EArgCopy ^= EArg;
+     RSt <= cons (cons 'S EArgCopy) RSt
+   else
+    if =? ETag 'cons then
+      ETag ^= 'cons; ETag ^= 'consB;
+      cons E1 E2 <= EArg;
+      Cd <= cons E1 (cons E2 (cons ('consE . nil) Cd))
+    else
+     if =? ETag 'consE then
+       ETag ^= 'consE; ETag ^= 'cons;
+       cons E2 (cons E1 (cons ('consB . nil) Cd')) <= Cd';
+       EArg <= cons E1 E2;
+       cons R2 (cons R1 RSt) <= RSt;
+       AV-CONS(R1, R2, Rc);
+       RSt <= cons Rc RSt
+     else
+      if =? ETag 'hd then
+        ETag ^= 'hd; ETag ^= 'hdB;
+        Cd <= cons EArg (cons ('hdE . nil) Cd)
+      else
+       if =? ETag 'hdE then
+         ETag ^= 'hdE; ETag ^= 'hd;
+         cons EArg (cons ('hdB . nil) Cd') <= Cd';
+         cons R1 RSt <= RSt;
+         AV-HD(R1, Rh);
+         RSt <= cons Rh RSt
+       else
+        if =? ETag 'tl then
+          ETag ^= 'tl; ETag ^= 'tlB;
+          Cd <= cons EArg (cons ('tlE . nil) Cd)
+        else
+         if =? ETag 'tlE then
+           ETag ^= 'tlE; ETag ^= 'tl;
+           cons EArg (cons ('tlB . nil) Cd') <= Cd';
+           cons R1 RSt <= RSt;
+           AV-TL(R1, Rt);
+           RSt <= cons Rt RSt
+         else
+          if =? ETag 'eq then
+            ETag ^= 'eq; ETag ^= 'eqB;
+            cons E1 E2 <= EArg;
+            Cd <= cons E1 (cons E2 (cons ('eqE . nil) Cd))
+          else
+           if =? ETag 'eqE then
+             ETag ^= 'eqE; ETag ^= 'eq;
+             cons E2 (cons E1 (cons ('eqB . nil) Cd')) <= Cd';
+             EArg <= cons E1 E2;
+             cons R2 (cons R1 RSt) <= RSt;
+             AV-EQ(R1, R2, Re);
+             RSt <= cons Re RSt
+           else
+            if =? ETag 'pairp then
+              ETag ^= 'pairp; ETag ^= 'pairpB;
+              Cd <= cons EArg (cons ('pairpE . nil) Cd)
+            else
+             if =? ETag 'pairpE then
+               ETag ^= 'pairpE; ETag ^= 'pairp;
+               cons EArg (cons ('pairpB . nil) Cd') <= Cd';
+               cons R1 RSt <= RSt;
+               AV-PAIRP(R1, Rp);
+               RSt <= cons Rp RSt
+             else
+               'error <= '0
+             fi =? ETag 'pairp
+            fi =? ETag 'pairpB
+           fi =? ETag 'eq
+          fi =? ETag 'eqB
+         fi =? ETag 'tl
+        fi =? ETag 'tlB
+       fi =? ETag 'hd
+      fi =? ETag 'hdB
+     fi =? ETag 'cons
+    fi =? ETag 'consB
+   fi =? ETag 'val
+  fi =? ETag 'var;
+  Cd' <= cons (cons ETag EArg) Cd'
+
+(* ===== AV pattern helpers (for 'rep), ported from spec.rwhile =====
+ * Store slots are AVs: static ('S.v), dynamic ('D.('var.k)).  These handle
+ * 'var, 'val and one level of 'cons (the SIMPLE forms). *)
+
+macro PAT-LEAF-STATIC-AV(PP, Stat)
+  if =? (hd PP) 'var then
+    cons PLStg PLSag <= PP;
+    LOOKUP(Vl, PLSag, PLSsv);
+    Stat ^= =? (hd PLSsv) 'S;
+    CLEAR(PLSsv);
+    PP <= cons PLStg PLSag
+  else
+    Stat ^= (nil.nil)
+  fi =? (hd PP) 'var
+
+macro CHECK-PAT-STATIC-AV(PP, Stat)
+  if =? (hd PP) 'cons then
+    cons CPStg CPSag <= PP;
+    cons CPSp1 CPSp2 <= CPSag;
+    PAT-LEAF-STATIC-AV(CPSp1, CPS1);
+    PAT-LEAF-STATIC-AV(CPSp2, CPS2);
+    if CPS1 then
+      if CPS2 then Stat ^= (nil.nil) fi CPS2
+    fi CPS1;
+    CLEAR(CPS1);
+    CLEAR(CPS2);
+    CPSag <= cons CPSp1 CPSp2;
+    PP <= cons CPStg CPSag
+  else
+    PAT-LEAF-STATIC-AV(PP, Stat)
+  fi =? (hd PP) 'cons
+
+(* PAT-READ-LEAF-AV: read a static leaf value into PV; set 'var slot to dynamic. *)
+macro PAT-READ-LEAF-AV(PP, PV)
+  if =? (hd PP) 'var then
+    cons PRLtg PRLag <= PP;
+    LOOKUP(Vl, PRLag, PRLsv);     (* PRLsv = ('S . v) *)
+    PV ^= tl PRLsv;               (* PV = v *)
+    UPDATE(Vl, PRLag, PRLsv);     (* clear slot to nil *)
+    CLEAR(PRLsv);               (* discard old AV *)
+    PRLagc ^= PRLag;
+    PRLsv <= cons 'D (cons 'var PRLagc);
+    UPDATE(Vl, PRLag, PRLsv);     (* slot = ('D.('var.k))  (PRLsv preserved) *)
+    cons PRLdd PRLdr <= PRLsv; CLEAR(PRLdd); CLEAR(PRLdr);
+    PP <= cons PRLtg PRLag
+  else
+    PV ^= tl PP
+  fi =? (hd PP) 'var
+
+macro PAT-READ-SIMPLE-AV(PP, PV)
+  if =? (hd PP) 'cons then
+    cons PRStg PRSag <= PP;
+    cons PRSp1 PRSp2 <= PRSag;
+    PAT-READ-LEAF-AV(PRSp1, PRSv1);
+    PAT-READ-LEAF-AV(PRSp2, PRSv2);
+    PV <= cons PRSv1 PRSv2;
+    PRSag <= cons PRSp1 PRSp2;
+    PP <= cons PRStg PRSag
+  else
+    PAT-READ-LEAF-AV(PP, PV)
+  fi =? (hd PP) 'cons
+
+(* PAT-WRITE-LEAF-AV: write static value PV into 'var slot as ('S.PV); 'dynamic
+ * marker sets the slot dynamic instead. *)
+macro PAT-WRITE-LEAF-AV(PP, PV)
+  if =? (hd PP) 'var then
+    cons PWLtg PWLag <= PP;
+    LOOKUP(Vl, PWLag, PWLsv);
+    UPDATE(Vl, PWLag, PWLsv);     (* clear slot to nil *)
+    CLEAR(PWLsv);
+    IsDyn ^= =? PV 'dynamic;
+    if IsDyn then
+      PWLagc ^= PWLag;
+      PWLsv <= cons 'D (cons 'var PWLagc);
+      UPDATE(Vl, PWLag, PWLsv);
+      cons PWLdd PWLdr <= PWLsv; CLEAR(PWLdd); CLEAR(PWLdr);
+      PV ^= 'dynamic
+    else
+      PWLsv <= cons 'S PV;        (* slot = ('S . PV) *)
+      UPDATE(Vl, PWLag, PWLsv);
+      cons PWLss PWLsval <= PWLsv; CLEAR(PWLss); CLEAR(PWLsval)
+    fi IsDyn;
+    CLEAR(IsDyn);
+    PP <= cons PWLtg PWLag
+  else
+    CLEAR(PV)
+  fi =? (hd PP) 'var
+
+macro PAT-WRITE-SIMPLE-AV(PP, PV)
+  if =? (hd PP) 'cons then
+    cons PWStg PWSag <= PP;
+    cons PWSp1 PWSp2 <= PWSag;
+    cons PWSv1 PWSv2 <= PV;
+    PAT-WRITE-LEAF-AV(PWSp1, PWSv1);
+    PAT-WRITE-LEAF-AV(PWSp2, PWSv2);
+    PWSag <= cons PWSp1 PWSp2;
+    PP <= cons PWStg PWSag
+  else
+    PAT-WRITE-LEAF-AV(PP, PV)
+  fi =? (hd PP) 'cons
+
+macro PAT-CLR-LEAF-AV(PP)
+  if =? (hd PP) 'var then
+    cons PCLtg PCLag <= PP;
+    LOOKUP(Vl, PCLag, PCLsv);
+    UPDATE(Vl, PCLag, PCLsv);
+    CLEAR(PCLsv);
+    PCLagc ^= PCLag;
+    PCLsv <= cons 'D (cons 'var PCLagc);
+    UPDATE(Vl, PCLag, PCLsv);
+    cons PCLdd PCLdr <= PCLsv; CLEAR(PCLdd); CLEAR(PCLdr);
+    PP <= cons PCLtg PCLag
+  fi =? (hd PP) 'var
+
+macro PAT-CLR-SIMPLE-AV(PP)
+  if =? (hd PP) 'cons then
+    cons PCStg PCSag <= PP;
+    cons PCSp1 PCSp2 <= PCSag;
+    PAT-CLR-LEAF-AV(PCSp1);
+    PAT-CLR-LEAF-AV(PCSp2);
+    PCSag <= cons PCSp1 PCSp2;
+    PP <= cons PCStg PCSag
+  else
+    PAT-CLR-LEAF-AV(PP)
+  fi =? (hd PP) 'cons
+
+(* ===== AV-aware pattern read/write (for partially-static 'rep) =====
+ * Read a pattern into an AV (consuming its vars); write an AV into a pattern.
+ * cons patterns split/combine via AV-CONS / AV-UNCONS, so partially-static
+ * structures (e.g. (prog.data)) are handled without losing the static part. *)
+
+macro PAT-READ-LEAF-AV2(P, RA)
+  if =? (hd P) 'var then
+    cons PRLt PRLi <= P;
+    LOOKUP(Vl, PRLi, PRLs);     (* PRLs = current slot AV *)
+    RA ^= PRLs;                 (* RA = slot AV (PRLs preserved) *)
+    UPDATE(Vl, PRLi, PRLs);     (* slot ^= PRLs -> nil *)
+    CLEAR(PRLs);               (* discard old slot AV *)
+    PRLs <= cons 'S nil;        (* consumed var becomes static nil *)
+    UPDATE(Vl, PRLi, PRLs);     (* slot = ('S.nil) *)
+    cons PRLss PRLsv <= PRLs; CLEAR(PRLss); CLEAR(PRLsv);
+    P <= cons PRLt PRLi
+  else
+    PRLv ^= tl P;
+    RA <= cons 'S PRLv
+  fi =? (hd P) 'var
+
+macro PAT-READ-AV(P, RA)
+  if =? (hd P) 'cons then
+    cons PRtg PRag <= P;
+    cons PRp1 PRp2 <= PRag;
+    PAT-READ-LEAF-AV2(PRp1, PRa1);
+    PAT-READ-LEAF-AV2(PRp2, PRa2);
+    AV-CONS(PRa1, PRa2, RA);
+    PRag <= cons PRp1 PRp2;
+    P <= cons PRtg PRag
+  else
+    PAT-READ-LEAF-AV2(P, RA)
+  fi =? (hd P) 'cons
+
+(* PAT-READ-ITER(P, RA): like PAT-READ-AV but for ARBITRARY-DEPTH (nested)
+ * patterns.  Macros cannot recurse, so this is an iterative worklist tree-fold
+ * (modeled on AV-LIFT's begin/end markers): it reads pattern P (preserved) and
+ * builds its AV RA bottom-up, combining nested conses via AV-CONS.  Depth-1
+ * PAT-READ-AV mis-reads a nested sub-cons as a static literal ('S.(tl P)) via
+ * PAT-READ-LEAF-AV2's leaf else-branch; ASSEMBLE-FP1's nested output pattern
+ * (cons (cons 'var I) (cons Body (cons 'var J))) needs the depth-general read,
+ * else the residual bakes the inner cons as a constant and never assembles. *)
+macro PAT-READ-ITER-STEP(Wk, Wk', PrSt)
+  cons PrP Wk <= Wk;
+  if =? (hd PrP) 'cons then
+    cons PrTg PrAg <= PrP;
+    PrTg ^= 'cons; PrTg ^= 'consB;            (* tag 'cons -> 'consB (placeholder) *)
+    cons PrX PrY <= PrAg;
+    Wk <= cons PrX (cons PrY (cons (cons 'consE nil) Wk));
+    CLEAR(PrX); CLEAR(PrY);
+    PrP <= cons PrTg PrAg                       (* PrP = ('consB . nil) *)
+  else
+   if =? (hd PrP) 'consE then
+    cons PrTg2 PrAg2 <= PrP;                    (* PrTg2='consE, PrAg2=nil *)
+    PrTg2 ^= 'consE; PrTg2 ^= 'cons;            (* tag 'consE -> 'cons *)
+    cons PrY (cons PrX (cons (cons 'consB nil) Wk')) <= Wk';
+    PrAg2 <= cons PrX PrY;
+    PrP <= cons PrTg2 PrAg2;                    (* reassembled ('cons.(PrX.PrY)) *)
+    cons PrA2 (cons PrA1 PrSt) <= PrSt;         (* pop child AVs (Y on top, then X) *)
+    AV-CONS(PrA1, PrA2, PrAc);
+    PrSt <= cons PrAc PrSt
+   else
+    PAT-READ-LEAF-AV2(PrP, PrLa);               (* var/val leaf; PrP preserved *)
+    PrSt <= cons PrLa PrSt
+   fi =? (hd PrP) 'cons                         (* after 'consE: tag='cons (T); leaf: var/val (F) *)
+  fi =? (hd PrP) 'consB;                        (* after 'cons: tag='consB (T); else (F) *)
+  Wk' <= cons PrP Wk'
+
+macro PAT-READ-ITER(P, RA)
+  P <= cons P nil;
+  from (=? P' nil) loop
+    PAT-READ-ITER-STEP(P, P', PrSt)
+  until (=? P nil);
+  cons P nil <= P';
+  cons RA nil <= PrSt
+
+(* SET-SLOT(Vl, K, V): replace store slot K's contents with V (V consumed; the
+ * previous AV is discarded).  Encapsulates the recurring LOOKUP/UPDATE store-
+ * replace dance.  NOTE: still uses CLEAR (non-reversible) to discard the old slot
+ * value and the V-shell -- step (b) makes this reversible here, in one place. *)
+macro SET-SLOT(Vl, K, V)
+  LOOKUP(Vl, K, SsoOld);
+  UPDATE(Vl, K, SsoOld);
+  CLEAR(SsoOld);
+  SsoOld <= V;
+  UPDATE(Vl, K, SsoOld);
+  cons SsoT SsoV <= SsoOld; CLEAR(SsoT); CLEAR(SsoV)
+
+macro PAT-WRITE-LEAF-AV2(P, WA)
+  if =? (hd P) 'var then
+    cons PWLt PWLi <= P;
+    SET-SLOT(Vl, PWLi, WA);
+    P <= cons PWLt PWLi
+  else
+    CLEAR(WA)
+  fi =? (hd P) 'var
+
+macro PAT-WRITE-AV(P, WA)
+  if =? (hd P) 'cons then
+    cons PWtg PWag <= P;
+    cons PWp1 PWp2 <= PWag;
+    AV-UNCONS(WA, PWa1, PWa2);
+    PAT-WRITE-LEAF-AV2(PWp1, PWa1);
+    PAT-WRITE-LEAF-AV2(PWp2, PWa2);
+    PWag <= cons PWp1 PWp2;
+    P <= cons PWtg PWag
+  else
+    PAT-WRITE-LEAF-AV2(P, WA)
+  fi =? (hd P) 'cons
+
+(* TEMP-IDX(T): T := the reserved unary temp-variable index 100, used as the
+ * scratch slot for swap-via-temp.  100 is above every interpreted program's
+ * variable indices and within ri.rwhile's store, so it never collides. *)
+macro TEMP-IDX(TmpT)
+  TmpT ^= (nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.nil))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+
+(* SET-SELF-SLOT(I): set store slot I to the self-referential dynamic ('D.('var.I)),
+ * re-establishing the no-alias invariant after a runtime move/swap.  I preserved. *)
+macro SET-SELF-SLOT(SsI)
+  LOOKUP(Vl, SsI, SsOld); UPDATE(Vl, SsI, SsOld); CLEAR(SsOld);   (* clear slot *)
+  SsIc ^= SsI;
+  SsNew <= cons 'D (cons 'var SsIc);
+  UPDATE(Vl, SsI, SsNew);                                          (* slot := ('D.('var.I)) *)
+  cons SsN1 SsN2 <= SsNew; CLEAR(SsN1);
+  cons SsN3 SsN4 <= SsN2; CLEAR(SsN3); CLEAR(SsN4)
+
+(* SWAP-VIA-TEMP(I1, I2, RCode): realize a runtime SWAP of variables V_I1 and V_I2
+ * (a transposition of two live dynamic values) reversibly using a temp variable
+ * 'tmp (an atom index, distinct from every unary program-variable index, so it
+ * cannot collide).  A plain `V_I1<=V_I2; V_I2<=V_I1` is irreversible (both targets
+ * are non-nil at runtime); the temp breaks the 2-cycle:
+ *     tmp <= V_I1 ;  V_I1 <= V_I2 ;  V_I2 <= tmp
+ * RCode is prepended (save, move, restore) so the global reverse yields that order.
+ * Both slots are reset to self-referential dynamics.  I1, I2 preserved. *)
+macro SWAP-VIA-TEMP(SvI1, SvI2, RCode)
+  TEMP-IDX(SvT1);
+  SvSi1 ^= SvI1;
+  RCode <= cons (cons 'rep (cons (cons 'var SvT1) (cons 'var SvSi1))) RCode;   (* tmp <= V_I1 *)
+  SvMi1 ^= SvI1; SvMi2 ^= SvI2;
+  RCode <= cons (cons 'rep (cons (cons 'var SvMi1) (cons 'var SvMi2))) RCode;  (* V_I1 <= V_I2 *)
+  TEMP-IDX(SvT2);
+  SvRi2 ^= SvI2;
+  RCode <= cons (cons 'rep (cons (cons 'var SvRi2) (cons 'var SvT2))) RCode;   (* V_I2 <= tmp *)
+  SET-SELF-SLOT(SvI1);
+  SET-SELF-SLOT(SvI2)
+
+(* ===== Structural AV pattern write (Stage C, for fp1) =====
+ * Write AV WA into pattern P, residualizing into RCode the ONE case that cannot
+ * be done reversibly in the AV domain: splitting a *pure dynamic* value into a
+ * cons pattern (symbolic hd/tl would read the dynamic value twice = irreversible).
+ *  - P var/val leaf      -> slot := WA (alias / static), no residual.
+ *  - P cons, WA cons-shaped ('C / 'S-cons) -> AV-UNCONS + write components,
+ *    no residual (this is the partially-static INPUT SPLIT: static parts kept).
+ *  - P cons, WA pure 'D leaf -> emit residual `P <= <code of WA>` and set P's
+ *    vars dynamic.  The residual reuses the source variable indices carried by
+ *    the 'D marker (same namespace as residualized 'ass), so no fresh allocator.
+ * One-level on the cons LHS, like PAT-WRITE-SIMPLE-AV (macros cannot recurse). *)
+macro PAT-WRITE-STRUCT(P, WA, RCode)
+  if =? (hd P) 'cons then
+    WSisD ^= =? (hd WA) 'D;
+    if WSisD then
+      (* dynamic cons-split: residualize the rep, set P's vars dynamic *)
+      cons WSt WScode <= WA;            (* WA = ('D . code); WA -> nil *)
+      WSt ^= 'D;
+      PAT-CLR-SIMPLE-AV(P);             (* P's vars -> ('D.('var.k)); P preserved *)
+      WSPc ^= P;                        (* copy P for the residual LHS *)
+      RCode <= cons (cons 'rep (cons WSPc WScode)) RCode
+    else
+      cons WStg WSag <= P;
+      cons WSp1 WSp2 <= WSag;
+      AV-UNCONS(WA, WSa1, WSa2);        (* WA is 'C or 'S here: real split *)
+      (* Detect a TRANSPOSITION of the two leaf variables: both leaves are vars
+       * (idx i1,i2) and each sub-AV is the dynamic reference to the OTHER leaf's
+       * variable (WSa1=('D.('var.i2)), WSa2=('D.('var.i1)), i1<>i2).  Two
+       * sequential REHOMEs would emit the broken in-place `Vi1<=Vi2; Vi2<=Vi1`
+       * (both targets non-nil at runtime); realize it as a swap via a temp var. *)
+      WSxp ^= nil;
+      if =? (hd WSp1) 'var then
+       if =? (hd WSp2) 'var then
+        if =? (hd WSa1) 'D then
+         if =? (hd (tl WSa1)) 'var then
+          if =? (hd WSa2) 'D then
+           if =? (hd (tl WSa2)) 'var then
+            if =? (tl (tl WSa1)) (tl WSp2) then
+             if =? (tl (tl WSa2)) (tl WSp1) then
+              if =? (tl WSp1) (tl WSp2) else WSxp ^= (nil.nil) fi =? (tl WSp1) (tl WSp2)
+             fi =? (tl (tl WSa2)) (tl WSp1)
+            fi =? (tl (tl WSa1)) (tl WSp2)
+           fi =? (hd (tl WSa2)) 'var
+          fi =? (hd WSa2) 'D
+         fi =? (hd (tl WSa1)) 'var
+        fi =? (hd WSa1) 'D
+       fi =? (hd WSp2) 'var
+      fi =? (hd WSp1) 'var;
+      if WSxp then
+        cons WSxt1 WSxi1 <= WSp1;
+        cons WSxt2 WSxi2 <= WSp2;
+        SWAP-VIA-TEMP(WSxi1, WSxi2, RCode);
+        WSp1 <= cons WSxt1 WSxi1;
+        WSp2 <= cons WSxt2 WSxi2;
+        CLEAR(WSa1); CLEAR(WSa2)
+      else
+        PAT-WRITE-LEAF-REHOME(WSp1, WSa1, RCode);
+        PAT-WRITE-LEAF-REHOME(WSp2, WSa2, RCode)
+      fi WSxp;
+      CLEAR(WSxp);
+      WSag <= cons WSp1 WSp2;
+      P <= cons WStg WSag
+    fi WSisD;
+    CLEAR(WSisD)
+  else
+    PAT-WRITE-LEAF-REHOME(P, WA, RCode)
+  fi =? (hd P) 'cons
+
+(* PAT-WRITE-LEAF-REHOME(P, WA, RCode): write AV WA into leaf pattern P (a var),
+ * preserving the NO-ALIAS invariant: a dynamic slot k must reference itself
+ * ('D.('var.k)), never another variable.  If WA is a dynamic-var leaf
+ * ('D.('var.k)) with k <> P's index, we cannot just store it (that aliases var k);
+ * instead emit a runtime MOVE  P <= ('var.k)  into RCode and set the slot to the
+ * self-reference ('D.('var.P)).  Otherwise (static, partial, self-referential, or
+ * non-var-dynamic) store WA directly.  Non-var P: discard WA. *)
+macro PAT-WRITE-LEAF-REHOME(P, WA, RCode)
+  if =? (hd P) 'var then
+    cons RhT RhI <= P;                  (* P = ('var . RhI) *)
+    (* Reh = (WA is ('D.('var.k)) with k <> RhI); WA and RhI preserved *)
+    if =? (hd WA) 'D then
+      if =? (hd (tl WA)) 'var then
+        if =? (tl (tl WA)) RhI else Reh ^= (nil.nil) fi =? (tl (tl WA)) RhI
+      fi =? (hd (tl WA)) 'var
+    fi =? (hd WA) 'D;
+    if Reh then
+      (* re-home: WA = ('D.('var.k)) -> emit move, slot := ('D.('var.RhI)) *)
+      cons RhDt (cons RhVt RhK) <= WA;  (* RhDt='D, RhVt='var, RhK=k; WA=nil *)
+      RhDt ^= 'D; RhVt ^= 'var;
+      LOOKUP(Vl, RhI, RhOld); UPDATE(Vl, RhI, RhOld); CLEAR(RhOld);  (* clear slot *)
+      RhIc ^= RhI;
+      RhNew <= cons 'D (cons 'var RhIc);
+      UPDATE(Vl, RhI, RhNew);           (* slot := ('D.('var.RhI)) *)
+      cons RhN1 RhN2 <= RhNew; CLEAR(RhN1); CLEAR(RhN2);
+      RhI2 ^= RhI;
+      RCode <= cons (cons 'rep (cons (cons 'var RhI2) (cons 'var RhK))) RCode
+    else
+      SET-SLOT(Vl, RhI, WA)             (* store WA directly into the slot *)
+    fi Reh;
+    CLEAR(Reh);
+    P <= cons RhT RhI
+  else
+    CLEAR(WA)
+  fi =? (hd P) 'var
+
+(* PAT-WRITE-ITER(P, WA, RCode): write AV WA into pattern P, handling cons
+ * patterns of ARBITRARY depth (PAT-WRITE-STRUCT only handled depth 1, dropping
+ * the value of any nested cons sub-pattern -- which is exactly ri_fp3's stack
+ * split `cons (cons V1e V2e) St <= St`).  Iterative worklist (macros can't
+ * recurse): a stack WW of (subPattern . subAV) pairs.  Consumes P and WA.
+ *   - subP a var leaf            -> PAT-WRITE-LEAF-REHOME (store/move, no-alias)
+ *   - subP a cons, subAV pure-D  -> residualize the whole split; clear subP's
+ *                                   (depth-1) leaves to self-referential dynamics
+ *   - subP a cons, subAV 'C/'S   -> AV-UNCONS and push the two sub-pairs (spine)
+ * Each step pushes a marker onto WW' so the loop entry test stays well-formed;
+ * WW' is discarded at the end. *)
+macro PAT-WRITE-ITER-STEP(WW, WW', RCode)
+  cons (cons WiP WiA) WW <= WW;          (* pop (WiP . WiA) *)
+  WiCons ^= =? (hd WiP) 'cons;
+  (* A cons pattern whose two immediate leaves are both 'val-literals is a
+   * CONSTANT marker pattern (e.g. ri_fp3's `cons 'consB nil`): it asserts the
+   * value, it does not bind variables.  Treat it as a leaf assertion (discard
+   * the value) rather than splitting it -- splitting would over-decompose and
+   * eventually AV-UNCONS a static atom.  (Nested constants are still split by
+   * the spine and discarded one level down.) *)
+  WiConstP ^= nil;
+  if WiCons then
+    cons WiCt WiCag <= WiP;
+    cons WiCl1 WiCl2 <= WiCag;
+    if =? (hd WiCl1) 'val then
+      if =? (hd WiCl2) 'val then WiConstP ^= (nil.nil) fi =? (hd WiCl2) 'val
+    fi =? (hd WiCl1) 'val;
+    WiCag <= cons WiCl1 WiCl2; WiP <= cons WiCt WiCag
+  fi WiCons;
+  if WiConstP then CLEAR(WiCons) fi WiConstP;  (* constant cons -> handle as leaf *)
+  if WiCons then
+    WiIsD ^= =? (hd WiA) 'D;
+    if WiIsD then
+      (* pure-D split: residualize `WiP <= code`, clear WiP's leaves *)
+      cons WiDt WiDcode <= WiA; WiDt ^= 'D;        (* WiA = ('D.code) -> consume *)
+      PAT-CLR-SIMPLE-AV(WiP);                        (* WiP leaves -> self-ref; WiP preserved *)
+      WiPc ^= WiP;                                   (* copy WiP for the residual LHS *)
+      RCode <= cons (cons 'rep (cons WiPc WiDcode)) RCode;
+      CLEAR(WiP)                                     (* discard consumed WiP *)
+    else
+      (* WiA is 'C or 'S.  'C is always splittable; an 'S value is splittable only
+       * if it is actually a cons.  A var-bearing cons pattern meeting a static
+       * non-cons (atom/nil) is a static pattern-match FAILURE -> dead position;
+       * discard it rather than AV-UNCONS an atom (which would crash). *)
+      WiSnc ^= nil;
+      if =? (hd WiA) 'S then
+        if pair? (tl WiA) else WiSnc ^= (nil.nil) fi pair? (tl WiA)
+      fi =? (hd WiA) 'S;
+      if WiSnc then
+        CLEAR(WiA); CLEAR(WiP)                        (* static match failure: drop *)
+      else
+        (* real split along the spine: uncons WiA, push the two sub-pairs *)
+        cons WiTg WiAg <= WiP; CLEAR(WiTg);          (* drop the 'cons tag *)
+        cons WiP1 WiP2 <= WiAg;
+        AV-UNCONS(WiA, WiA1, WiA2);
+        WW <= cons (cons WiP1 WiA1) (cons (cons WiP2 WiA2) WW)
+      fi WiSnc;
+      CLEAR(WiSnc)
+    fi WiIsD;
+    CLEAR(WiIsD)
+  else
+    (* var leaf *)
+    PAT-WRITE-LEAF-REHOME(WiP, WiA, RCode);          (* WiP preserved, WiA consumed *)
+    CLEAR(WiP)                                       (* discard consumed WiP *)
+  fi WiCons;
+  CLEAR(WiCons);
+  CLEAR(WiConstP);
+  WW' <= cons (nil.nil) WW'                          (* marker: keep loop well-formed *)
+
+macro PAT-WRITE-ITER(P, WA, RCode)
+  WW <= cons (cons P WA) nil;            (* seed worklist; P, WA consumed *)
+  from (=? WW' nil) loop
+    PAT-WRITE-ITER-STEP(WW, WW', RCode)
+  until (=? WW nil);
+  CLEAR(WW')                             (* discard processed markers *)
+
+(* ===== AV-based command specializer (WIP: 'seq and 'ass) =====
+ * SPEC-STEP-AV processes one command; residual commands accumulate in RCode
+ * (reverse order).  Store slots are AVs; a dynamic slot is ('D.('var.k)). *)
+macro SPEC-STEP-AV(Cd, Cd', RCode)
+  cons (cons Tag Arg) Cd <= Cd;
+  if =? Tag 'ass then
+    cons (cons 'var K) E <= Arg;
+    SPEC-EXP-AV(E, RE);
+    cons TRE VRE <= RE;            (* RE -> TRE, VRE  (RE = nil) *)
+    ExpS ^= =? TRE 'S;
+    if ExpS then
+      (* static expression value VRE *)
+      LOOKUP(Vl, K, AVx);
+      UPDATE(Vl, K, AVx);          (* AVx = old slot; slot = nil *)
+      cons TAVx VAVx <= AVx;       (* AVx -> TAVx, VAVx  (AVx = nil) *)
+      if =? TAVx 'S then
+        (* static variable: reversible update of VAVx with VRE *)
+        NewV ^= VRE;
+        CKNil ^= =? VAVx nil;
+        if =? VAVx nil then
+          VAVx ^= NewV
+        else
+          CKNew ^= =? VAVx NewV;
+          if =? VAVx NewV then
+            VAVx ^= NewV; VAVx ^= nil; NewV ^= VRE
+          else
+            if =? NewV nil then NewV ^= VRE else 'error <= '10 fi =? NewV VRE
+          fi CKNew;
+          CLEAR(CKNew)
+        fi CKNil;
+        CLEAR(CKNil);
+        CLEAR(NewV);
+        AVx <= cons TAVx VAVx;     (* reassemble ('S . VAVx') *)
+        UPDATE(Vl, K, AVx)         (* slot = new AV  (AVx preserved) *)
+      else
+        (* dynamic/partial variable, static expr: restore slot, residualize *)
+        AVx <= cons TAVx VAVx;
+        UPDATE(Vl, K, AVx);        (* slot unchanged  (AVx preserved) *)
+        KK ^= K;
+        VREc ^= VRE;
+        RCode <= cons (cons 'ass (cons (cons 'var KK) (cons 'val VREc))) RCode
+      fi =? (hd AVx) 'S;
+      cons TAVx VAVx <= AVx;       (* re-split AVx -> clear  (AVx = nil) *)
+      CLEAR(TAVx); CLEAR(VAVx);
+      CLEAR(VRE);
+      TRE ^= 'S
+    else
+      (* dynamic or partial expr: residualize X ^= lift(RE); slot -> dynamic *)
+      RE <= cons TRE VRE;          (* reassemble RE *)
+      AV-LIFT(RE, LE);             (* AV-LIFT preserves RE *)
+      CLEAR(RE);
+      LOOKUP(Vl, K, AVx);
+      UPDATE(Vl, K, AVx);          (* slot = nil; AVx = old *)
+      CLEAR(AVx);                  (* discard old AV *)
+      KKc ^= K;
+      AVx <= cons 'D (cons 'var KKc);
+      UPDATE(Vl, K, AVx);          (* slot = ('D.('var.K))  (AVx preserved) *)
+      cons TD AVxR <= AVx;         (* re-split -> clear AVx *)
+      CLEAR(TD); CLEAR(AVxR);
+      KK ^= K;
+      RCode <= cons (cons 'ass (cons (cons 'var KK) LE)) RCode
+    fi ExpS;
+    CLEAR(ExpS);
+    Arg <= cons (cons 'var K) E
+  else
+   if =? Tag 'rep then
+     (* Execute the replacement in the AV domain: read R as an AV, write it into
+      * Q.  cons patterns split/combine via AV-UNCONS / AV-CONS, so a partially-
+      * static structure (e.g. (prog.data)) is split without losing the static
+      * part, and a fully-dynamic value flows symbolically (lifted at output). *)
+     cons RpQ RpR <= Arg;
+     PAT-READ-ITER(RpR, RpAV);   (* depth-general read (was PAT-READ-AV, depth-1) *)
+     (* PAT-WRITE-ITER (below) handles arbitrary-depth patterns and, with the
+      * pair? guard, no longer crashes on ri_fp3's static-atom positions. But
+      * wiring it makes full-ri_fp3 fp1 DIVERGE (a static loop in ri_fp3's stack
+      * machine unrolls forever during specialization). It is correct for small
+      * fp1 programs (assemble-fp1 2/3/4 pass when wired). Until the divergence is
+      * fixed, keep PAT-WRITE-STRUCT here so the suite does not hang. *)
+     PAT-WRITE-STRUCT(RpQ, RpAV, RCode);
+     Arg <= cons RpQ RpR
+   else
+    if =? Tag 'cond then
+      cons E (cons C (cons D (cons F nil))) <= Arg;   (* Arg -> E,C,D,F *)
+      SPEC-EXP-AV(E, RE);                              (* E preserved; RE = test AV *)
+      cons TT VT <= RE;
+      AnnT ^= =? TT 'S;
+      if AnnT then
+        (* static test: VT is the boolean; take one branch, drop the other *)
+        CVT ^= VT;
+        if VT then
+          Cd <= cons C Cd;
+          CLEAR(D)
+        else
+          Cd <= cons D Cd;
+          CLEAR(C)
+        fi CVT;
+        CLEAR(CVT);
+        CLEAR(VT); TT ^= 'S;
+        CLEAR(E); CLEAR(F)
+      else
+        (* dynamic test: residualize the whole conditional with lifted test.
+         * The branches may read/modify any variable, so first DYNAMICIZE the
+         * store (materialise static slots, mark all dynamic) — this runs
+         * BEFORE the residual cond (prepend it first), so the residual sees the
+         * correct runtime values and no stale static value leaks past. *)
+        RE <= cons TT VT;
+        AV-LIFT(RE, LE);
+        CLEAR(RE);
+        CLEAR(E);
+        DYNAMICIZE-ALL(Vl, RCode);
+        Arg <= cons LE (cons C (cons D (cons F nil)));
+        Ccond ^= Arg;
+        RCode <= cons (cons 'cond Ccond) RCode;
+        CLEAR(Arg)
+      fi AnnT;
+      CLEAR(AnnT)
+    else
+     if =? Tag 'loop then
+       (* loop = ('loop . (E . (D . (L . (F . nil))))).  Static control unrolls
+        * via an 'lcheck continuation; dynamic control residualizes the loop. *)
+       cons LpE (cons LpD (cons LpL (cons LpF nil))) <= Arg;
+       SPEC-EXP-AV(LpE, LpRE);
+       cons LpTE LpVE <= LpRE;
+       LpCEs ^= =? LpTE 'S;
+       if LpCEs then
+         if LpVE then
+           (* static entry true: run D, then check exit via 'lcheck *)
+           LpEc ^= LpE; LpDc ^= LpD; LpLc ^= LpL; LpFc ^= LpF;
+           LpDp ^= LpD;
+           Cd <= cons LpDp (cons (cons 'lcheck (cons LpEc (cons LpDc (cons LpLc (cons LpFc nil))))) Cd);
+           CLEAR(LpE); CLEAR(LpD); CLEAR(LpL); CLEAR(LpF)
+         else
+           'error <= '40
+         fi LpVE;
+         CLEAR(LpVE);
+         LpTE ^= 'S
+       else
+         (* dynamic entry test: residualize whole loop (entry test lifted).
+          * The body may modify any var, so DYNAMICIZE the store first (runs
+          * before the residual loop), keeping the abstract store consistent. *)
+         LpRE <= cons LpTE LpVE;
+         AV-LIFT(LpRE, LpLEe);
+         CLEAR(LpRE);
+         CLEAR(LpE);
+         DYNAMICIZE-ALL(Vl, RCode);
+         Arg <= cons LpLEe (cons LpD (cons LpL (cons LpF nil)));
+         LpCl ^= Arg;
+         RCode <= cons (cons 'loop LpCl) RCode;
+         CLEAR(Arg)
+       fi LpCEs;
+       CLEAR(LpCEs)
+     else
+      if =? Tag 'lcheck then
+        cons LpE (cons LpD (cons LpL (cons LpF nil))) <= Arg;
+        SPEC-EXP-AV(LpF, LpRF);
+        cons LpTF LpVF <= LpRF;
+        LpCFs ^= =? LpTF 'S;
+        if LpCFs then
+          if LpVF then
+            (* exit test true: loop finished *)
+            CLEAR(LpE); CLEAR(LpD); CLEAR(LpL); CLEAR(LpF)
+          else
+            (* exit test false: run L, then D, then re-check via 'lcheck *)
+            LpEc ^= LpE; LpDc ^= LpD; LpLc ^= LpL; LpFc ^= LpF;
+            LpLp ^= LpL; LpDp ^= LpD;
+            Cd <= cons LpLp (cons LpDp (cons (cons 'lcheck (cons LpEc (cons LpDc (cons LpLc (cons LpFc nil))))) Cd));
+            CLEAR(LpE); CLEAR(LpD); CLEAR(LpL); CLEAR(LpF)
+          fi LpVF;
+          CLEAR(LpVF);
+          LpTF ^= 'S
+        else
+          'error <= '41
+        fi LpCFs;
+        CLEAR(LpCFs)
+      else
+       if =? Tag 'seq then
+         (* push both subcommands onto the work stack; the shell is discarded,
+          * so no seqB/seqE reconstruction is needed (and cond/loop nested in a
+          * seq do not corrupt a shell stack). *)
+         cons C D <= Arg;
+         Cd <= cons C (cons D Cd)
+       else
+         'error <= '1
+       fi =? Tag 'seq
+      fi =? Tag 'lcheck
+     fi =? Tag 'loop
+    fi =? Tag 'cond
+   fi =? Tag 'rep
+  fi =? Tag 'ass;
+  Cd' <= cons (cons Tag Arg) Cd'
+
+(* SPEC-CMD-AV(Cmd): run SPEC-STEP-AV over Cmd; the residual program accumulates
+ * in RCode (reverse order).  Cmd is consumed into the work stack; the shell
+ * (Cd') is discarded (we do not reconstruct the source command — the residual is
+ * what matters).  Note: injectivity embedding of the source is a Stage-C concern. *)
+macro SPEC-CMD-AV(Cmd)
+  Cd <= cons Cmd nil;
+  from (=? Cd' nil) loop
+    SPEC-STEP-AV(Cd, Cd', RCode)
+  until (=? Cd nil);
+  CLEAR(Cd')
+
+(* MKAV(BT, Src, Ic, AVout): build the partial-input AV for the read variable,
+ * BINDING-TIME-AWARE (the fp2 fix; mirrors RWhileRevProj2BT.agda `mkAV`).
+ *   BT = 'S (static input half):  AVout = ('C.(('S.Src).('D.('var.Ic))))
+ *        car static (folded), cdr dynamic (the other input half) -- as in fp1.
+ *   BT = 'D (dynamic input half): AVout = ('D.('var.Ic))
+ *        the whole input variable is dynamic; Src carries no static info.
+ * Consumes BT, Src, Ic.  Under self-application (fp2) BT is itself dynamic, so
+ * the OUTER specializer RESIDUALIZES this branch instead of statically baking
+ * 'S -- exactly the two-level discipline that makes spec_av self-applicable
+ * (the unconditional 'S tag was the fp2 root cause; see RWhileRevProj2BT). *)
+macro MKAV(BT, Src, Ic, AVout)
+  MkS ^= =? BT 'S;
+  if MkS then
+    BT ^= 'S;
+    AVout <= cons 'C (cons (cons 'S Src) (cons 'D (cons 'var Ic)))
+  else
+    BT ^= 'D;
+    CLEAR(Src);
+    AVout <= cons 'D (cons 'var Ic)
+  fi MkS;
+  CLEAR(MkS)
+
+(* ===== Main program ===== *)
+(* First Futamura projection (fp1), now BINDING-TIME-AWARE (self-applicable).
+ * Input  In = (Prog . (BT . Src)), Prog = p2d of the program to specialise
+ *   (= (('var.I') . (Body . ('var.J')))), Src = the static input half, and BT
+ *   = its binding time ('S static / 'D dynamic).  fp1 uses BT='S; under self-
+ *   application (fp2) the inner specialiser's (BT.Src) is dynamic, so MKAV's
+ *   branch on BT residualises rather than baking 'S (the fp2 root cause fix;
+ *   cf. RWhileRevProj2BT.agda).
+ * Output Out = comp_src, the residual program specialised to Src, with the
+ *   other input half left dynamic: [comp_src](d) = [Prog]((Src.d)) when BT='S.
+ * Method: init an N-slot static-nil AV store, set V[I'] to the partial input
+ *   AV = MKAV(BT,Src,I') (BT='S -> ('C.(('S.Src).('D.('var.I'))))), specialise
+ *   Body, and assemble. N is fixed (3 for now; raise for ri_fp3). *)
+
+(* EMBED-GARB(Out): wrap the residual body of Out=(RV.(Body.WV)) in a dead
+ * constant-true conditional `if (nil.nil) then Body else <dead> fi (nil.nil)`,
+ * whose ELSE carries the accumulated GARB as a value literal (a never-run
+ * assignment `var0 ^= GARB`).  [Out](d) is unchanged; GARB exits via the output
+ * here so spec is store-clean without erasure; spec^-1 recovers the discarded
+ * info from the dead branch. *)
+macro EMBED-GARB(Out)
+  cons EgRV EgRest <= Out;
+  cons EgBody EgWV <= EgRest;
+  EgDead <= cons 'ass (cons (cons 'var EgGidx) (cons 'val GARB));
+  EgT1 ^= (nil.nil);
+  EgT2 ^= (nil.nil);
+  EgBody2 <= cons 'cond (cons (cons 'val EgT1) (cons EgBody (cons EgDead (cons (cons 'val EgT2) nil))));
+  EgRest <= cons EgBody2 EgWV;
+  Out <= cons EgRV EgRest
+
+read In;
+  cons Prog FpBTS <= In;
+  cons FpBT Src <= FpBTS;
+  (* decode Prog = (('var.I') . (Body . ('var.J'))) *)
+  cons FpPR FpPT <= Prog;
+  cons FpVI FpI <= FpPR;  FpVI ^= 'var;
+  cons FpBody FpPW <= FpPT;
+  cons FpVJ FpJ <= FpPW;  FpVJ ^= 'var;
+
+  (* init static-nil AV store (N = 3) *)
+  FpN ^= (nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.nil))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))));
+  AV-INIT(FpN, Vl);
+  FpN ^= (nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.nil))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))));
+
+  (* set V[I'] = MKAV(BT, Src, I'): BT='S -> ('C.(('S.Src).('D.('var.I')))),
+     BT='D -> ('D.('var.I')).  Binding-time-aware so fp2 residualises the tag. *)
+  LOOKUP(Vl, FpI, FpOld);  UPDATE(Vl, FpI, FpOld);  CLEAR(FpOld);
+  FpIc ^= FpI;
+  MKAV(FpBT, Src, FpIc, FpPart);
+  UPDATE(Vl, FpI, FpPart);
+  CLEAR(FpPart);
+
+  (* specialise the body, assemble the residual *)
+  SPEC-CMD-AV(FpBody);
+  ASSEMBLE-FP1(FpI, FpJ, Out);
+  CLEAR(RCode);
+  CLEAR(Vl);
+  CLEAR(FpI);
+  CLEAR(FpJ);
+  EMBED-GARB(Out);
+write Out

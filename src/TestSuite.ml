@@ -1602,6 +1602,27 @@ let test_fp3_cogen () =
   check_op "'swap";
   check_op "'id"
 
+(* Reversible specializer prototype (examples/spec_av_rev.rwhile): CLEAR pushes the
+ * discarded value onto a garbage stack GARB instead of X^=X, and main embeds GARB
+ * into the residual's DEAD (constant-true) else-branch (EMBED-GARB).  This makes
+ * spec REVERSIBLE: it runs with a clean store (so evalProgram does not raise
+ * "variables not nil"), [comp](d) is unchanged (the dead branch never runs), and
+ * -- the decisive property -- inverting the specializer and running it on its own
+ * output RECONSTRUCTS the original input from the dead-branch garbage. *)
+let test_rev_spec_dead_garbage () =
+  let rev   = parse_file_program (examples_dir ^ "/spec_av_rev.rwhile") in
+  let rimin = Program2DataRwhile.program2data
+      (parse_file_program (examples_dir ^ "/ri_min.rwhile")) in
+  let input = spec_in rimin (atom "'swap") in
+  let comp  = EvalRwhile.evalProgram rev input in   (* raises if the store is not clean *)
+  (* [comp](d) still computes swap, ignoring the dead garbage branch *)
+  Alcotest.(check valT_testable) "rev: [comp](('a.'b)) = ('swap.('b.'a))"
+    (parse_val "('swap . ('b . 'a))") (run_comp_direct comp (parse_val "('a . 'b)"));
+  (* reversibility: inverting spec_av_rev and running it on comp recovers the input *)
+  let inv = InvRwhile.invProgram rev in
+  Alcotest.(check valT_testable) "rev: [INV-spec_av_rev](comp) == input (round-trip)"
+    input (EvalRwhile.evalProgram inv comp)
+
 (* Refactoring gate: examples/spec_av_clean.rwhile (the readability/paper rewrite)
  * MUST stay behaviorally identical to the canonical examples/spec_av.rwhile
  * (git tag spec_av-fp123-working).  Asserts byte-identical fp1 residuals for
@@ -2214,6 +2235,9 @@ let () =
        * specializes spec_av by self-application); skipped under `./test-suite -q`. *)
       Alcotest.test_case "fp2 GREEN: [spec_av]((spec_av.ri_min)) compiles ri_min (comp==B)" `Slow test_fp2_second_projection;
       Alcotest.test_case "fp3 GREEN: [spec_av]((spec_av.spec_av)) = cogen ([comp3]('S.ri_min)=comp2)" `Slow test_fp3_cogen;
+    ];
+    "reversible-spec", [
+      Alcotest.test_case "spec_av_rev: clean-store run, [comp] correct, INV round-trips input" `Slow test_rev_spec_dead_garbage;
     ];
     "refactor-gate", [
       Alcotest.test_case "spec_av_clean == spec_av (fp1 residuals identical)" `Quick test_clean_equiv_spec_av;
