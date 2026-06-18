@@ -1,81 +1,70 @@
 <?php
-set_time_limit(10);             // 時間制限の設定
-
-function convertEOL($string, $to = "\n")
-{
-    return strtr($string, array(
-        "\r\n" => $to,
-        "\r" => $to,
-        "\n" => $to,
-    ));
-}
+// execute.php — R-WHILE Playground backend
+// Runs the ri interpreter on user-submitted programs
 
 $dir = dirname(__FILE__);
-$cmd = "timeout -sKILL 10 $dir/ri";
+// `make install` copies ri into this web directory; fall back to a system path.
+$RI = is_executable("$dir/ri") ? "$dir/ri" : '/usr/local/bin/ri';
+$TIMEOUT = 5; // seconds
 
-// 引数の設定
-$invert = filter_input(INPUT_POST, "invert", FILTER_VALIDATE_BOOLEAN);
-$p2d =    filter_input(INPUT_POST, "p2d",    FILTER_VALIDATE_BOOLEAN);
-$exp =    filter_input(INPUT_POST, "exp",    FILTER_VALIDATE_BOOLEAN);
-$ri_flags = array();
-if ($invert) { $cmd .= " -inverse"; }
-if ($p2d)    { $cmd .= " -p2d"; }
-if ($exp)    { $cmd .= " -exp"; }
+$prog = $_POST['prog'] ?? '';
+$data = $_POST['data'] ?? '';
+$invert = isset($_POST['invert']);
+$p2d = isset($_POST['p2d']);
+$exp = isset($_POST['exp']);
 
-// プログラムを保存する
-$prog_text = convertEOL(filter_input(INPUT_POST, "prog", FILTER_UNSAFE_RAW));
-$prog_hash = substr(sha1($prog_text), 0, 8);
-$res = file_put_contents("$dir/programs/$prog_hash.rwhile", $prog_text);
-if ($res === FALSE) {
-    header("HTTP/1.1 500 Internal Server Error");
+if (empty(trim($prog))) {
+    header('Content-Type: text/plain; charset=UTF-8');
+    echo 'Error: No program provided.';
     exit;
 }
-$cmd .= " $dir/programs/$prog_hash.rwhile";
 
-// データを保存する
-$data_text = convertEOL(filter_input(INPUT_POST, "data", FILTER_UNSAFE_RAW));
-$data_hash = substr(sha1($data_text), 0, 8);
-$res = file_put_contents("$dir/data/$data_hash.rwhile", $data_text);
-if ($res === FALSE) {
-    header("HTTP/1.1 500 Internal Server Error");
+// Write program and data to temp files
+$tmpDir = sys_get_temp_dir();
+$progFile = tempnam($tmpDir, 'rwhile_prog_') . '.rwhile';
+$dataFile = tempnam($tmpDir, 'rwhile_data_') . '.val';
+
+if (file_put_contents($progFile, $prog) === false ||
+    file_put_contents($dataFile, $data) === false) {
+    @unlink($progFile);
+    @unlink($dataFile);
+    @unlink(substr($progFile, 0, -7));
+    @unlink(substr($dataFile, 0, -4));
+    header('HTTP/1.1 500 Internal Server Error');
+    header('Content-Type: text/plain; charset=UTF-8');
+    echo 'Error: could not write temporary files.';
     exit;
 }
-if (!($invert || $p2d || $exp)) {
-	$cmd .= " $dir/data/$data_hash.rwhile";
+
+// Build command arguments
+$args = [];
+if ($invert) $args[] = '-inverse';
+if ($p2d) $args[] = '-p2d';
+if ($exp) $args[] = '-exp';
+$args[] = escapeshellarg($progFile);
+if (!empty(trim($data))) {
+    $args[] = escapeshellarg($dataFile);
 }
 
-$cwd = "/tmp";
-$descriptorspec = array(
-    0 => array("pipe", "r"),
-    1 => array("pipe", "w")
-);
-$env = array();
+// Run with timeout. `timeout` exits 124 (TERM) / 137 (KILL) when it stops the command.
+$cmd = '/usr/bin/timeout ' . $TIMEOUT . ' ' . escapeshellarg($RI) . ' ' . implode(' ', $args) . ' 2>&1';
+$lines = [];
+$code = 0;
+exec($cmd, $lines, $code);
+$output = implode("\n", $lines);
 
-// echo $cmd . "\n";
-$process = proc_open($cmd, $descriptorspec, $pipes, $cwd, $env);
+// Cleanup
+@unlink($progFile);
+@unlink($dataFile);
+// Also clean up the tempnam base file (without .rwhile extension)
+@unlink(substr($progFile, 0, -7));
+@unlink(substr($dataFile, 0, -4));
 
-if (is_resource($process)) {
-
-    fwrite($pipes[0], $prog_text);
-    fclose($pipes[0]);
-
-    $output = stream_get_contents($pipes[1]);
-    fclose($pipes[1]);
-
-    $return_value = proc_close($process);
-
-    // echo $return_value . "\n";
-
-    if ($return_value === 124) {
-      echo "Execution timed out!\n";
-    }
-?>
-<textarea name="output" rows="30" cols="100">
-<?php
-    echo $output;
-?>
-</textarea>
-<?php
+if ($code === 124 || $code === 137) {
+    $output = "Execution timed out (limit: {$TIMEOUT}s).";
+} elseif ($code !== 0 && $output === '') {
+    $output = 'Error: execution failed.';
 }
 
-?>
+header('Content-Type: text/plain; charset=UTF-8');
+echo $output;
