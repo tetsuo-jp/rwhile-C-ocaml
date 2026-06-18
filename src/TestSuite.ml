@@ -1622,6 +1622,19 @@ let test_clean_equiv_spec_av () =
   check "ri_seq [id,swap]"   ri_seq (parse_val "('id . ('swap . nil))");
   check "ri_seq [swap,swap]" ri_seq (parse_val "('swap . ('swap . nil))")
 
+(* Strong refactor gate: spec_av_clean and spec_av must produce the IDENTICAL fp2
+ * compiler.  Specialising spec_av (itself) to ri_min exercises essentially every
+ * path of the specialiser, so this catches any behavioral drift the fast fp1
+ * gate might miss.  SLOW (~seconds). *)
+let test_clean_equiv_fp2 () =
+  let spec_av = parse_file_program (examples_dir ^ "/spec_av.rwhile") in
+  let clean   = parse_file_program (examples_dir ^ "/spec_av_clean.rwhile") in
+  let rimin = Program2DataRwhile.program2data
+      (parse_file_program (examples_dir ^ "/ri_min.rwhile")) in
+  Alcotest.(check valT_testable) "spec_av_clean fp2 comp == spec_av fp2 comp"
+    (EvalRwhile.evalProgram spec_av (spec_in (Program2DataRwhile.program2data spec_av) rimin))
+    (EvalRwhile.evalProgram clean   (spec_in (Program2DataRwhile.program2data clean)   rimin))
+
 (* ===== First Futamura projection, GREEN via the minimal self-interpreter =====
  * ri_min interprets a tiny one-op language (Op = 'swap | else 'id) using only
  * depth-1 cons patterns and a single static dispatch (no loops, no nested
@@ -2199,6 +2212,7 @@ let () =
     ];
     "refactor-gate", [
       Alcotest.test_case "spec_av_clean == spec_av (fp1 residuals identical)" `Quick test_clean_equiv_spec_av;
+      Alcotest.test_case "spec_av_clean == spec_av (fp2 comp identical, all paths)" `Slow test_clean_equiv_fp2;
     ];
     "spec-av-exp", [
       Alcotest.test_case "var static" `Quick test_se_av_var_static;
