@@ -6,16 +6,28 @@
  * exits through the output), and [comp](d) is unchanged (the dead branch never
  * runs).  Derived from spec_av_clean.rwhile.
  *
- * This is a behavior-preserving, human-readable rewrite of spec_av.rwhile,
- * intended for the paper.  The canonical CORRECT version is spec_av.rwhile
- * (git tag spec_av-fp123-working: fp1/fp2/fp3 all green); the test suite still
- * uses THAT.  This file is developed separately and MUST stay behaviorally
- * identical to spec_av.rwhile -- the regression gate `test_clean_equiv_spec_av`
- * (TestSuite.ml) asserts both produce byte-identical residuals on fp1 subjects
- * (ri_min / ri_seq).  Refactor here freely as long as that gate (and ideally
- * fp2/fp3 via direct eval) stays green.  Started as an exact copy of
- * spec_av.rwhile; refactoring proceeds incrementally (docs/invariants first,
- * then naming/structure -- never the residualisation/reversibility cores).
+ * NOTE: this is NOT byte-equivalent to spec_av.rwhile -- the residual carries
+ * extra dead-branch garbage (that is the point).  Equivalence is SEMANTIC:
+ * [comp](d) agrees, ignoring the dead branch.  Locked by test_rev_spec_dead_garbage
+ * (reversible-spec group): clean-store run, [comp] correct, and INV round-trips.
+ * Canonical correct/forward versions are spec_av.rwhile (tag spec_av-fp123-working)
+ * and spec_av_clean.rwhile.  This prototype is tagged spec_av_rev-prototype.
+ *
+ * GARBAGE MINIMISATION (in progress).  The residual is bloated by GARB
+ * (comp ~1739 nodes vs B 103 for fp1 ri_min).  Levers:
+ *  1. N-sizing (DONE): the final CLEAR(Vl) garbages the whole AV store, and
+ *     per-slot intermediates scale with N (FpN).  Size FpN to the SUBJECT with
+ *     `specsize spec_av_rev.rwhile <subject>` -> for ri_min (FpN=13) comp drops
+ *     1739 -> 767 nodes (-56%), still correct.
+ *  2. Static delocalisation (TODO, research-scale): replace CLEAR(X) with a
+ *     reversible recompute `X ^= <expr over LIVE vars>` where X is statically a
+ *     constant/function of live state, so it is not garbaged.  Blocked for the
+ *     common case (boolean flags `f ^= =? X c`) because X is usually CONSUMED in
+ *     the branch before the flag is cleared, so it cannot be uncomputed without
+ *     restructuring (preserve the operand / reorder).  Runtime "skip-if-nil" is
+ *     NOT cleanly reversible (both branches leave X=nil -> no exit assertion can
+ *     distinguish them).  So genuine minimisation = reversible rewrite of the AV
+ *     algebra (AV-HD/TL/CONS/EQ) in uncompute discipline -- future work.
  *
  * ---- original header (spec_av.rwhile) ----
  * AV-based (partially-static) specializer for R-WHILE.
