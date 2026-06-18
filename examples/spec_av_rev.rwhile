@@ -14,20 +14,23 @@
  * and spec_av_clean.rwhile.  This prototype is tagged spec_av_rev-prototype.
  *
  * GARBAGE MINIMISATION (in progress).  The residual is bloated by GARB
- * (comp ~1739 nodes vs B 103 for fp1 ri_min).  Levers:
- *  1. N-sizing (DONE): the final CLEAR(Vl) garbages the whole AV store, and
- *     per-slot intermediates scale with N (FpN).  Size FpN to the SUBJECT with
- *     `specsize spec_av_rev.rwhile <subject>` -> for ri_min (FpN=13) comp drops
- *     1739 -> 767 nodes (-56%), still correct.
- *  2. Static delocalisation (TODO, research-scale): replace CLEAR(X) with a
- *     reversible recompute `X ^= <expr over LIVE vars>` where X is statically a
- *     constant/function of live state, so it is not garbaged.  Blocked for the
- *     common case (boolean flags `f ^= =? X c`) because X is usually CONSUMED in
- *     the branch before the flag is cleared, so it cannot be uncomputed without
- *     restructuring (preserve the operand / reorder).  Runtime "skip-if-nil" is
- *     NOT cleanly reversible (both branches leave X=nil -> no exit assertion can
- *     distinguish them).  So genuine minimisation = reversible rewrite of the AV
- *     algebra (AV-HD/TL/CONS/EQ) in uncompute discipline -- future work.
+ * Measured (fp1 ri_min): comp = 1739 nodes vs B = 103; the dead-branch garbage
+ * is 81 pushes / 1517 nodes, of which ONE value is 1055 nodes -- the final
+ * CLEAR(Vl), i.e. the whole N-slot AV store.  Levers:
+ *  1. N-sizing (DONE, dominant): size FpN to the SUBJECT with
+ *     `specsize spec_av_rev.rwhile <subject>`; for ri_min (FpN=13) the 1055-node
+ *     store collapses and comp drops to ~755 nodes.
+ *  2. Static delocalisation (DONE for the easy set): replace CLEAR(X) with a
+ *     reversible recompute `X ^= <src>` where X is a copy of a still-LIVE var, so
+ *     it is uncomputed rather than garbaged.  Applied to CBoth/CBothS/CVT/NewV
+ *     (round-trip still holds; -12 nodes -- small, these are booleans/short AVs).
+ *  3. Hard set (TODO, research-scale): boolean flags `f ^= =? X c` cannot be
+ *     uncomputed because X is CONSUMED in the branch before the flag is cleared
+ *     (needs operand-preservation / reorder); runtime "skip-if-nil" is NOT
+ *     cleanly reversible (both branches converge to X=nil -> no exit assertion).
+ *     Genuine elimination = reversible (uncompute-discipline) rewrite of the AV
+ *     algebra (AV-HD/TL/UNCONS/EQ) and store-reversal for Vl -- future work.
+ * Combined (deloc + N-sizing): 1739 -> 755 nodes (-57%), [comp] still correct.
  *
  * ---- original header (spec_av.rwhile) ----
  * AV-based (partially-static) specializer for R-WHILE.
@@ -168,7 +171,7 @@ macro AV-CONS(A1, A2, R)
     A2 <= cons T2 V2;
     R <= cons 'C (cons A1 A2)
   fi CBoth;
-  CLEAR(CBoth);
+  CBoth ^= Both;
   CLEAR(Both);
   CLEAR(S1);
   CLEAR(S2)
@@ -269,7 +272,7 @@ macro AV-EQ(A1, A2, R)
     CLEAR(A1); CLEAR(A2);
     R <= cons 'D (cons 'eq (cons C1 C2))
   fi CBothS;
-  CLEAR(CBothS);
+  CBothS ^= BothS;
   CLEAR(BothS)
 
 (* MAKE-SEQ(RCode, Cmd): fold a reverse-ordered residual list into one 'seq
@@ -934,7 +937,7 @@ macro SPEC-STEP-AV(Cd, Cd', RCode)
           CLEAR(CKNew)
         fi CKNil;
         CLEAR(CKNil);
-        CLEAR(NewV);
+        NewV ^= VRE;
         AVx <= cons TAVx VAVx;     (* reassemble ('S . VAVx') *)
         UPDATE(Vl, K, AVx)         (* slot = new AV  (AVx preserved) *)
       else
@@ -999,7 +1002,7 @@ macro SPEC-STEP-AV(Cd, Cd', RCode)
           Cd <= cons D Cd;
           CLEAR(C)
         fi CVT;
-        CLEAR(CVT);
+        CVT ^= VT;
         CLEAR(VT); TT ^= 'S;
         CLEAR(E); CLEAR(F)
       else
