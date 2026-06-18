@@ -1,5 +1,9 @@
 # 二村射影と spec.rwhile の現状
 
+> **注意（2026-06-18）**: 本ファイルは旧 `spec.rwhile`（配列版）・2026-06-14 時点の記述で、第2/第3射影
+> を「未検証」としているが**古い**。現行は AV 版 `spec_av.rwhile` で fp1/fp2/fp3 とも達成済み。
+> 最新の統合知見は **`FINDINGS_reversible_projections.md`** を参照。
+
 ## 三つの二村射影とは
 
 **二村射影**（Futamura Projections）は、部分評価器（specializer）を用いた
