@@ -1,0 +1,17 @@
+(* Symmetric reversible `case` (always-on sugar; desugared to if/fi).
+ *
+ * In-place node rewrite: a cons is swapped, nil is left as nil.  Each arm
+ * reads X into its input pattern, runs its body, and rebuilds X from its
+ * output pattern; the output shapes (cons vs nil) are disjoint, which is what
+ * makes the synthesised exit assertion -- and hence inversion -- sound.
+ *
+ *   ./ri examples/case_swap.rwhile examples/list123.val
+ *   ./ri -exp examples/case_swap.rwhile        # show the if/fi expansion
+ *   ./ri -inverse examples/case_swap.rwhile    # inverse (case is invertible)
+ *)
+read X;
+case X yields X of
+    cons A B => nil <= nil => cons B A
+  | nil      => nil <= nil => nil
+end;
+write X

@@ -31,6 +31,27 @@ This builds the `ri` interpreter.
 ./ri -p2d <program.rwhile>
 ```
 
+## Language note: symmetric `case`
+
+Besides the core `if/fi` and `from/loop/until`, programs may use a symmetric,
+reversible pattern match (always-on sugar, desugared to `if/fi`):
+
+```
+case Scrut yields Result of
+    InPat1 => Body1 => OutPat1
+  | InPat2 => Body2 => OutPat2
+  | ...
+end
+```
+
+Each arm reads `Scrut` into its input pattern, runs its body, and builds
+`Result` from its output pattern. The entry test and exit assertion are
+synthesised from the patterns' top shapes (`cons` / `nil` / `'atom`); for the
+result to stay reversible the **output** patterns must have pairwise-distinct
+shapes, and every arm but the last must have a concrete, distinct **input**
+pattern (the last arm's input may be a variable catch-all). See
+`examples/case_swap.rwhile`; `./ri -exp` shows the `if/fi` expansion.
+
 ## Tests
 
 ```bash
