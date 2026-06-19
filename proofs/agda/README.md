@@ -157,12 +157,21 @@ done by the accumulator induction `rev-rest`.
   machinery.  Remaining for full G1 (see `../../AGDA_CORRESPONDENCE.md`): assemble
   an AV specialisation STEP from these sound ops and discharge H1/H2 end-to-end so
   the executable spec_av becomes an instance of the proved fp2/fp3.
+- `RWhileCaseInv.agda` — **soundness of the symmetric `case` sugar** (Rwhile.cf
+  CCase / src/Desugar.ml).  Models the desugaring to the verified reversible core
+  (atom/_⨾_/cond) and proves: `case-reversible` (a desugared case is reversible,
+  via `inv-sound`); `inv-commute` (inverting a desugared case = desugaring the
+  SWAPPED case — scrutinee↔result, each arm InPat↔OutPat, body inverted —
+  SEMANTICALLY, the two differing only by the ; -associativity that inversion
+  introduces, discharged by `seq-assoc` + `cond-cong`); `case-inv-undoes`
+  (running the swapped case backwards undoes the original); and `invArm-inv` (the
+  per-arm swap is an involution).  So the inverse of a `case` is again a `case`.
 
 ## Checking
 
 ```
 cd proofs/agda
-for f in RWhileRev RWhileRevFull RWhileValStore RWhileCRep RWhileCRepDet RWhileDet RWhileDetConcrete RWhileExec RWhileExecConcrete RWhileIL RWhileFutamura RWhileFutamura2 RWhileFutamura2Inst RWhileRevFutamura RWhileRevProjPaper RWhileRevProjInst RWhileRevProjGen RWhileCoreExp RWhileFp1Residual RWhileElabCom RWhileMacroSubst RWhileRevProj2Lift RWhileRevProj2BT RWhileRevProj2Self RWhileAVSound; do
+for f in RWhileRev RWhileRevFull RWhileValStore RWhileCRep RWhileCRepDet RWhileDet RWhileDetConcrete RWhileExec RWhileExecConcrete RWhileIL RWhileFutamura RWhileFutamura2 RWhileFutamura2Inst RWhileRevFutamura RWhileRevProjPaper RWhileRevProjInst RWhileRevProjGen RWhileCoreExp RWhileFp1Residual RWhileElabCom RWhileMacroSubst RWhileRevProj2Lift RWhileRevProj2BT RWhileRevProj2Self RWhileAVSound RWhileCaseInv; do
   agda --safe $f.agda
 done
 ```

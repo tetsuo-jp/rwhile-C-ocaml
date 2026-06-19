@@ -98,7 +98,9 @@
   非単射ゆえ入力相当のゴミを保持せざるを得ない（Landauer/Bennett）。dead-path 埋め込み＋N-sizing で
   −57% を実測。古典 PE 研究にこの「特殊化器そのものの可逆化コスト」の議論は無い。
 - **対称可逆マッチ `case`**：入出力パターンの互いに素性 ⇔ 反転可能、という健全性条件付きの脱糖。
-  RFun/Janus のパターンマッチと対比可能な小さな言語設計の貢献。
+  RFun/Janus のパターンマッチと対比可能な小さな言語設計の貢献。**健全性は Agda で機械検査済**
+  （`proofs/agda/RWhileCaseInv.agda`：脱糖した case は可逆、反転は「入出力を入れ替えた case の脱糖」と
+  意味的に一致＝case は反転で閉じる、arm 反転は対合）。
 - **Agda 形式化**：`proofs/agda/RWhileRevProj2*`（postulate 0）。実行デモに機械検査の裏付け。
 
 ## 6. 公表前に詰めるべき確認事項（claim を堅くする）
