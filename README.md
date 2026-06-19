@@ -46,11 +46,23 @@ end
 
 Each arm reads `Scrut` into its input pattern, runs its body, and builds
 `Result` from its output pattern. The entry test and exit assertion are
-synthesised from the patterns' top shapes (`cons` / `nil` / `'atom`); for the
-result to stay reversible the **output** patterns must have pairwise-distinct
-shapes, and every arm but the last must have a concrete, distinct **input**
-pattern (the last arm's input may be a variable catch-all). See
-`examples/case_swap.rwhile`; `./ri -exp` shows the `if/fi` expansion.
+synthesised from each pattern's *discriminant*: its top shape (`cons` / `nil` /
+`'atom`) or, for a pattern `cons 'tag P`, the head atom (tested by
+`=? (hd v) 'tag`). The latter lets a `case` dispatch on a node's tag, e.g.
+
+```
+case PP yields PP of
+    cons 'var A => ... => cons 'var A
+  | cons 'cons C => ... => cons 'cons C
+  | Rest => ... => Rest
+end
+```
+
+For the result to stay reversible the **output** patterns must have
+pairwise-disjoint discriminants, and every arm but the last must have a
+concrete, disjoint **input** pattern (the last arm may be a variable catch-all).
+See `examples/case_swap.rwhile` (top-shape) and `examples/case_tag.rwhile`
+(head-atom); `./ri -exp` shows the `if/fi` expansion.
 
 ## Tests
 

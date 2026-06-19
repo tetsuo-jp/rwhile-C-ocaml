@@ -27,41 +27,65 @@
    assertion from its output pattern.  Reversibility / invertibility is
    guaranteed by a well-formedness check on top-level shapes (cons / nil / atom):
 
-     - the OUTPUT patterns of all arms must have pairwise-DISTINCT shapes, so the
-       exit assertion at every nesting level is FALSE in the else-branch;
-     - the INPUT patterns of every arm but the last must be concrete and have
-       pairwise-distinct shapes (the last arm's input may be a variable). *)
+     - the OUTPUT patterns of all arms must have pairwise-DISJOINT discriminants,
+       so the exit assertion at every nesting level is FALSE in the else-branch;
+     - the INPUT patterns of every arm but the last must be concrete with
+       pairwise-disjoint discriminants (the last arm may be a variable catch-all).
+
+   A discriminant is the top shape (cons / nil / atom) OR -- for a cons pattern
+   whose head is a literal atom -- that head atom, tested by (=? (hd v) atom).
+   This lets a case dispatch on a node tag (cons VAR A => ... | cons VAL B ...). *)
 
 open AbsRwhile
 
 exception Desugar_error of string
 let err msg = raise (Desugar_error ("case: " ^ msg))
 
-(* Top-level shape of a pattern, used to synthesise the dispatch tests. *)
-type shape = SCons | SNil | SAtom of string
+(* The discriminant of a pattern: the single test on the scrutinee/result
+   variable that decides this arm.  Beyond the top shape (cons/nil/atom) we also
+   support a cons whose HEAD is a literal atom (pattern  cons TAG P), dispatched
+   by  =? (hd v) TAG.  That is exactly what the pattern-tag steppers need, e.g.
+   the PAT- macros that do  if =? (hd PP) VAR then ... . *)
+type disc =
+  | DAtom of string   (* v = the atom                              *)
+  | DNil              (* v = nil                                   *)
+  | DHead of string   (* hd v = the atom (cons with literal head)  *)
+  | DPair             (* pair? v        (cons with non-literal head) *)
 
-let shape_of_pat : pat -> shape = function
-  | PCons _              -> SCons
-  | PVal (VCons _)       -> SCons
-  | PVal (VList (_ :: _))-> SCons
-  | PVal VNil            -> SNil
-  | PVal (VList [])      -> SNil
-  | PVal (VAtom (Atom a))-> SAtom a
-  | PList (_ :: _)       -> SCons
-  | PList []             -> SNil
-  | PVar _               -> err "a variable pattern has no fixed shape here"
+let disc_of_pat : pat -> disc = function
+  | PCons (PVal (VAtom (Atom a)), _) -> DHead a
+  | PCons _                          -> DPair
+  | PVal (VCons (VAtom (Atom a), _)) -> DHead a
+  | PVal (VCons _)                   -> DPair
+  | PVal (VList (_ :: _))            -> DPair
+  | PList (_ :: _)                   -> DPair
+  | PVal VNil | PVal (VList []) | PList [] -> DNil
+  | PVal (VAtom (Atom a))            -> DAtom a
+  | PVar _ -> err "a variable pattern has no fixed discriminant here"
 
-(* An expression that is TRUE iff variable [v] currently has shape [s]. *)
-let test_of_shape (v : rIdent) (s : shape) : exp =
+(* An expression that is TRUE iff variable [v] currently matches discriminant [d]. *)
+let test_of_disc (v : rIdent) (d : disc) : exp =
   let var = EVar (Var v) in
-  match s with
-  | SCons   -> EPair var
-  | SNil    -> EEq (var, EVal VNil)
-  | SAtom a -> EEq (var, EVal (VAtom (Atom a)))
+  match d with
+  | DPair   -> EPair var
+  | DNil    -> EEq (var, EVal VNil)
+  | DAtom a -> EEq (var, EVal (VAtom (Atom a)))
+  | DHead a -> EEq (EHd var, EVal (VAtom (Atom a)))
 
-let rec pairwise_distinct = function
+(* Two discriminants are disjoint when no value satisfies both -- so one test
+   cleanly separates the arms forwards and backwards.  Note a cons with a given
+   head (DHead) is also a pair (DPair), so those two are NOT disjoint. *)
+let disjoint (d1 : disc) (d2 : disc) : bool =
+  match d1, d2 with
+  | DAtom a, DAtom b -> a <> b
+  | DHead a, DHead b -> a <> b
+  | DNil, DNil | DPair, DPair -> false
+  | DHead _, DPair | DPair, DHead _ -> false
+  | _ -> true   (* atom vs nil vs cons are always disjoint *)
+
+let rec pairwise_disjoint = function
   | [] | [_] -> true
-  | x :: xs  -> (not (List.mem x xs)) && pairwise_distinct xs
+  | x :: xs  -> List.for_all (disjoint x) xs && pairwise_disjoint xs
 
 let seq3 a b c = CSeq (CSeq (a, b), c)
 
@@ -85,27 +109,25 @@ and desugar_loop = function BLoop c -> BLoop (desugar_com c) | BLoopNone -> BLoo
 and desugar_case scrut result arms =
   let n = List.length arms in
   if n < 2 then err "needs at least two arms (InPat => Body => OutPat | ...)";
-  (* Output shapes must be pairwise distinct: this is what makes every exit
-     assertion FALSE in its else-branch, hence the nest invertible. *)
-  let out_shapes = List.map (fun (ACase (_, _, out)) -> shape_of_pat out) arms in
-  if not (pairwise_distinct out_shapes) then
-    err "the output patterns must have pairwise-distinct top shapes \
-         (cons / nil / atom) so each exit assertion separates its arm";
-  (* Input shapes: every arm but the last needs a concrete shape for its entry
-     test, and those shapes (plus the last if concrete) must be distinct so no
-     earlier arm shadows a later one.  The last arm's input may be a variable. *)
-  let in_shapes =
+  (* Collect the concrete discriminants of one side (input/output).  A variable
+     pattern carries no discriminant and is allowed only on the LAST arm: as an
+     input it is the catch-all, as an output it is the untested fall-through. *)
+  let discs side sel =
     List.concat (List.mapi
-      (fun i (ACase (inp, _, _)) ->
-         match inp with
-         | PVar _ when i = n - 1 -> []          (* last arm: variable catch-all *)
-         | PVar _ -> err "only the LAST arm's input may be a variable; \
-                          every earlier arm needs a concrete pattern (cons/nil/atom)"
-         | _ -> [shape_of_pat inp])
+      (fun i arm ->
+         match sel arm with
+         | PVar _ when i = n - 1 -> []
+         | PVar _ -> err ("only the LAST arm's " ^ side ^ " pattern may be a variable; \
+                           every earlier arm needs a concrete pattern \
+                           (cons / cons 'tag / nil / atom)")
+         | p -> [disc_of_pat p])
       arms) in
-  if not (pairwise_distinct in_shapes) then
-    err "the input patterns must have pairwise-distinct top shapes \
+  if not (pairwise_disjoint (discs "input" (fun (ACase (i,_,_)) -> i))) then
+    err "the input patterns must have pairwise-disjoint discriminants \
          (only the last arm may be a variable catch-all)";
+  if not (pairwise_disjoint (discs "output" (fun (ACase (_,_,o)) -> o))) then
+    err "the output patterns must have pairwise-disjoint discriminants \
+         so each exit assertion separates its arm";
   desugar_arms scrut result arms
 
 (* Build the nested conditional.  The last arm is the fall-through (no test). *)
@@ -115,10 +137,10 @@ and desugar_arms scrut result = function
   | ACase (inp, body, out) :: rest ->
      let then_com =
        seq3 (CRep (inp, PVar (Var scrut))) (desugar_com body) (CRep (PVar (Var result), out)) in
-     CCond (test_of_shape scrut (shape_of_pat inp),
+     CCond (test_of_disc scrut (disc_of_pat inp),
             BThen then_com,
             BElse (desugar_arms scrut result rest),
-            test_of_shape result (shape_of_pat out))
+            test_of_disc result (disc_of_pat out))
   | [] -> err "needs at least two arms"   (* unreachable: guarded above *)
 
 let desugar_macro (Mac (name, params, body)) = Mac (name, params, desugar_com body)

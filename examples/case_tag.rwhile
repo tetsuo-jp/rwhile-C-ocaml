@@ -1,0 +1,13 @@
+(* Head-atom `case`: dispatch on a node's tag (the head of a cons), the idiom
+ * the PAT-* steppers use (`if =? (hd PP) 'cons then ...`).  Here: swap the two
+ * children of a 'cons node; leave any other tagged node unchanged.
+ *
+ *   ./ri examples/case_tag.rwhile examples/case_tag.val   # ('cons.('a.'b)) -> ('cons.('b.'a))
+ *   ./ri -exp examples/case_tag.rwhile                    # see the (hd P)-dispatch
+ *)
+read P;
+case P yields P of
+    cons 'cons Pair => cons P1 P2 <= Pair; Pair <= cons P2 P1 => cons 'cons Pair
+  | Rest            => nil <= nil => Rest
+end;
+write P
