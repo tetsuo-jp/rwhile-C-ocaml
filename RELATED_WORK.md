@@ -97,6 +97,9 @@
 - **可逆化のゴミ（reversibilization cost）**：`spec_av` は非可逆（`X^=X`）。可逆版 `spec_av_rev` は
   非単射ゆえ入力相当のゴミを保持せざるを得ない（Landauer/Bennett）。dead-path 埋め込み＋N-sizing で
   −57% を実測。古典 PE 研究にこの「特殊化器そのものの可逆化コスト」の議論は無い。
+  **量的下界を Agda で機械検査**（`proofs/agda/RWhileGarbageBound.agda`：可逆残余 (結果,ゴミ) が単射なら
+  ゴミは各 fiber 上単射＝`|ゴミ|≥|fiber|`；定数関数は全入力保持が必要）。質的二分律
+  `RWhileRevProjGen`（必要/十分）を量的に補強。
 - **対称可逆マッチ `case`**：入出力パターンの互いに素性 ⇔ 反転可能、という健全性条件付きの脱糖。
   RFun/Janus のパターンマッチと対比可能な小さな言語設計の貢献。**健全性は Agda で機械検査済**
   （`proofs/agda/RWhileCaseInv.agda`：脱糖した case は可逆、反転は「入出力を入れ替えた case の脱糖」と

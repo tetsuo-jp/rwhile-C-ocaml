@@ -166,12 +166,22 @@ done by the accumulator induction `rev-rest`.
   introduces, discharged by `seq-assoc` + `cond-cong`); `case-inv-undoes`
   (running the swapped case backwards undoes the original); and `invArm-inv` (the
   per-arm swap is an involution).  So the inverse of a `case` is again a `case`.
+- `RWhileGarbageBound.agda` — a **quantitative lower bound on garbage** (sharpens
+  the qualitative `RWhileRevProjGen.garbage-necessary`).  A reversible residual
+  keeps `(result , garbage) = (S x , g x)`; reversibility = that pair map is
+  injective.  Proves `garbage-distinguishes-fiber` / `garbage-injective-on-fiber`:
+  on a FIBER of `S` (inputs sharing a result) the garbage alone must distinguish
+  them, so the garbage is injective per fiber, i.e. `|fiber| ≤ |Gar|` (≥ log|fiber|
+  bits) — the minimal information any reversible simulation must retain
+  (Landauer/Bennett).  Witness: for the constant (maximally non-injective) source
+  the whole input must be kept — the NECESSITY counterpart of
+  `input-preserving-inj`'s sufficiency.  UIP-free, so `--safe`.
 
 ## Checking
 
 ```
 cd proofs/agda
-for f in RWhileRev RWhileRevFull RWhileValStore RWhileCRep RWhileCRepDet RWhileDet RWhileDetConcrete RWhileExec RWhileExecConcrete RWhileIL RWhileFutamura RWhileFutamura2 RWhileFutamura2Inst RWhileRevFutamura RWhileRevProjPaper RWhileRevProjInst RWhileRevProjGen RWhileCoreExp RWhileFp1Residual RWhileElabCom RWhileMacroSubst RWhileRevProj2Lift RWhileRevProj2BT RWhileRevProj2Self RWhileAVSound RWhileCaseInv; do
+for f in RWhileRev RWhileRevFull RWhileValStore RWhileCRep RWhileCRepDet RWhileDet RWhileDetConcrete RWhileExec RWhileExecConcrete RWhileIL RWhileFutamura RWhileFutamura2 RWhileFutamura2Inst RWhileRevFutamura RWhileRevProjPaper RWhileRevProjInst RWhileRevProjGen RWhileCoreExp RWhileFp1Residual RWhileElabCom RWhileMacroSubst RWhileRevProj2Lift RWhileRevProj2BT RWhileRevProj2Self RWhileAVSound RWhileCaseInv RWhileGarbageBound; do
   agda --safe $f.agda
 done
 ```
