@@ -29,9 +29,11 @@
   `RWhileAVSound.agda`（`--safe`）が AV（`S`/`D`/`C`）・残余コード `⟦_⟧c`・概念化 `γ` を定義し、
   `AV-HD/TL/CONS/EQ/PAIRP/LIFT` 各演算が γ と**可換であること（健全性）**を機械検査
   （`avHd-sound`/`avCons-sound`/…/`lift-sound`）。これが特殊化の正しさ＝H1 `spec-correct` の congruence 核。
-  **残り**：これら健全な AV 演算から特殊化 STEP（`SPEC-EXP-AV-STEP` 相当）を組み、H1/H2 を端から端まで
-  示して `spec_av` を `RWhileFutamura2` のインスタンスにする（＝実機 fp2/fp3 を「byte 一致テスト」から
-  「証明された定理の具体例」へ）。現状は AV 代数まで証明、STEP 組立は未。
+  **N2 第2段 ✓（H1 完了）**：`RWhileAVSpec.agda` が AV 記号評価 `aeval`＋健全性 `aeval-sound` を組み、
+  束縛時刻分割 `C (S s)(D cVar)`（MKAV 規律）の残余化で **H1 `spec-correct`：`⟦spec p s⟧c d ≡ ⟦p⟧c (s·d)`**
+  を実 AV 機構で証明（`RWhileFutamura2` の H1 を closure/op-list 代用でなく discharge）。
+  **残り（G1 最後）**：H2 `spec-impl`（特殊化器を自己言語のプログラムとして表現＝自己適用）。これは IEICE
+  草稿も残す工学課題。H1（正しさの核）は機械検査済みなので、fp1 は実 AV で成立、fp2/fp3 は H2 追加で従う。
 - **G2：`Core.ml ≡ EvalRwhile`（実用上クローズ済 ✓ — N1 実施）。** Agda は両者の**モデル**を別個に
   証明（`RWhileCoreExp`/`RWhileElabCom`）。OCaml レベルの等価は、`core-equiv` 群（`test_core_equiv_corpus`/
   `test_core_equiv_selfinterp`）が**実例コーパス7本＋完全自己解釈器 ri.rwhile の p2d 入力3本**で
@@ -50,9 +52,9 @@
    （さらなる強化：spec_av fp1 も `Slow` で core-equiv に追加可能。）
 2. **N2（中・最高）：AV 特殊化ステップの Agda モデルで H1/H2 を証明。**
    - **第1段 ✓ 実施済**：AV 代数の健全性 `RWhileAVSound.agda`（各 AV 演算が γ と可換）。
-   - **第2段（残）**：健全な AV 演算から特殊化 STEP を組み、H1 `spec-correct`・H2 `spec-impl` を示して
-     `RWhileFutamura2` をインスタンス化。`RWhileRevProj2Self`（実残余化・refl）と本健全性を合流させるのが筋。
-   完了すれば実機 fp2/fp3 が証明された定理の具体例に格上げ＝G1 本丸クローズ。
+   - **第2段 H1 ✓**：`RWhileAVSpec.agda`＝`aeval`/`aeval-sound`/`spec-correct`（H1, MKAV 分割）。
+   - **第2段 H2（残）**：特殊化器の自己言語表現（自己適用）。これで `RWhileFutamura2` 完全インスタンス化＝
+     実機 fp2/fp3 が証明された定理の具体例に格上げ＝G1 本丸クローズ。IEICE 草稿も残す工学課題。
 3. **N3（中）：検証コアの抽出（Agda GHC）と OCaml 差分。** `Extract*.agda` の路線で `eval_core` 相当を
    抽出し、`EvalRwhile` とコーパス差分＝G3 を縮める。
 4. **N4：`p2d`/`data2program` の往復（`data2program ∘ program2data = id`）を Agda 化＝G4 の中核。**

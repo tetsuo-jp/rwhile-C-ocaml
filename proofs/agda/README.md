@@ -157,6 +157,18 @@ done by the accumulator induction `rev-rest`.
   machinery.  Remaining for full G1 (see `../../AGDA_CORRESPONDENCE.md`): assemble
   an AV specialisation STEP from these sound ops and discharge H1/H2 end-to-end so
   the executable spec_av becomes an instance of the proved fp2/fp3.
+- `RWhileAVSpec.agda` — **spec-correct (H1) for the real AV mechanism** (N2 step 2).
+  Assembles RWhileAVSound's ops into the symbolic evaluator `aeval` and proves it
+  sound (`aeval-sound : γ (aeval c a) ρ ≡ ⟦ c ⟧c (γ a ρ)`).  Defines the AV
+  residualiser with the BINDING-TIME SPLIT (head static, tail dynamic:
+  `C (S s) (D cVar)`, spec_av's MKAV discipline) and proves
+  `spec-correct : ⟦ spec p s ⟧c d ≡ ⟦ p ⟧c (s · d)` — the H1 hypothesis of
+  `RWhileFutamura2`, now discharged for the ACTUAL AV algebra (not the closure of
+  RWhileFutamura2Inst nor the op-list table of RWhileRevProj2Self), with the
+  dynamic tail genuinely used (`residual-uses-input`, no over-static degeneration).
+  Remaining for a full fp2/fp3 instance: H2 (spec-impl) — representing this
+  specialiser in its own object language (self-application), the engineering the
+  IEICE draft also leaves open.  H1, the correctness core, is now machine-checked.
 - `RWhileCaseInv.agda` — **soundness of the symmetric `case` sugar** (Rwhile.cf
   CCase / src/Desugar.ml).  Models the desugaring to the verified reversible core
   (atom/_⨾_/cond) and proves: `case-reversible` (a desugared case is reversible,
@@ -181,7 +193,7 @@ done by the accumulator induction `rev-rest`.
 
 ```
 cd proofs/agda
-for f in RWhileRev RWhileRevFull RWhileValStore RWhileCRep RWhileCRepDet RWhileDet RWhileDetConcrete RWhileExec RWhileExecConcrete RWhileIL RWhileFutamura RWhileFutamura2 RWhileFutamura2Inst RWhileRevFutamura RWhileRevProjPaper RWhileRevProjInst RWhileRevProjGen RWhileCoreExp RWhileFp1Residual RWhileElabCom RWhileMacroSubst RWhileRevProj2Lift RWhileRevProj2BT RWhileRevProj2Self RWhileAVSound RWhileCaseInv RWhileGarbageBound; do
+for f in RWhileRev RWhileRevFull RWhileValStore RWhileCRep RWhileCRepDet RWhileDet RWhileDetConcrete RWhileExec RWhileExecConcrete RWhileIL RWhileFutamura RWhileFutamura2 RWhileFutamura2Inst RWhileRevFutamura RWhileRevProjPaper RWhileRevProjInst RWhileRevProjGen RWhileCoreExp RWhileFp1Residual RWhileElabCom RWhileMacroSubst RWhileRevProj2Lift RWhileRevProj2BT RWhileRevProj2Self RWhileAVSound RWhileAVSpec RWhileCaseInv RWhileGarbageBound; do
   agda --safe $f.agda
 done
 ```
