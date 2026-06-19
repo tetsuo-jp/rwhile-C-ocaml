@@ -1,0 +1,57 @@
+# Agda 形式化 ↔ 実装 の対応とギャップ（#2 棚卸し）
+
+2026-06-19。`proofs/agda/`（README 参照、`--safe`・postulate 0、唯一の仮定は `funext`）と
+実行系（`src/*.ml`・`examples/*.rwhile`）の対応を棚卸しし、「機械検査済み」「差分テストのみ」
+「未接続」を区別して、コアと実装を厳密に結ぶための次手を特定する。
+
+## 1. 対応表（実装の各部品 ↔ Agda の結果 ↔ 強さ）
+
+| 実装の部品 | Agda 結果 | 強さ |
+|---|---|---|
+| `InvRwhile.invCom`（atom/seq/cond/loop） | `RWhileRev`/`RWhileRevFull`：`inv-sound`/`inv-inv`/`inv-complete` | **証明**（モデルが invCom を厳密に写す） |
+| `EvalRwhile.rupdate`（可逆 XOR 代入） | `RWhileValStore`(`RAss-sym`)・`RWhileExecConcrete`(`rupdF`) | **証明**（部分対合・決定性） |
+| `EvalRwhile.evalCom`（**アルゴリズム**） | `RWhileExec`：`frun ≡` 関係意味（`frun-sound/complete`）、`frun-reversible` | **証明**（ただし `frun` は手書きで evalCom を模倣） |
+| パターン読み書き `CRep`（`evalPat`/`inv_evalPat`） | `RWhileCRep`/`RWhileCRepDet`：`read-write`/`write-read`/`crep-reversible` | **証明** |
+| `Core.ml` `norm_exp`/`norm_pat`/`eval_cexp` | `RWhileCoreExp`：`norm-correct`/`read-norm-correct` | **証明** ＋ `core-ir` 差分テスト |
+| `Core.ml` `elaborate`（com→core） | `RWhileElabCom`：`elab-sound`/`elab-complete` | **証明** |
+| `MacroRwhile.expMacProgram`（衛生性） | `RWhileMacroSubst`：`subst-exp`/`subst-upd`/`capture` | **証明**（衛生的なら健全、を定理化） |
+| `spec_av` fp1（構造的残余化） | `RWhileFutamura`(`mix`,`fp1`)・`RWhileRevFutamura`(`reversible-fp1`,`mix-commute`) | **証明だが op 言語の `mix` 限定**。実 AV 機構は未モデル |
+| `spec_av` fp2/fp3（byte 一致） | `RWhileFutamura2`(H1+H2 から fp2/fp3)・`RWhileRevProjPaper`(`rev-proj1/2/3`) | **モジュラ定理は証明**。具体例は **closure ctor `papp`** か小 op-list（下記）で、実 `spec_av` ではない |
+| 自己適用器の具体例 | `RWhileFutamura2Inst`/`RWhileRevProjInst`（`papp`/`mkpapp`, refl）・`RWhileRevProj2Self`（op-list, **実残余化**, refl） | **証明だが closure か小言語**。`ExtractRevProj` で第2可逆射影を実機計算 |
+| `spec_av` の BTA 修正（`MKAV`） | `RWhileRevProj2BT`：`fp2-buggy-mistags`/`correct-uses-input`/`overstatic-wrong` | **設計仕様を証明**（真因＝無条件 `'S` タグ、修正＝束縛時刻認識） |
+| `spec_av` の lift イディオム（`ASSEMBLE-FP1`） | `RWhileRevProj2Lift`：`idiom-ok`/`idiom-drift`/`fix-roundtrips`/`selfClear-masks` | **設計仕様を証明**（lift が operand 保存 ⇔ 成立） |
+| 可逆化ゴミ（`spec_av_rev`） | `RWhileRevProjGen`：`garbage-necessary`/`input-preserving-inj` | **抽象は証明**。実装は −57% を実測（`FINDINGS §6`） |
+| 反復ワークリスト（`PAT-READ-ITER`） | `RWhileIL`（flat-IL→R-WHILE 翻訳の意味保存・IL 可逆性） | **方法論は証明**（IL で証明し検証翻訳で移送）。`PAT-READ-ITER` 自体は未モデル |
+
+## 2. ギャップ（埋めるべき順）
+
+- **G1（最重要）：実 `spec_av` の AV 構造的残余化が Agda に無い。** fp2/fp3 のモジュラ定理
+  （`RWhileFutamura2`：H1 `spec-correct`・H2 `spec-impl` ⇒ fp2/fp3）は証明済みだが、その**具体例は
+  closure（`papp`）か小 op-list**（`RWhileRevProj2Self`）。実 `spec_av` の `SPEC-EXP-AV-STEP`／AV 代数が
+  H1/H2 を満たすことは**未接続**。よって実機 fp2/fp3 は **byte 一致テストのみ**が根拠。
+- **G2：`Core.ml ≡ EvalRwhile` は差分テスト（`core-ir` 群）止まり。** Agda は両者の**モデル**を別個に
+  証明（`RWhileCoreExp`/`RWhileElabCom`）するが、OCaml の `eval_core` と `evalCom` が等しいことは
+  証明でなく `core-ir` の少数例による経験的照合のみ。
+- **G3：リテラル OCaml は抽出/証明されていない。** `frun`/`eval_core` は手書きで evalCom を模倣
+  （README「Honest scope」）。
+- **G4：式言語・`all_cleared` 不変条件・`p2d`/`data2program`・パーサが Agda 範囲外。** 特に `p2d`
+  は射影機構の中核（プログラム⇄データ）なのに未検証。
+
+## 3. 次手（費用対効果順）
+
+1. **N1（安・高）：`-core` 差分を全テストの不変条件に昇格。** 現状 `core-ir` は独立の小群。
+   代わりに統合/射影テストの実行ごとに `Core.eval_program_core ≡ EvalRwhile.evalProgram` を表明すれば、
+   コーパス全体で `Core.ml ≡ EvalRwhile` を経験的に保証＝G2 を実用上クローズ。`RWhileCoreExp`/
+   `RWhileElabCom` の抽象証明と合わせ「検証コアを実装が refine」を強く主張できる。
+2. **N2（中・最高）：AV 特殊化ステップの Agda モデルで H1/H2 を証明。** `SPEC-EXP-AV-STEP`／AV 代数の
+   最小モデルを作り、`spec-correct`（H1）と `spec-impl`（H2＝自己適用）を示せば、実 `spec_av` が
+   `RWhileFutamura2` の**インスタンス**になり、fp2/fp3 が「byte 一致テスト」から「証明された定理の具体例」に
+   格上げ。`RWhileRevProj2Self`（既に実残余化・refl）を AV 規律へ寄せるのが入口。これが G1 の本丸。
+3. **N3（中）：検証コアの抽出（Agda GHC）と OCaml 差分。** `Extract*.agda` の路線で `eval_core` 相当を
+   抽出し、`EvalRwhile` とコーパス差分＝G3 を縮める。
+4. **N4：`p2d`/`data2program` の往復（`data2program ∘ program2data = id`）を Agda 化＝G4 の中核。**
+
+## 4. まとめ（論文での言い方）
+「surface→core 翻訳の意味保存（exp/pat/制御）・衛生的マクロ展開・`inv` の可逆性・決定性は機械検査済み。
+fp1（mix）と可逆 fp1、fp2/fp3 のモジュラ定理、BTA 修正・ゴミ二分律も機械検査済み。実 `spec_av` の
+fp2/fp3 は現状 byte 一致テストで、N2 によりモジュラ定理のインスタンスへ接続するのが次段階。」
