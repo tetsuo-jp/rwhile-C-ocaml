@@ -329,88 +329,26 @@ macro SPEC-EXP-AV(E, RE)
 
 macro SPEC-EXP-AV-STEP(Cd, Cd', RSt)
   cons (cons ETag EArg) Cd <= Cd;
-  if =? ETag 'var then
-    (* variable: push its store AV (LOOKUP is non-destructive) *)
-    LOOKUP(Vl, EArg, SX);
-    RSt <= cons SX RSt
-  else
-   if =? ETag 'val then
-     (* literal: static AV ('S . v) *)
-     EArgCopy ^= EArg;
-     RSt <= cons (cons 'S EArgCopy) RSt
-   else
-    if =? ETag 'cons then
-      ETag ^= 'cons; ETag ^= 'consB;
-      cons E1 E2 <= EArg;
-      Cd <= cons E1 (cons E2 (cons ('consE . nil) Cd))
-    else
-     if =? ETag 'consE then
-       ETag ^= 'consE; ETag ^= 'cons;
-       cons E2 (cons E1 (cons ('consB . nil) Cd')) <= Cd';
-       EArg <= cons E1 E2;
-       cons R2 (cons R1 RSt) <= RSt;
-       AV-CONS(R1, R2, Rc);
-       RSt <= cons Rc RSt
-     else
-      if =? ETag 'hd then
-        ETag ^= 'hd; ETag ^= 'hdB;
-        Cd <= cons EArg (cons ('hdE . nil) Cd)
-      else
-       if =? ETag 'hdE then
-         ETag ^= 'hdE; ETag ^= 'hd;
-         cons EArg (cons ('hdB . nil) Cd') <= Cd';
-         cons R1 RSt <= RSt;
-         AV-HD(R1, Rh);
-         RSt <= cons Rh RSt
-       else
-        if =? ETag 'tl then
-          ETag ^= 'tl; ETag ^= 'tlB;
-          Cd <= cons EArg (cons ('tlE . nil) Cd)
-        else
-         if =? ETag 'tlE then
-           ETag ^= 'tlE; ETag ^= 'tl;
-           cons EArg (cons ('tlB . nil) Cd') <= Cd';
-           cons R1 RSt <= RSt;
-           AV-TL(R1, Rt);
-           RSt <= cons Rt RSt
-         else
-          if =? ETag 'eq then
-            ETag ^= 'eq; ETag ^= 'eqB;
-            cons E1 E2 <= EArg;
-            Cd <= cons E1 (cons E2 (cons ('eqE . nil) Cd))
-          else
-           if =? ETag 'eqE then
-             ETag ^= 'eqE; ETag ^= 'eq;
-             cons E2 (cons E1 (cons ('eqB . nil) Cd')) <= Cd';
-             EArg <= cons E1 E2;
-             cons R2 (cons R1 RSt) <= RSt;
-             AV-EQ(R1, R2, Re);
-             RSt <= cons Re RSt
-           else
-            if =? ETag 'pairp then
-              ETag ^= 'pairp; ETag ^= 'pairpB;
-              Cd <= cons EArg (cons ('pairpE . nil) Cd)
-            else
-             if =? ETag 'pairpE then
-               ETag ^= 'pairpE; ETag ^= 'pairp;
-               cons EArg (cons ('pairpB . nil) Cd') <= Cd';
-               cons R1 RSt <= RSt;
-               AV-PAIRP(R1, Rp);
-               RSt <= cons Rp RSt
-             else
-               'error <= '0
-             fi =? ETag 'pairp
-            fi =? ETag 'pairpB
-           fi =? ETag 'eq
-          fi =? ETag 'eqB
-         fi =? ETag 'tl
-        fi =? ETag 'tlB
-       fi =? ETag 'hd
-      fi =? ETag 'hdB
-     fi =? ETag 'cons
-    fi =? ETag 'consB
-   fi =? ETag 'val
-  fi =? ETag 'var;
+  case ETag yields ETag of
+     'var    => LOOKUP(Vl, EArg, SX); RSt <= cons SX RSt => 'var
+   | 'val    => EArgCopy ^= EArg; RSt <= cons (cons 'S EArgCopy) RSt => 'val
+   | 'cons   => cons E1 E2 <= EArg; Cd <= cons E1 (cons E2 (cons ('consE . nil) Cd)) => 'consB
+   | 'consE  => cons E2 (cons E1 (cons ('consB . nil) Cd')) <= Cd'; EArg <= cons E1 E2;
+                cons R2 (cons R1 RSt) <= RSt; AV-CONS(R1, R2, Rc); RSt <= cons Rc RSt => 'cons
+   | 'hd     => Cd <= cons EArg (cons ('hdE . nil) Cd) => 'hdB
+   | 'hdE    => cons EArg (cons ('hdB . nil) Cd') <= Cd'; cons R1 RSt <= RSt;
+                AV-HD(R1, Rh); RSt <= cons Rh RSt => 'hd
+   | 'tl     => Cd <= cons EArg (cons ('tlE . nil) Cd) => 'tlB
+   | 'tlE    => cons EArg (cons ('tlB . nil) Cd') <= Cd'; cons R1 RSt <= RSt;
+                AV-TL(R1, Rt); RSt <= cons Rt RSt => 'tl
+   | 'eq     => cons E1 E2 <= EArg; Cd <= cons E1 (cons E2 (cons ('eqE . nil) Cd)) => 'eqB
+   | 'eqE    => cons E2 (cons E1 (cons ('eqB . nil) Cd')) <= Cd'; EArg <= cons E1 E2;
+                cons R2 (cons R1 RSt) <= RSt; AV-EQ(R1, R2, Re); RSt <= cons Re RSt => 'eq
+   | 'pairp  => Cd <= cons EArg (cons ('pairpE . nil) Cd) => 'pairpB
+   | 'pairpE => cons EArg (cons ('pairpB . nil) Cd') <= Cd'; cons R1 RSt <= RSt;
+                AV-PAIRP(R1, Rp); RSt <= cons Rp RSt => 'pairp
+   | W       => 'error <= '0 => nil
+  end;
   Cd' <= cons (cons ETag EArg) Cd'
 
 (* ===== AV pattern helpers (for 'rep), ported from spec.rwhile =====

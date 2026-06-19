@@ -56,60 +56,26 @@ macro CANON(V, B)
 
 macro EVAL-EXP-STEP(Cd,Cd',St,H)
 cons (cons ETag EArg) Cd <= Cd;
-if =? ETag 'var then
- DLOOKUP(Vl,EArg,V); St <= cons V St
-else
- if =? ETag 'val then
-  V ^= EArg; St <= cons V St
- else
-  if =? ETag 'cons then
-   ETag ^= 'cons; ETag ^= 'consB; cons E1 E2 <= EArg;  Cd <= cons E1 (cons E2 (cons ('consE.nil) Cd))
-  else
-   if =? ETag 'consE then
-    ETag ^= 'consE; ETag ^= 'cons;  cons E2 (cons E1 (cons ('consB.nil) Cd')) <= Cd';  cons V2 (cons V1 St) <= St;
-    St <= cons (cons V1 V2) St; EArg <= cons E1 E2
-   else
-    if =? ETag 'hd then
-     ETag ^= 'hd; ETag ^= 'hdB; Cd <= cons EArg (cons ('hdE.nil) Cd)
-    else
-     if =? ETag 'hdE then
-      ETag ^= 'hdE; ETag ^= 'hd;  cons EArg (cons ('hdB.nil) Cd') <= Cd';  cons (cons V1 V2) St <= St;
-      St <= cons V1 St; H <= cons V2 H
-     else
-      if =? ETag 'tl then
-       ETag ^= 'tl; ETag ^= 'tlB;  Cd <= cons EArg (cons ('tlE.nil) Cd)
-      else
-       if =? ETag 'tlE then
-        ETag ^= 'tlE; ETag ^= 'tl;  cons EArg (cons ('tlB.nil) Cd') <= Cd';  cons (cons V1 V2) St <= St;
-        St <= cons V2 St; H <= cons V1 H
-       else
-        if =? ETag 'eq then
-         ETag ^= 'eq; ETag ^= 'eqB;  cons E1 E2 <= EArg;  Cd <= cons E1 (cons E2 (cons ('eqE.nil) Cd))
-        else
-         if =? ETag 'eqE then
-          ETag ^= 'eqE; ETag ^= 'eq;  cons E2 (cons E1 (cons ('eqB.nil) Cd')) <= Cd';  cons V2 (cons V1 St) <= St;
-          EArg <= cons E1 E2; V ^= =? V1 V2; St <= cons V St; H <= cons V1 (cons V2 H)
-         else
-          if =? ETag 'pairp then
-           ETag ^= 'pairp; ETag ^= 'pairpB;  Cd <= cons EArg (cons ('pairpE.nil) Cd)
-          else
-           if =? ETag 'pairpE then
-            ETag ^= 'pairpE; ETag ^= 'pairp;  cons EArg (cons ('pairpB.nil) Cd') <= Cd';  cons V1 St <= St;
-            V ^= pair? V1; St <= cons V St; H <= cons V1 H
-           else
-	    'error <= '0
-           fi =? ETag 'pairp
-          fi =? ETag 'pairpB
-         fi =? ETag 'eq
-        fi =? ETag 'eqB
-       fi =? ETag 'tl
-      fi =? ETag 'tlB
-     fi =? ETag 'hd
-    fi =? ETag 'hdB
-   fi =? ETag 'cons
-  fi =? ETag 'consB
- fi =? ETag 'val
-fi =? ETag 'var;
+case ETag yields ETag of
+   'var    => DLOOKUP(Vl,EArg,V); St <= cons V St => 'var
+ | 'val    => V ^= EArg; St <= cons V St => 'val
+ | 'cons   => cons E1 E2 <= EArg; Cd <= cons E1 (cons E2 (cons ('consE.nil) Cd)) => 'consB
+ | 'consE  => cons E2 (cons E1 (cons ('consB.nil) Cd')) <= Cd'; cons V2 (cons V1 St) <= St;
+              St <= cons (cons V1 V2) St; EArg <= cons E1 E2 => 'cons
+ | 'hd     => Cd <= cons EArg (cons ('hdE.nil) Cd) => 'hdB
+ | 'hdE    => cons EArg (cons ('hdB.nil) Cd') <= Cd'; cons (cons V1 V2) St <= St;
+              St <= cons V1 St; H <= cons V2 H => 'hd
+ | 'tl     => Cd <= cons EArg (cons ('tlE.nil) Cd) => 'tlB
+ | 'tlE    => cons EArg (cons ('tlB.nil) Cd') <= Cd'; cons (cons V1 V2) St <= St;
+              St <= cons V2 St; H <= cons V1 H => 'tl
+ | 'eq     => cons E1 E2 <= EArg; Cd <= cons E1 (cons E2 (cons ('eqE.nil) Cd)) => 'eqB
+ | 'eqE    => cons E2 (cons E1 (cons ('eqB.nil) Cd')) <= Cd'; cons V2 (cons V1 St) <= St;
+              EArg <= cons E1 E2; V ^= =? V1 V2; St <= cons V St; H <= cons V1 (cons V2 H) => 'eq
+ | 'pairp  => Cd <= cons EArg (cons ('pairpE.nil) Cd) => 'pairpB
+ | 'pairpE => cons EArg (cons ('pairpB.nil) Cd') <= Cd'; cons V1 St <= St;
+              V ^= pair? V1; St <= cons V St; H <= cons V1 H => 'pairp
+ | W       => 'error <= '0 => nil
+end;
 Cd' <= cons (cons ETag EArg) Cd'
 
 macro EVAL-EXP(E,V,H)
