@@ -95,6 +95,7 @@ let rec expMacCom (ms : macro list) = function
   | CLocal (x, c) -> CLocal (x, expMacCom ms c)
   | CAutoFi (e, t, el) -> CAutoFi (e, expMacThenBranch ms t, expMacElseBranch ms el)
   | CArrAss _ as e -> e
+  | CCase _ as c -> expMacCom ms (Desugar.desugar_com c)  (* normally already desugared in expMacProgram *)
 
 and expMacThenBranch ms = function
     BThen c   -> BThen (expMacCom ms c)
@@ -112,7 +113,10 @@ and expMacLoopBranch ms = function
     BLoop c   -> BLoop (expMacCom ms c)
   | BLoopNone -> BLoopNone
 
-and expMacProgram (Prog (ms, x, c, y) as p) =
+and expMacProgram prog =
+  (* Desugar surface sugar (e.g. `case`) into core constructs before anything
+     else, so the rest of the pipeline only ever sees core commands. *)
+  let (Prog (ms, x, c, y) as p) = Desugar.desugar_program prog in
   (* Top-level variables are globals and exempt from alpha-renaming.  Computed
      from the un-expanded main body so macro-call arguments (the actuals) and
      direct top-level assignments both count.  Also seed the reserved-name set

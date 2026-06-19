@@ -57,7 +57,8 @@ and transCom (c : com) : valT =
          | CShow _ -> failwith "CShow cannot be translated to data"
          | CLocal _ -> failwith "CLocal cannot be translated to data"
          | CAutoFi _ -> failwith "CAutoFi cannot be translated to data"
-         | CArrAss _ -> failwith "CArrAss cannot be translated to data")
+         | CArrAss _ -> failwith "CArrAss cannot be translated to data"
+         | CCase _ -> failwith "transCom: `case` must be desugared first (Desugar.desugar_program)")
 
 and transThenBranch = function
     BThen com -> transCom com

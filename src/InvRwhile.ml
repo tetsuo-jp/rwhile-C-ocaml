@@ -22,6 +22,7 @@ let rec invCom = function
   | CLocal (x, c) -> CLocal (x, invCom c)        (* local scope is symmetric *)
   | CAutoFi (e, t, el) -> CAutoFi (e, invThenBranch t, invElseBranch el)
   | CArrAss (x, i, e) -> CArrAss (x, i, e)       (* array update is self-inverse *)
+  | CCase _ as c -> invCom (Desugar.desugar_com c)  (* normally desugared in invProgram *)
 
 and invThenBranch = function
     BThen c   -> BThen (invCom c)
@@ -39,4 +40,6 @@ and invLoopBranch = function
     BLoop c   -> BLoop (invCom c)
   | BLoopNone -> BLoopNone
 
-let invProgram (Prog (macros, x, c, y)) = Prog (macros, y, invCom c, x)
+let invProgram prog =
+  let (Prog (macros, x, c, y)) = Desugar.desugar_program prog in
+  Prog (macros, y, invCom c, x)

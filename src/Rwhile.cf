@@ -13,6 +13,7 @@
 --                      | local X in C end                      (extension: scoped local)
 --                      | iff E then C else D fi                 (extension: auto-fi)
 --                      | X[E] ^= E                             (extension: array update)
+--                      | case X yields Y of Q=>C=>R | ... end  (symmetric match: sugar)
 -- Macro       ∋ M    ::= macro X ( X, ..., X ) C
 -- Programs    ∋ P    ::= M* read X; C; write Y
 --
@@ -54,7 +55,11 @@ CShow.   Com1 ::= "show" Exp ;                                    -- Show comman
 CLocal.  Com1 ::= "local" RIdent "in" Com "end" ;                 -- Scoped local variable (-local)
 CAutoFi. Com1 ::= "iff" Exp ThenBranch ElseBranch "fi" ;          -- Auto-fi conditional (-autofi)
 CArrAss. Com1 ::= RIdent "[" Exp1 "]" "^=" Exp ;                  -- Array element update (-array)
+CCase.   Com1 ::= "case" RIdent "yields" RIdent "of" [CaseArm] "end" ; -- Symmetric reversible match (always-on sugar; desugared to if/fi)
 coercions Com 1;
+
+ACase.   CaseArm ::= Pat "=>" Com "=>" Pat ;   -- inPat => body => outPat
+separator CaseArm "|" ;
 
 BThen.     ThenBranch ::= "then" Com ;
 BThenNone. ThenBranch ::= ;

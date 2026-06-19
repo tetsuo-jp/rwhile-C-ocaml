@@ -76,6 +76,7 @@ let rec elaborate : com -> core = function
   | CMac _              -> failwith "Core.elaborate: macros must be expanded first"
   | CLocal _ | CAutoFi _ | CArrAss _ ->
       failwith "Core.elaborate: surface extension not in the reversible core"
+  | CCase _ as c -> elaborate (Desugar.desugar_com c)  (* normally desugared upstream *)
 and elab_then = function BThen c -> elaborate c | BThenNone -> Skip
 and elab_else = function BElse c -> elaborate c | BElseNone -> Skip
 and elab_do   = function BDo c   -> elaborate c | BDoNone   -> Skip

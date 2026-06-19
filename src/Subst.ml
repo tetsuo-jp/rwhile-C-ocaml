@@ -40,6 +40,7 @@ and substCom ss = function
   | CLocal (x, c) -> CLocal (substRIdent ss x, substCom ss c)
   | CAutoFi (e, t, el) -> CAutoFi (substExp ss e, substThenBranch ss t, substElseBranch ss el)
   | CArrAss (x, i, e) -> CArrAss (substRIdent ss x, substExp ss i, substExp ss e)
+  | CCase _ as c -> substCom ss (Desugar.desugar_com c)
 
 and substThenBranch ss = function
     BThen com -> BThen (substCom ss com)
@@ -90,6 +91,7 @@ and varsCom = function
   | CLocal (x, c) -> x :: varsCom c
   | CAutoFi (e, t, el) -> varsExp e @ varsThenBranch t @ varsElseBranch el
   | CArrAss (x, i, e) -> x :: varsExp i @ varsExp e
+  | CCase _ as c -> varsCom (Desugar.desugar_com c)
 
 and varsThenBranch = function BThen c -> varsCom c | BThenNone -> []
 and varsElseBranch = function BElse c -> varsCom c | BElseNone -> []
