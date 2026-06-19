@@ -144,12 +144,25 @@ done by the accumulator induction `rev-rest`.
   `compiler-residual-uses-input` / `fp2-correct` witness that the generated
   compiler's residual USES its runtime input (no over-static degeneration) —
   the small-core realisation of the fix `RWhileRevProj2BT` specifies.
+- `RWhileAVSound.agda` — **soundness of spec_av's annotated-value (AV) algebra**
+  (the executable specialiser's actual mechanism, not a closure/op-list stand-in).
+  Models AV (`S` static / `D` dynamic-code / `C` partial-static cons), a residual-
+  code language with semantics `⟦_⟧c`, and concretisation `γ : AV → Val → Val`
+  (fill dynamic holes with the runtime input).  Proves every AV operation
+  (mirroring the macros `AV-HD`/`AV-TL`/`AV-CONS`/`AV-EQ`/`AV-PAIRP`/`AV-LIFT`)
+  commutes with concretisation: e.g. `avHd-sound : γ (avHd a) ρ ≡ hd (γ a ρ)`,
+  and `lift-sound : ⟦ lift a ⟧c ρ ≡ γ a ρ`.  These congruences are the machine-
+  checked core of "spec_av specialises correctly" — the H1 (`spec-correct`)
+  obligation of the modular hierarchy `RWhileFutamura2`, for the REAL AV
+  machinery.  Remaining for full G1 (see `../../AGDA_CORRESPONDENCE.md`): assemble
+  an AV specialisation STEP from these sound ops and discharge H1/H2 end-to-end so
+  the executable spec_av becomes an instance of the proved fp2/fp3.
 
 ## Checking
 
 ```
 cd proofs/agda
-for f in RWhileRev RWhileRevFull RWhileValStore RWhileCRep RWhileCRepDet RWhileDet RWhileDetConcrete RWhileExec RWhileExecConcrete RWhileIL RWhileFutamura RWhileFutamura2 RWhileFutamura2Inst RWhileRevFutamura RWhileRevProjPaper RWhileRevProjInst RWhileRevProjGen RWhileCoreExp RWhileFp1Residual RWhileElabCom RWhileMacroSubst RWhileRevProj2Lift RWhileRevProj2BT RWhileRevProj2Self; do
+for f in RWhileRev RWhileRevFull RWhileValStore RWhileCRep RWhileCRepDet RWhileDet RWhileDetConcrete RWhileExec RWhileExecConcrete RWhileIL RWhileFutamura RWhileFutamura2 RWhileFutamura2Inst RWhileRevFutamura RWhileRevProjPaper RWhileRevProjInst RWhileRevProjGen RWhileCoreExp RWhileFp1Residual RWhileElabCom RWhileMacroSubst RWhileRevProj2Lift RWhileRevProj2BT RWhileRevProj2Self RWhileAVSound; do
   agda --safe $f.agda
 done
 ```

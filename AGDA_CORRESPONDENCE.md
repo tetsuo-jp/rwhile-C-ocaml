@@ -25,10 +25,13 @@
 
 ## 2. ギャップ（埋めるべき順）
 
-- **G1（最重要）：実 `spec_av` の AV 構造的残余化が Agda に無い。** fp2/fp3 のモジュラ定理
-  （`RWhileFutamura2`：H1 `spec-correct`・H2 `spec-impl` ⇒ fp2/fp3）は証明済みだが、その**具体例は
-  closure（`papp`）か小 op-list**（`RWhileRevProj2Self`）。実 `spec_av` の `SPEC-EXP-AV-STEP`／AV 代数が
-  H1/H2 を満たすことは**未接続**。よって実機 fp2/fp3 は **byte 一致テストのみ**が根拠。
+- **G1（最重要・一部クローズ ✓）：実 `spec_av` の AV 代数を Agda 化した（N2 第1段）。**
+  `RWhileAVSound.agda`（`--safe`）が AV（`S`/`D`/`C`）・残余コード `⟦_⟧c`・概念化 `γ` を定義し、
+  `AV-HD/TL/CONS/EQ/PAIRP/LIFT` 各演算が γ と**可換であること（健全性）**を機械検査
+  （`avHd-sound`/`avCons-sound`/…/`lift-sound`）。これが特殊化の正しさ＝H1 `spec-correct` の congruence 核。
+  **残り**：これら健全な AV 演算から特殊化 STEP（`SPEC-EXP-AV-STEP` 相当）を組み、H1/H2 を端から端まで
+  示して `spec_av` を `RWhileFutamura2` のインスタンスにする（＝実機 fp2/fp3 を「byte 一致テスト」から
+  「証明された定理の具体例」へ）。現状は AV 代数まで証明、STEP 組立は未。
 - **G2：`Core.ml ≡ EvalRwhile`（実用上クローズ済 ✓ — N1 実施）。** Agda は両者の**モデル**を別個に
   証明（`RWhileCoreExp`/`RWhileElabCom`）。OCaml レベルの等価は、`core-equiv` 群（`test_core_equiv_corpus`/
   `test_core_equiv_selfinterp`）が**実例コーパス7本＋完全自己解釈器 ri.rwhile の p2d 入力3本**で
@@ -45,10 +48,11 @@
    `Core.eval_program_core == EvalRwhile.evalProgram` を表明（`TestSuite.ml`）。`RWhileCoreExp`/
    `RWhileElabCom` の抽象証明と合わせ「検証コアを実装が refine」を経験的に主張できる。
    （さらなる強化：spec_av fp1 も `Slow` で core-equiv に追加可能。）
-2. **N2（中・最高）：AV 特殊化ステップの Agda モデルで H1/H2 を証明。** `SPEC-EXP-AV-STEP`／AV 代数の
-   最小モデルを作り、`spec-correct`（H1）と `spec-impl`（H2＝自己適用）を示せば、実 `spec_av` が
-   `RWhileFutamura2` の**インスタンス**になり、fp2/fp3 が「byte 一致テスト」から「証明された定理の具体例」に
-   格上げ。`RWhileRevProj2Self`（既に実残余化・refl）を AV 規律へ寄せるのが入口。これが G1 の本丸。
+2. **N2（中・最高）：AV 特殊化ステップの Agda モデルで H1/H2 を証明。**
+   - **第1段 ✓ 実施済**：AV 代数の健全性 `RWhileAVSound.agda`（各 AV 演算が γ と可換）。
+   - **第2段（残）**：健全な AV 演算から特殊化 STEP を組み、H1 `spec-correct`・H2 `spec-impl` を示して
+     `RWhileFutamura2` をインスタンス化。`RWhileRevProj2Self`（実残余化・refl）と本健全性を合流させるのが筋。
+   完了すれば実機 fp2/fp3 が証明された定理の具体例に格上げ＝G1 本丸クローズ。
 3. **N3（中）：検証コアの抽出（Agda GHC）と OCaml 差分。** `Extract*.agda` の路線で `eval_core` 相当を
    抽出し、`EvalRwhile` とコーパス差分＝G3 を縮める。
 4. **N4：`p2d`/`data2program` の往復（`data2program ∘ program2data = id`）を Agda 化＝G4 の中核。**
