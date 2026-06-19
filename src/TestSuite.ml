@@ -1583,6 +1583,25 @@ let test_fp2_second_projection () =
   Alcotest.(check valT_testable) "fp2 end-to-end: [[comp]'swap](('a.'b)) = ('swap.('b.'a))"
     (parse_val "('swap . ('b . 'a))") (run_comp_direct comp_swap (parse_val "('a . 'b)"))
 
+(* #5 (benchmark + regression guard): specialisation is EFFECTIVE -- the fp1
+ * residual is strictly SMALLER than the interpreter it specialises (static
+ * dispatch resolved at specialisation time), i.e. not a mere interpreter
+ * embedding.  Generalises the IEICE draft's single "103 < 163" datapoint to a
+ * checked invariant.  Sizes are p2d node counts (EvalRwhile.count_nodes). *)
+let test_specialization_gain () =
+  let spec_av = parse_file_program (examples_dir ^ "/spec_av.rwhile") in
+  let rimin = Program2DataRwhile.program2data
+      (parse_file_program (examples_dir ^ "/ri_min.rwhile")) in
+  let int_size = EvalRwhile.count_nodes rimin in
+  let resid_size op =
+    EvalRwhile.count_nodes (EvalRwhile.evalProgram spec_av (spec_in rimin (atom op))) in
+  let b_swap = resid_size "'swap" and b_id = resid_size "'id" in
+  Printf.eprintf
+    "[SPEC-GAIN] ri_min interpreter = %d nodes; fp1 residual: swap=%d, id=%d\n%!"
+    int_size b_swap b_id;
+  Alcotest.(check bool) "fp1 residual (swap) is smaller than the interpreter" true (b_swap < int_size);
+  Alcotest.(check bool) "fp1 residual (id) is smaller than the interpreter"   true (b_id   < int_size)
+
 (* fp3 (cogen): comp3 = [spec_av]((spec_av . ('S . spec_av))).  [comp3](('S.ri_min))
  * is the ri_min compiler comp2, and [comp2](('S.op)) == B.  Verified end-to-end
  * by DIRECT eval.  VERY SLOW (self-application of the full specialiser). *)
@@ -2262,6 +2281,9 @@ let () =
       Alcotest.test_case "fp1 GREEN seq: [[spec_av]((ri_seq.[swap,swap]))](('a.'b))=([swap,swap].('a.'b))" `Quick test_fp1_seq_swapswap;
       Alcotest.test_case "fp1 ri_min correct on ALL small inputs (exhaustive)" `Slow test_fp1_min_exhaustive;
       Alcotest.test_case "fp1 ri_seq correct on many op-lists x inputs (exhaustive)" `Slow test_fp1_seq_exhaustive;
+    ];
+    "specialization-gain", [
+      Alcotest.test_case "fp1 residual is smaller than the interpreter (specialisation effective)" `Slow test_specialization_gain;
     ];
     "second-projection", [
       (* 2nd reversible Futamura projection: comp=[spec_av]((spec_av.('S.ri_min)))

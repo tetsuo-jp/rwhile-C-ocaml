@@ -105,6 +105,9 @@
   （`proofs/agda/RWhileCaseInv.agda`：脱糖した case は可逆、反転は「入出力を入れ替えた case の脱糖」と
   意味的に一致＝case は反転で閉じる、arm 反転は対合）。
 - **Agda 形式化**：`proofs/agda/RWhileRevProj2*`（postulate 0）。実行デモに機械検査の裏付け。
+- **特殊化の有効性（実測・回帰ガード）**：fp1 残余 < インタプリタ（静的ディスパッチが解決＝単なる埋め込みでない）。
+  `specialization-gain` テストで ri_min=163 / 残余 swap=103・id=63 ノードを測定（親草稿の単一値 103<163 を
+  一般化・自動検証化）。
 
 ## 6. 公表前に詰めるべき確認事項（claim を堅くする）
 
