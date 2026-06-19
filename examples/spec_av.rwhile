@@ -356,15 +356,10 @@ macro SPEC-EXP-AV-STEP(Cd, Cd', RSt)
  * 'var, 'val and one level of 'cons (the SIMPLE forms). *)
 
 macro PAT-LEAF-STATIC-AV(PP, Stat)
-  if =? (hd PP) 'var then
-    cons PLStg PLSag <= PP;
-    LOOKUP(Vl, PLSag, PLSsv);
-    Stat ^= =? (hd PLSsv) 'S;
-    PLSsv ^= PLSsv;
-    PP <= cons PLStg PLSag
-  else
-    Stat ^= (nil.nil)
-  fi =? (hd PP) 'var
+  case PP yields PP of
+      cons 'var PLSag => LOOKUP(Vl, PLSag, PLSsv); Stat ^= =? (hd PLSsv) 'S; PLSsv ^= PLSsv => cons 'var PLSag
+    | Rest => Stat ^= (nil.nil) => Rest
+  end
 
 macro CHECK-PAT-STATIC-AV(PP, Stat)
   if =? (hd PP) 'cons then
@@ -385,20 +380,10 @@ macro CHECK-PAT-STATIC-AV(PP, Stat)
 
 (* PAT-READ-LEAF-AV: read a static leaf value into PV; set 'var slot to dynamic. *)
 macro PAT-READ-LEAF-AV(PP, PV)
-  if =? (hd PP) 'var then
-    cons PRLtg PRLag <= PP;
-    LOOKUP(Vl, PRLag, PRLsv);     (* PRLsv = ('S . v) *)
-    PV ^= tl PRLsv;               (* PV = v *)
-    UPDATE(Vl, PRLag, PRLsv);     (* clear slot to nil *)
-    PRLsv ^= PRLsv;               (* discard old AV *)
-    PRLagc ^= PRLag;
-    PRLsv <= cons 'D (cons 'var PRLagc);
-    UPDATE(Vl, PRLag, PRLsv);     (* slot = ('D.('var.k))  (PRLsv preserved) *)
-    cons PRLdd PRLdr <= PRLsv; PRLdd ^= PRLdd; PRLdr ^= PRLdr;
-    PP <= cons PRLtg PRLag
-  else
-    PV ^= tl PP
-  fi =? (hd PP) 'var
+  case PP yields PP of
+      cons 'var PRLag => LOOKUP(Vl, PRLag, PRLsv); PV ^= tl PRLsv; UPDATE(Vl, PRLag, PRLsv); PRLsv ^= PRLsv; PRLagc ^= PRLag; PRLsv <= cons 'D (cons 'var PRLagc); UPDATE(Vl, PRLag, PRLsv); cons PRLdd PRLdr <= PRLsv; PRLdd ^= PRLdd; PRLdr ^= PRLdr => cons 'var PRLag
+    | Rest => PV ^= tl Rest => Rest
+  end
 
 macro PAT-READ-SIMPLE-AV(PP, PV)
   if =? (hd PP) 'cons then
@@ -416,28 +401,10 @@ macro PAT-READ-SIMPLE-AV(PP, PV)
 (* PAT-WRITE-LEAF-AV: write static value PV into 'var slot as ('S.PV); 'dynamic
  * marker sets the slot dynamic instead. *)
 macro PAT-WRITE-LEAF-AV(PP, PV)
-  if =? (hd PP) 'var then
-    cons PWLtg PWLag <= PP;
-    LOOKUP(Vl, PWLag, PWLsv);
-    UPDATE(Vl, PWLag, PWLsv);     (* clear slot to nil *)
-    PWLsv ^= PWLsv;
-    IsDyn ^= =? PV 'dynamic;
-    if IsDyn then
-      PWLagc ^= PWLag;
-      PWLsv <= cons 'D (cons 'var PWLagc);
-      UPDATE(Vl, PWLag, PWLsv);
-      cons PWLdd PWLdr <= PWLsv; PWLdd ^= PWLdd; PWLdr ^= PWLdr;
-      PV ^= 'dynamic
-    else
-      PWLsv <= cons 'S PV;        (* slot = ('S . PV) *)
-      UPDATE(Vl, PWLag, PWLsv);
-      cons PWLss PWLsval <= PWLsv; PWLss ^= PWLss; PWLsval ^= PWLsval
-    fi IsDyn;
-    IsDyn ^= IsDyn;
-    PP <= cons PWLtg PWLag
-  else
-    PV ^= PV
-  fi =? (hd PP) 'var
+  case PP yields PP of
+      cons 'var PWLag => LOOKUP(Vl, PWLag, PWLsv); UPDATE(Vl, PWLag, PWLsv); PWLsv ^= PWLsv; IsDyn ^= =? PV 'dynamic; if IsDyn then PWLagc ^= PWLag; PWLsv <= cons 'D (cons 'var PWLagc); UPDATE(Vl, PWLag, PWLsv); cons PWLdd PWLdr <= PWLsv; PWLdd ^= PWLdd; PWLdr ^= PWLdr; PV ^= 'dynamic else PWLsv <= cons 'S PV; UPDATE(Vl, PWLag, PWLsv); cons PWLss PWLsval <= PWLsv; PWLss ^= PWLss; PWLsval ^= PWLsval fi IsDyn; IsDyn ^= IsDyn => cons 'var PWLag
+    | Rest => PV ^= PV => Rest
+  end
 
 macro PAT-WRITE-SIMPLE-AV(PP, PV)
   if =? (hd PP) 'cons then
@@ -453,17 +420,10 @@ macro PAT-WRITE-SIMPLE-AV(PP, PV)
   fi =? (hd PP) 'cons
 
 macro PAT-CLR-LEAF-AV(PP)
-  if =? (hd PP) 'var then
-    cons PCLtg PCLag <= PP;
-    LOOKUP(Vl, PCLag, PCLsv);
-    UPDATE(Vl, PCLag, PCLsv);
-    PCLsv ^= PCLsv;
-    PCLagc ^= PCLag;
-    PCLsv <= cons 'D (cons 'var PCLagc);
-    UPDATE(Vl, PCLag, PCLsv);
-    cons PCLdd PCLdr <= PCLsv; PCLdd ^= PCLdd; PCLdr ^= PCLdr;
-    PP <= cons PCLtg PCLag
-  fi =? (hd PP) 'var
+  case PP yields PP of
+      cons 'var PCLag => LOOKUP(Vl, PCLag, PCLsv); UPDATE(Vl, PCLag, PCLsv); PCLsv ^= PCLsv; PCLagc ^= PCLag; PCLsv <= cons 'D (cons 'var PCLagc); UPDATE(Vl, PCLag, PCLsv); cons PCLdd PCLdr <= PCLsv; PCLdd ^= PCLdd; PCLdr ^= PCLdr => cons 'var PCLag
+    | Rest => nil <= nil => Rest
+  end
 
 macro PAT-CLR-SIMPLE-AV(PP)
   if =? (hd PP) 'cons then
