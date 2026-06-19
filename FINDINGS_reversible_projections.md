@@ -95,5 +95,7 @@
 - ゴミ最小化の hard 集合（AV 代数の uncompute 規律可逆書換、Vl の store-reversal）。
 - `N` の真の動的化（spec_av 内部で Prog の変数数から算定。現状は固定 or `specsize` で外部生成）。
 - ri.rwhile bug2（自己クリア非可逆）の扱い＝spec_av_rev のように残余から self-clear を排すれば run_via_ri 可。
-- 先行研究：古典 PE の cogen は Jones-Sestoft-Søndergaard の Mix(1985)で達成済。**可逆領域で fp3 まで**の
-  公表例の有無は要文献確認（新規性の在処の可能性）。
+- 先行研究：古典 PE の cogen は Mix/Similix/C-mix で達成済（いずれも非可逆）。**可逆領域**の先行 PE
+  （Mogensen Janus PE 2011、Glück–Normann 2024、可逆フローチャート PE 2024）は **fp1＋反転射影どまりで
+  自己適用 fp2/fp3 は無い**＝本研究（自己適用可能な可逆 PE による fp2/fp3・可逆 cogen）が中核的新規性。
+  詳細な位置づけ・出典・公表前の確認事項は **`RELATED_WORK.md`** を参照。
