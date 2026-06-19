@@ -362,21 +362,10 @@ macro PAT-LEAF-STATIC-AV(PP, Stat)
   end
 
 macro CHECK-PAT-STATIC-AV(PP, Stat)
-  if =? (hd PP) 'cons then
-    cons CPStg CPSag <= PP;
-    cons CPSp1 CPSp2 <= CPSag;
-    PAT-LEAF-STATIC-AV(CPSp1, CPS1);
-    PAT-LEAF-STATIC-AV(CPSp2, CPS2);
-    if CPS1 then
-      if CPS2 then Stat ^= (nil.nil) fi CPS2
-    fi CPS1;
-    CPS1 ^= CPS1;
-    CPS2 ^= CPS2;
-    CPSag <= cons CPSp1 CPSp2;
-    PP <= cons CPStg CPSag
-  else
-    PAT-LEAF-STATIC-AV(PP, Stat)
-  fi =? (hd PP) 'cons
+  case PP yields PP of
+      cons 'cons CPSag => cons CPSp1 CPSp2 <= CPSag; PAT-LEAF-STATIC-AV(CPSp1, CPS1); PAT-LEAF-STATIC-AV(CPSp2, CPS2); if CPS1 then if CPS2 then Stat ^= (nil.nil) fi CPS2 fi CPS1; CPS1 ^= CPS1; CPS2 ^= CPS2; CPSag <= cons CPSp1 CPSp2 => cons 'cons CPSag
+    | Rest => PAT-LEAF-STATIC-AV(Rest, Stat) => Rest
+  end
 
 (* PAT-READ-LEAF-AV: read a static leaf value into PV; set 'var slot to dynamic. *)
 macro PAT-READ-LEAF-AV(PP, PV)
@@ -386,17 +375,10 @@ macro PAT-READ-LEAF-AV(PP, PV)
   end
 
 macro PAT-READ-SIMPLE-AV(PP, PV)
-  if =? (hd PP) 'cons then
-    cons PRStg PRSag <= PP;
-    cons PRSp1 PRSp2 <= PRSag;
-    PAT-READ-LEAF-AV(PRSp1, PRSv1);
-    PAT-READ-LEAF-AV(PRSp2, PRSv2);
-    PV <= cons PRSv1 PRSv2;
-    PRSag <= cons PRSp1 PRSp2;
-    PP <= cons PRStg PRSag
-  else
-    PAT-READ-LEAF-AV(PP, PV)
-  fi =? (hd PP) 'cons
+  case PP yields PP of
+      cons 'cons PRSag => cons PRSp1 PRSp2 <= PRSag; PAT-READ-LEAF-AV(PRSp1, PRSv1); PAT-READ-LEAF-AV(PRSp2, PRSv2); PV <= cons PRSv1 PRSv2; PRSag <= cons PRSp1 PRSp2 => cons 'cons PRSag
+    | Rest => PAT-READ-LEAF-AV(Rest, PV) => Rest
+  end
 
 (* PAT-WRITE-LEAF-AV: write static value PV into 'var slot as ('S.PV); 'dynamic
  * marker sets the slot dynamic instead. *)
@@ -407,17 +389,10 @@ macro PAT-WRITE-LEAF-AV(PP, PV)
   end
 
 macro PAT-WRITE-SIMPLE-AV(PP, PV)
-  if =? (hd PP) 'cons then
-    cons PWStg PWSag <= PP;
-    cons PWSp1 PWSp2 <= PWSag;
-    cons PWSv1 PWSv2 <= PV;
-    PAT-WRITE-LEAF-AV(PWSp1, PWSv1);
-    PAT-WRITE-LEAF-AV(PWSp2, PWSv2);
-    PWSag <= cons PWSp1 PWSp2;
-    PP <= cons PWStg PWSag
-  else
-    PAT-WRITE-LEAF-AV(PP, PV)
-  fi =? (hd PP) 'cons
+  case PP yields PP of
+      cons 'cons PWSag => cons PWSp1 PWSp2 <= PWSag; cons PWSv1 PWSv2 <= PV; PAT-WRITE-LEAF-AV(PWSp1, PWSv1); PAT-WRITE-LEAF-AV(PWSp2, PWSv2); PWSag <= cons PWSp1 PWSp2 => cons 'cons PWSag
+    | Rest => PAT-WRITE-LEAF-AV(Rest, PV) => Rest
+  end
 
 macro PAT-CLR-LEAF-AV(PP)
   case PP yields PP of
@@ -426,16 +401,10 @@ macro PAT-CLR-LEAF-AV(PP)
   end
 
 macro PAT-CLR-SIMPLE-AV(PP)
-  if =? (hd PP) 'cons then
-    cons PCStg PCSag <= PP;
-    cons PCSp1 PCSp2 <= PCSag;
-    PAT-CLR-LEAF-AV(PCSp1);
-    PAT-CLR-LEAF-AV(PCSp2);
-    PCSag <= cons PCSp1 PCSp2;
-    PP <= cons PCStg PCSag
-  else
-    PAT-CLR-LEAF-AV(PP)
-  fi =? (hd PP) 'cons
+  case PP yields PP of
+      cons 'cons PCSag => cons PCSp1 PCSp2 <= PCSag; PAT-CLR-LEAF-AV(PCSp1); PAT-CLR-LEAF-AV(PCSp2); PCSag <= cons PCSp1 PCSp2 => cons 'cons PCSag
+    | Rest => PAT-CLR-LEAF-AV(Rest) => Rest
+  end
 
 (* ===== AV-aware pattern read/write (for partially-static 'rep) =====
  * Read a pattern into an AV (consuming its vars); write an AV into a pattern.
@@ -443,33 +412,16 @@ macro PAT-CLR-SIMPLE-AV(PP)
  * structures (e.g. (prog.data)) are handled without losing the static part. *)
 
 macro PAT-READ-LEAF-AV2(P, RA)
-  if =? (hd P) 'var then
-    cons PRLt PRLi <= P;
-    LOOKUP(Vl, PRLi, PRLs);     (* PRLs = current slot AV *)
-    RA ^= PRLs;                 (* RA = slot AV (PRLs preserved) *)
-    UPDATE(Vl, PRLi, PRLs);     (* slot ^= PRLs -> nil *)
-    PRLs ^= PRLs;               (* discard old slot AV *)
-    PRLs <= cons 'S nil;        (* consumed var becomes static nil *)
-    UPDATE(Vl, PRLi, PRLs);     (* slot = ('S.nil) *)
-    cons PRLss PRLsv <= PRLs; PRLss ^= PRLss; PRLsv ^= PRLsv;
-    P <= cons PRLt PRLi
-  else
-    PRLv ^= tl P;
-    RA <= cons 'S PRLv
-  fi =? (hd P) 'var
+  case P yields P of
+      cons 'var PRLi => LOOKUP(Vl, PRLi, PRLs); RA ^= PRLs; UPDATE(Vl, PRLi, PRLs); PRLs ^= PRLs; PRLs <= cons 'S nil; UPDATE(Vl, PRLi, PRLs); cons PRLss PRLsv <= PRLs; PRLss ^= PRLss; PRLsv ^= PRLsv => cons 'var PRLi
+    | Rest => PRLv ^= tl Rest; RA <= cons 'S PRLv => Rest
+  end
 
 macro PAT-READ-AV(P, RA)
-  if =? (hd P) 'cons then
-    cons PRtg PRag <= P;
-    cons PRp1 PRp2 <= PRag;
-    PAT-READ-LEAF-AV2(PRp1, PRa1);
-    PAT-READ-LEAF-AV2(PRp2, PRa2);
-    AV-CONS(PRa1, PRa2, RA);
-    PRag <= cons PRp1 PRp2;
-    P <= cons PRtg PRag
-  else
-    PAT-READ-LEAF-AV2(P, RA)
-  fi =? (hd P) 'cons
+  case P yields P of
+      cons 'cons PRag => cons PRp1 PRp2 <= PRag; PAT-READ-LEAF-AV2(PRp1, PRa1); PAT-READ-LEAF-AV2(PRp2, PRa2); AV-CONS(PRa1, PRa2, RA); PRag <= cons PRp1 PRp2 => cons 'cons PRag
+    | Rest => PAT-READ-LEAF-AV2(Rest, RA) => Rest
+  end
 
 (* PAT-READ-ITER(P, RA): like PAT-READ-AV but for ARBITRARY-DEPTH (nested)
  * patterns.  Macros cannot recurse, so this is an iterative worklist tree-fold
@@ -514,31 +466,16 @@ macro PAT-READ-ITER(P, RA)
   cons RA nil <= PrSt
 
 macro PAT-WRITE-LEAF-AV2(P, WA)
-  if =? (hd P) 'var then
-    cons PWLt PWLi <= P;
-    LOOKUP(Vl, PWLi, PWLs);
-    UPDATE(Vl, PWLi, PWLs);     (* clear slot to nil *)
-    PWLs ^= PWLs;               (* discard old *)
-    PWLs <= WA;                 (* move WA into PWLs (WA consumed) *)
-    UPDATE(Vl, PWLi, PWLs);     (* slot = WA (PWLs preserved) *)
-    cons PWLss PWLsv <= PWLs; PWLss ^= PWLss; PWLsv ^= PWLsv;
-    P <= cons PWLt PWLi
-  else
-    WA ^= WA
-  fi =? (hd P) 'var
+  case P yields P of
+      cons 'var PWLi => LOOKUP(Vl, PWLi, PWLs); UPDATE(Vl, PWLi, PWLs); PWLs ^= PWLs; PWLs <= WA; UPDATE(Vl, PWLi, PWLs); cons PWLss PWLsv <= PWLs; PWLss ^= PWLss; PWLsv ^= PWLsv => cons 'var PWLi
+    | Rest => WA ^= WA => Rest
+  end
 
 macro PAT-WRITE-AV(P, WA)
-  if =? (hd P) 'cons then
-    cons PWtg PWag <= P;
-    cons PWp1 PWp2 <= PWag;
-    AV-UNCONS(WA, PWa1, PWa2);
-    PAT-WRITE-LEAF-AV2(PWp1, PWa1);
-    PAT-WRITE-LEAF-AV2(PWp2, PWa2);
-    PWag <= cons PWp1 PWp2;
-    P <= cons PWtg PWag
-  else
-    PAT-WRITE-LEAF-AV2(P, WA)
-  fi =? (hd P) 'cons
+  case P yields P of
+      cons 'cons PWag => cons PWp1 PWp2 <= PWag; AV-UNCONS(WA, PWa1, PWa2); PAT-WRITE-LEAF-AV2(PWp1, PWa1); PAT-WRITE-LEAF-AV2(PWp2, PWa2); PWag <= cons PWp1 PWp2 => cons 'cons PWag
+    | Rest => PAT-WRITE-LEAF-AV2(Rest, WA) => Rest
+  end
 
 (* TEMP-IDX(T): T := the reserved unary temp-variable index 100, used as the
  * scratch slot for swap-via-temp.  100 is above every interpreted program's
