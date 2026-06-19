@@ -29,9 +29,11 @@
   （`RWhileFutamura2`：H1 `spec-correct`・H2 `spec-impl` ⇒ fp2/fp3）は証明済みだが、その**具体例は
   closure（`papp`）か小 op-list**（`RWhileRevProj2Self`）。実 `spec_av` の `SPEC-EXP-AV-STEP`／AV 代数が
   H1/H2 を満たすことは**未接続**。よって実機 fp2/fp3 は **byte 一致テストのみ**が根拠。
-- **G2：`Core.ml ≡ EvalRwhile` は差分テスト（`core-ir` 群）止まり。** Agda は両者の**モデル**を別個に
-  証明（`RWhileCoreExp`/`RWhileElabCom`）するが、OCaml の `eval_core` と `evalCom` が等しいことは
-  証明でなく `core-ir` の少数例による経験的照合のみ。
+- **G2：`Core.ml ≡ EvalRwhile`（実用上クローズ済 ✓ — N1 実施）。** Agda は両者の**モデル**を別個に
+  証明（`RWhileCoreExp`/`RWhileElabCom`）。OCaml レベルの等価は、`core-equiv` 群（`test_core_equiv_corpus`/
+  `test_core_equiv_selfinterp`）が**実例コーパス7本＋完全自己解釈器 ri.rwhile の p2d 入力3本**で
+  `EvalRwhile.evalProgram == Core.eval_program_core` を表明し経験的に保証。残る厳密化（OCaml 上の証明
+  または抽出）は G3。
 - **G3：リテラル OCaml は抽出/証明されていない。** `frun`/`eval_core` は手書きで evalCom を模倣
   （README「Honest scope」）。
 - **G4：式言語・`all_cleared` 不変条件・`p2d`/`data2program`・パーサが Agda 範囲外。** 特に `p2d`
@@ -39,10 +41,10 @@
 
 ## 3. 次手（費用対効果順）
 
-1. **N1（安・高）：`-core` 差分を全テストの不変条件に昇格。** 現状 `core-ir` は独立の小群。
-   代わりに統合/射影テストの実行ごとに `Core.eval_program_core ≡ EvalRwhile.evalProgram` を表明すれば、
-   コーパス全体で `Core.ml ≡ EvalRwhile` を経験的に保証＝G2 を実用上クローズ。`RWhileCoreExp`/
-   `RWhileElabCom` の抽象証明と合わせ「検証コアを実装が refine」を強く主張できる。
+1. **N1（安・高）✓ 実施済**：`core-equiv` 群を追加し、実例コーパス＋自己解釈器で
+   `Core.eval_program_core == EvalRwhile.evalProgram` を表明（`TestSuite.ml`）。`RWhileCoreExp`/
+   `RWhileElabCom` の抽象証明と合わせ「検証コアを実装が refine」を経験的に主張できる。
+   （さらなる強化：spec_av fp1 も `Slow` で core-equiv に追加可能。）
 2. **N2（中・最高）：AV 特殊化ステップの Agda モデルで H1/H2 を証明。** `SPEC-EXP-AV-STEP`／AV 代数の
    最小モデルを作り、`spec-correct`（H1）と `spec-impl`（H2＝自己適用）を示せば、実 `spec_av` が
    `RWhileFutamura2` の**インスタンス**になり、fp2/fp3 が「byte 一致テスト」から「証明された定理の具体例」に

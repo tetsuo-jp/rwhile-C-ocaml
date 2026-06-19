@@ -2091,6 +2091,36 @@ let test_core_reversible_swap () =
   let s' = Core.eval_core t (Core.inv_core cr) in
   Alcotest.(check bool) "core inv_core reverses the store" true (s' = s0)
 
+(* N1 (AGDA_CORRESPONDENCE.md, gap G2): the Agda model proves Core's elaboration
+ * and normalization semantics-preserving (RWhileCoreExp / RWhileElabCom).  This
+ * battery certifies, across the whole example corpus, that the OCaml Core.ml
+ * really computes the same function as EvalRwhile -- so "Core.ml mirrors the
+ * verified core" is checked on real programs (incl. the self-interpreter), not
+ * just the few core-ir smoke tests. *)
+let check_core_file name prog_file data_file =
+  let p = parse_file_program (examples_dir ^ "/" ^ prog_file) in
+  let v = parse_file_val (examples_dir ^ "/" ^ data_file) in
+  Alcotest.(check valT_testable) name
+    (EvalRwhile.evalProgram p v) (Core.eval_program_core p v)
+
+let test_core_equiv_corpus () =
+  List.iter (fun (n, pf, df) -> check_core_file n pf df)
+    [ "rep",         "rep.rwhile",         "list123.val";
+      "length",      "length.rwhile",      "list123.val";
+      "compare",     "compare.rwhile",     "compare0.val";
+      "minus",       "minus.rwhile",       "minus.val";
+      "rle0",        "rle.rwhile",         "rle0.val";
+      "rle1",        "rle.rwhile",         "rle1.val";
+      "enumeration", "enumeration.rwhile", "nil.val" ]
+
+(* The full self-interpreter ri.rwhile (macros, cons/hd/tl/=?/pair?, loops, case)
+ * run on p2d-encoded programs -- the most complex Core==eval check. *)
+let test_core_equiv_selfinterp () =
+  List.iter (fun (n, pf, df) -> check_core_file n pf df)
+    [ "ri id_and_nil",          "ri.rwhile", "id_and_nil.p_val";
+      "ri reverse_and_list123", "ri.rwhile", "reverse_and_list123.p_val";
+      "ri piorder",             "ri.rwhile", "piorder.p_val" ]
+
 (* RWHILE_HYGIENIC=1 ./test-suite runs the WHOLE suite with -hygienic-macros on,
    used to verify that the core programs (spec/ri/spec_av) are hygiene-clean.
    The hygiene-specific group below already toggles the flag per-test, so it is
@@ -2108,6 +2138,10 @@ let () =
       Alcotest.test_case "Core agrees with eval: list sugar" `Quick test_core_agree_list;
       Alcotest.test_case "inv_core is involutive" `Quick test_core_inv_involution;
       Alcotest.test_case "inv_core reverses execution" `Quick test_core_reversible_swap;
+    ];
+    "core-equiv", [
+      Alcotest.test_case "Core == eval on corpus (rep/length/compare/minus/rle/enum)" `Quick test_core_equiv_corpus;
+      Alcotest.test_case "Core == eval on self-interpreter ri.rwhile (p2d inputs)" `Quick test_core_equiv_selfinterp;
     ];
     "store", [
       Alcotest.test_case "insert empty" `Quick test_insert_empty;
