@@ -433,28 +433,11 @@ macro PAT-READ-AV(P, RA)
  * else the residual bakes the inner cons as a constant and never assembles. *)
 macro PAT-READ-ITER-STEP(Wk, Wk', PrSt)
   cons PrP Wk <= Wk;
-  if =? (hd PrP) 'cons then
-    cons PrTg PrAg <= PrP;
-    PrTg ^= 'cons; PrTg ^= 'consB;            (* tag 'cons -> 'consB (placeholder) *)
-    cons PrX PrY <= PrAg;
-    Wk <= cons PrX (cons PrY (cons (cons 'consE nil) Wk));
-    PrX ^= PrX; PrY ^= PrY;
-    PrP <= cons PrTg PrAg                       (* PrP = ('consB . nil) *)
-  else
-   if =? (hd PrP) 'consE then
-    cons PrTg2 PrAg2 <= PrP;                    (* PrTg2='consE, PrAg2=nil *)
-    PrTg2 ^= 'consE; PrTg2 ^= 'cons;            (* tag 'consE -> 'cons *)
-    cons PrY (cons PrX (cons (cons 'consB nil) Wk')) <= Wk';
-    PrAg2 <= cons PrX PrY;
-    PrP <= cons PrTg2 PrAg2;                    (* reassembled ('cons.(PrX.PrY)) *)
-    cons PrA2 (cons PrA1 PrSt) <= PrSt;         (* pop child AVs (Y on top, then X) *)
-    AV-CONS(PrA1, PrA2, PrAc);
-    PrSt <= cons PrAc PrSt
-   else
-    PAT-READ-LEAF-AV2(PrP, PrLa);               (* var/val leaf; PrP preserved *)
-    PrSt <= cons PrLa PrSt
-   fi =? (hd PrP) 'cons                         (* after 'consE: tag='cons (T); leaf: var/val (F) *)
-  fi =? (hd PrP) 'consB;                        (* after 'cons: tag='consB (T); else (F) *)
+  case PrP yields PrP of
+      cons 'cons PrAg => cons PrX PrY <= PrAg; Wk <= cons PrX (cons PrY (cons (cons 'consE nil) Wk)); PrX ^= PrX; PrY ^= PrY => cons 'consB PrAg
+    | cons 'consE PrAg2 => cons PrY (cons PrX (cons (cons 'consB nil) Wk')) <= Wk'; PrAg2 <= cons PrX PrY; cons PrA2 (cons PrA1 PrSt) <= PrSt; AV-CONS(PrA1, PrA2, PrAc); PrSt <= cons PrAc PrSt => cons 'cons PrAg2
+    | Rest => PAT-READ-LEAF-AV2(Rest, PrLa); PrSt <= cons PrLa PrSt => Rest
+  end;
   Wk' <= cons PrP Wk'
 
 macro PAT-READ-ITER(P, RA)
