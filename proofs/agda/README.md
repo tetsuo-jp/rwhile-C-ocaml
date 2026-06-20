@@ -224,11 +224,26 @@ done by the accumulator induction `rev-rest`.
   hierarchy instance on the actual `spec_av` is only its non-structural part
   (bounded worklist / looping), needing a fuel-indexed model (route A, future).
 
+- `RWhileH2Hier.agda` — **a full, total, NON-closure instance of the Futamura
+  hierarchy** (Phase A1): replaces `RWhileFutamura2Inst`'s bespoke `papp`/`mkpapp`
+  constructors with REAL program construction.  Defines a small applicative
+  language `Tm` (input/quote/pair/car/cdr/application + program-builder ops), a
+  GENERIC total interpreter `run`, the trivial specialiser `spec p s =
+  apT (quo p) (pr (quo s) inp)` (the paper's rspec: embed p,s and run), and
+  `specP` — a genuine `Tm` program that *constructs* those residuals from its
+  input.  H1 (`spec-correct`) and H2 (`spec-impl`) both hold by computation
+  (`refl`), so `open RWhileFutamura2.Hierarchy` yields fp1/fp2/fp3 as proven
+  theorems with real, inspectable residuals (`compiler`/`cogen` are concrete
+  programs).  Totality without fuel: application is of literally quoted programs
+  (`run (apT (quo p) a) x = run p (run a x)` recurses on subterm `p`), which is
+  all the trivial specialiser emits.  General first-class application (a
+  non-quoted function) and the looping AV specialiser need fuel — Phase A2.
+
 ## Checking
 
 ```
 cd proofs/agda
-for f in RWhileRev RWhileRevFull RWhileValStore RWhileCRep RWhileCRepDet RWhileDet RWhileDetConcrete RWhileExec RWhileExecConcrete RWhileIL RWhileFutamura RWhileFutamura2 RWhileFutamura2Inst RWhileRevFutamura RWhileRevProjPaper RWhileRevProjInst RWhileRevProjGen RWhileCoreExp RWhileFp1Residual RWhileElabCom RWhileMacroSubst RWhileRevProj2Lift RWhileRevProj2BT RWhileRevProj2Self RWhileAVSound RWhileAVSpec RWhileP2D RWhileAVSelfApp RWhileH2 RWhileCaseInv RWhileGarbageBound; do
+for f in RWhileRev RWhileRevFull RWhileValStore RWhileCRep RWhileCRepDet RWhileDet RWhileDetConcrete RWhileExec RWhileExecConcrete RWhileIL RWhileFutamura RWhileFutamura2 RWhileFutamura2Inst RWhileRevFutamura RWhileRevProjPaper RWhileRevProjInst RWhileRevProjGen RWhileCoreExp RWhileFp1Residual RWhileElabCom RWhileMacroSubst RWhileRevProj2Lift RWhileRevProj2BT RWhileRevProj2Self RWhileAVSound RWhileAVSpec RWhileP2D RWhileAVSelfApp RWhileH2 RWhileH2Hier RWhileCaseInv RWhileGarbageBound; do
   agda --safe $f.agda
 done
 ```

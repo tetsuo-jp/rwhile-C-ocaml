@@ -87,8 +87,14 @@ spec-correct（H1）と AV 代数健全性、`case` 健全性、ゴミ量的下�
 実 `spec_av` の fp2/fp3 は byte 一致テストで実機検証され、形式的に残る唯一の橋は完全 `spec_av` の非構造部
 （Turing 完全ループ）の自己適用のみで、fuel-indexed モデルが要る。」
 
-## 5. 最終状態（案2：G4・統一 fp1・H2 再帰核を達成、残るは Turing 完全部のみ）
-- **Agda 形式化は 32 モジュールすべて `--safe` で通過**（postulate 0、唯一の仮定は `RWhileDetConcrete` の `funext`）。
+## 5. 最終状態（案2：G4・統一 fp1・H2核・非クロージャ全域ハイアラーキ実例を達成）
+- **Agda 形式化は 33 モジュールすべて `--safe` で通過**（postulate 0、唯一の仮定は `RWhileDetConcrete` の `funext`）。
+- **Phase A1 達成（`RWhileH2Hier.agda`）**：Inst の `papp`/`mkpapp` 構成子を**実プログラム構成**に置換した
+  全域・非クロージャのハイアラーキ実例。小さな適用言語 `Tm`（input/quote/pair/car/cdr/application＋builder）と
+  汎用全域 `run`、自明スペシャライザ `spec p s = apT (quo p)(pr (quo s) inp)`（＝論文 rspec：p,s を埋めて実行）、
+  残余を構成する genuine プログラム `specP`。**H1・H2 とも refl で成立 → fp1/fp2/fp3 が証明済み定理**（`compiler`/
+  `cogen` は実プログラム）。全域の鍵＝適用をリテラル quote 限定（自明 spec が出すのはこの形だけ、fuel 不要）。
+  一般適用＋ループ付き AV spec は fuel が要る＝Phase A2。
 - **済**：可逆性/決定性/翻訳意味保存/衛生/可逆fp1/モジュラfp2-3/BTA/ゴミ二分律・**量的下界**/`case`健全性/
   **AV 代数健全性**/**実 AV の H1 spec-correct**/**`p2d`/`d2p` 往復（G4）**/**統一値型での実 AV fp1（`fp1U`、無条件）**/
   **H2 の再帰核を非クロージャで discharge（`RWhileH2.self-rep`：`aeval` は汎用全域インタプリタ上の genuine データ
