@@ -189,11 +189,31 @@ done by the accumulator induction `rev-rest`.
   the whole input must be kept — the NECESSITY counterpart of
   `input-preserving-inj`'s sufficiency.  UIP-free, so `--safe`.
 
+- `RWhileP2D.agda` — **program⇄data encoding for the residual `Code`** (gap G4,
+  the prerequisite of self-application H2).  `program2data : Code → Val` /
+  `data2program : Val → Code` with the round-trip `d2p∘p2d : data2program ∘
+  program2data ≡ id` and the corollary `p2d-injective` (a program is uniquely
+  recoverable from its data form — the injectivity the paper's `rspec` relies on).
+
+- `RWhileAVSelfApp.agda` — **the hierarchy for the real AV machinery in ONE value
+  type** (case 2).  Sets `U = Val` and uses RWhileP2D to make the real residual
+  evaluator act on a single type: `runU pv d = ⟦ data2program pv ⟧c d`,
+  `specU pv sv = program2data (spec (data2program pv) sv)`.  **Discharges H1 for
+  this unified real machinery** (`specU-correct`, from the round-trip +
+  `RWhileAVSpec.spec-correct`), so **fp1 holds unconditionally for the real AV
+  specialiser in the value type** (`fp1U`).  `WithSelfApp` then instantiates
+  RWhileFutamura2's modular fp2/fp3 at the real `runU`/`specU`, taking H2
+  (`spec-impl`) as its one hypothesis — now a single concrete equation
+  `runU specP (pv·sv) ≡ specU pv sv`.  The header documents why H2 stays open:
+  the first-order `Code` cannot express `spec`, and a total `--safe` `runU`
+  cannot be a universal interpreter for a Turing-complete object language (the
+  closure constructor of `RWhileFutamura2Inst` is exactly the sidestep).
+
 ## Checking
 
 ```
 cd proofs/agda
-for f in RWhileRev RWhileRevFull RWhileValStore RWhileCRep RWhileCRepDet RWhileDet RWhileDetConcrete RWhileExec RWhileExecConcrete RWhileIL RWhileFutamura RWhileFutamura2 RWhileFutamura2Inst RWhileRevFutamura RWhileRevProjPaper RWhileRevProjInst RWhileRevProjGen RWhileCoreExp RWhileFp1Residual RWhileElabCom RWhileMacroSubst RWhileRevProj2Lift RWhileRevProj2BT RWhileRevProj2Self RWhileAVSound RWhileAVSpec RWhileCaseInv RWhileGarbageBound; do
+for f in RWhileRev RWhileRevFull RWhileValStore RWhileCRep RWhileCRepDet RWhileDet RWhileDetConcrete RWhileExec RWhileExecConcrete RWhileIL RWhileFutamura RWhileFutamura2 RWhileFutamura2Inst RWhileRevFutamura RWhileRevProjPaper RWhileRevProjInst RWhileRevProjGen RWhileCoreExp RWhileFp1Residual RWhileElabCom RWhileMacroSubst RWhileRevProj2Lift RWhileRevProj2BT RWhileRevProj2Self RWhileAVSound RWhileAVSpec RWhileP2D RWhileAVSelfApp RWhileCaseInv RWhileGarbageBound; do
   agda --safe $f.agda
 done
 ```

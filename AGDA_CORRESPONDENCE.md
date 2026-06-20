@@ -32,8 +32,17 @@
   **N2 第2段 ✓（H1 完了）**：`RWhileAVSpec.agda` が AV 記号評価 `aeval`＋健全性 `aeval-sound` を組み、
   束縛時刻分割 `C (S s)(D cVar)`（MKAV 規律）の残余化で **H1 `spec-correct`：`⟦spec p s⟧c d ≡ ⟦p⟧c (s·d)`**
   を実 AV 機構で証明（`RWhileFutamura2` の H1 を closure/op-list 代用でなく discharge）。
-  **残り（G1 最後）**：H2 `spec-impl`（特殊化器を自己言語のプログラムとして表現＝自己適用）。これは IEICE
-  草稿も残す工学課題。H1（正しさの核）は機械検査済みなので、fp1 は実 AV で成立、fp2/fp3 は H2 追加で従う。
+  **N2 第3段 ✓（統一・fp1 無条件）**：`RWhileP2D.agda`（G4）が残余 `Code` の `program2data`/`data2program`
+  と往復 `data2program ∘ program2data ≡ id`（＋符号化の単射性 `p2d-injective`）を機械検査。これを使い
+  `RWhileAVSelfApp.agda` が U=Val の単一値型に統一（`runU pv d = ⟦d2p pv⟧c d`, `specU pv sv = p2d(spec(d2p pv)sv)`）し、
+  **実 AV 機構の H1（spec-correct）を統一型で discharge**（`specU-correct`）→ **fp1 が実 AV で無条件成立**（`fp1U`）。
+  fp2/fp3 はモジュラ論理 `RWhileFutamura2` を実 `runU`/`specU` でインスタンス化した `WithSelfApp`（H2 を引数に取る）で
+  certify＝「実 run/spec に対し階層の論理は健全、残るは H2 ただ一本」。
+  **残り（G1 最後）＝H2 `spec-impl`**（自己表現）。今や具体式 `runU specP (pv·sv) ≡ specU pv sv` に絞れた。
+  これが閉じない理由は2つ：(1) 残余 `Code` は非再帰の一階式言語で `spec`（`aeval` が構造再帰）を表現できない、
+  (2) より本質的に、全域メタ言語（Agda `--safe`）では Turing 完全対象言語の全域万能 `runU` が存在しえない
+  （`RWhileFutamura2Inst` が closure 構成子 `papp` で `run` を全域に保ち H2 を refl で満たすのはこの回避）。
+  実 `spec_av` の ri_min での byte 一致 fp2/fp3 がその経験的証拠。H1（正しさの核）は機械検査済み。
 - **G2：`Core.ml ≡ EvalRwhile`（実用上クローズ済 ✓ — N1 実施）。** Agda は両者の**モデル**を別個に
   証明（`RWhileCoreExp`/`RWhileElabCom`）。OCaml レベルの等価は、`core-equiv` 群（`test_core_equiv_corpus`/
   `test_core_equiv_selfinterp`）が**実例コーパス7本＋完全自己解釈器 ri.rwhile の p2d 入力3本**で
@@ -41,8 +50,10 @@
   または抽出）は G3。
 - **G3：リテラル OCaml は抽出/証明されていない。** `frun`/`eval_core` は手書きで evalCom を模倣
   （README「Honest scope」）。
-- **G4：式言語・`all_cleared` 不変条件・`p2d`/`data2program`・パーサが Agda 範囲外。** 特に `p2d`
-  は射影機構の中核（プログラム⇄データ）なのに未検証。
+- **G4（一部クローズ ✓）：`p2d`/`data2program` の往復を Agda 化した。** `RWhileP2D.agda` が残余 `Code` の
+  `program2data`/`data2program` と `data2program ∘ program2data ≡ id`・`p2d-injective` を機械検査
+  （射影機構の中核プログラム⇄データの核）。**残り**：式言語全体・`all_cleared` 不変条件・surface R-WHILE
+  プログラム全体の `p2d`（現状は AV 残余 `Code` のみ）・パーサは依然 Agda 範囲外。
 
 ## 3. 次手（費用対効果順）
 
@@ -57,19 +68,25 @@
      実機 fp2/fp3 が証明された定理の具体例に格上げ＝G1 本丸クローズ。IEICE 草稿も残す工学課題。
 3. **N3（中）：検証コアの抽出（Agda GHC）と OCaml 差分。** `Extract*.agda` の路線で `eval_core` 相当を
    抽出し、`EvalRwhile` とコーパス差分＝G3 を縮める。
-4. **N4：`p2d`/`data2program` の往復（`data2program ∘ program2data = id`）を Agda 化＝G4 の中核。**
+4. **N4（✓ 実施済）：`p2d`/`data2program` の往復（`data2program ∘ program2data = id`）を Agda 化＝G4 の中核。**
+   `RWhileP2D.agda`（残余 `Code` 対象）。これを土台に `RWhileAVSelfApp.agda` が統一型 fp1 と H2 の一点化を達成。
 
 ## 4. まとめ（論文での言い方）
 「surface→core 翻訳の意味保存（exp/pat/制御）・衛生的マクロ展開・`inv` の可逆性・決定性は機械検査済み。
 fp1（mix）と可逆 fp1、fp2/fp3 のモジュラ定理、BTA 修正・ゴミ二分律も機械検査済み。さらに **実 AV 機構の
-spec-correct（H1）と AV 代数健全性、`case` 健全性、ゴミ量的下界も機械検査済み**。実 `spec_av` の fp2/fp3 は
-byte 一致テストで実機検証され、形式的には残る唯一の橋が H2（自己適用の自己言語表現）。」
+spec-correct（H1）と AV 代数健全性、`case` 健全性、ゴミ量的下界、`p2d`/`d2p` 往復も機械検査済み**。
+**単一値型に統一した実 AV 機構で fp1 を無条件に証明し（`RWhileAVSelfApp.fp1U`）、fp2/fp3 は実 `runU`/`specU` に
+対するモジュラ論理として certify**（残る入力は H2 一本）。実 `spec_av` の fp2/fp3 は byte 一致テストで実機検証され、
+形式的に残る唯一の橋が H2（自己適用の自己言語表現）で、その所在は具体式に絞り込まれている。」
 
-## 5. 最終状態（方針 (a)：H1 まで genuine、H2 は明示的 future work）
-- **Agda 形式化は 28 モジュールすべて `--safe` で通過**（postulate 0、唯一の仮定は `RWhileDetConcrete` の `funext`）。
+## 5. 最終状態（案2：G4 と統一 fp1 を達成、H2 を一点に絞り原因を厳密化）
+- **Agda 形式化は 31 モジュールすべて `--safe` で通過**（postulate 0、唯一の仮定は `RWhileDetConcrete` の `funext`）。
 - **済**：可逆性/決定性/翻訳意味保存/衛生/可逆fp1/モジュラfp2-3/BTA/ゴミ二分律・**量的下界**/`case`健全性/
-  **AV 代数健全性**/**実 AV の H1 spec-correct**。OCaml 側は `core-equiv` で `Core.ml ≡ EvalRwhile` をコーパス保証、
-  実機 fp2/fp3 は byte 一致、特殊化有効性は `specialization-gain` で回帰ガード。
-- **未解決（明示的 future work）＝H2 `spec-impl`**：AV 特殊化器を自分の対象言語のプログラムとして表現する
-  自己適用。これは IEICE 草稿も残す本分野の本質的課題で、実機 `spec_av` の byte 一致 fp2/fp3 がその**経験的
-  証拠**。H1 が機械検査済みのため、H2 を加えれば fp2/fp3 が「証明された定理の具体例」へ格上げされる（G1 完了）。
+  **AV 代数健全性**/**実 AV の H1 spec-correct**/**`p2d`/`d2p` 往復（G4）**/**統一値型での実 AV fp1（`fp1U`、無条件）**。
+  OCaml 側は `core-equiv` で `Core.ml ≡ EvalRwhile` をコーパス保証、実機 fp2/fp3 は byte 一致、特殊化有効性は
+  `specialization-gain` で回帰ガード。
+- **未解決（一点に縮小）＝H2 `spec-impl`**：`runU specP (pv·sv) ≡ specU pv sv`。`RWhileAVSelfApp.WithSelfApp` が
+  これを引数に取り fp2/fp3 を導く（階層論理は実 run/spec で健全）。閉じない原因は明確：(1) 残余 `Code` は非再帰の
+  一階式言語で `spec`（`aeval` の構造再帰）を表現不能、(2) 全域メタ言語 `--safe` では Turing 完全対象言語の全域万能
+  `runU` が存在しえない（`RWhileFutamura2Inst` の closure 回避がこの証左）。**真の解は対象言語を再帰付きに拡張するか
+  fuel-indexed/部分性モデルへ移す**こと。実機 `spec_av` の byte 一致 fp2/fp3 が経験的証拠。
