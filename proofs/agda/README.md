@@ -239,11 +239,22 @@ done by the accumulator induction `rev-rest`.
   all the trivial specialiser emits.  General first-class application (a
   non-quoted function) and the looping AV specialiser need fuel — Phase A2.
 
+- `RWhileH2Hier2.agda` — **Phase A2 (step 1): the hierarchy with GENERAL
+  first-class application**, via a big-step evaluation RELATION `prog · x ⇓ v`
+  on the same language `Tm` (no fuel, no quote restriction).  Its `⇓ap` rule
+  evaluates the function position to a program value and applies it — genuine
+  general application; a relation is fine in `--safe` (inductive family,
+  partiality = "no derivation") and dodges the totality wall.  Proves the
+  relation deterministic (`⇓-det`), discharges H1 (both directions) and H2 for
+  the trivial specialiser, and derives fp1/fp2/fp3 as relational theorems with
+  general application.  Remaining: the LOOPING AV specialiser of spec_av in this
+  model (route A, future) — its recursive structure is in RWhileH2.
+
 ## Checking
 
 ```
 cd proofs/agda
-for f in RWhileRev RWhileRevFull RWhileValStore RWhileCRep RWhileCRepDet RWhileDet RWhileDetConcrete RWhileExec RWhileExecConcrete RWhileIL RWhileFutamura RWhileFutamura2 RWhileFutamura2Inst RWhileRevFutamura RWhileRevProjPaper RWhileRevProjInst RWhileRevProjGen RWhileCoreExp RWhileFp1Residual RWhileElabCom RWhileMacroSubst RWhileRevProj2Lift RWhileRevProj2BT RWhileRevProj2Self RWhileAVSound RWhileAVSpec RWhileP2D RWhileAVSelfApp RWhileH2 RWhileH2Hier RWhileCaseInv RWhileGarbageBound; do
+for f in RWhileRev RWhileRevFull RWhileValStore RWhileCRep RWhileCRepDet RWhileDet RWhileDetConcrete RWhileExec RWhileExecConcrete RWhileIL RWhileFutamura RWhileFutamura2 RWhileFutamura2Inst RWhileRevFutamura RWhileRevProjPaper RWhileRevProjInst RWhileRevProjGen RWhileCoreExp RWhileFp1Residual RWhileElabCom RWhileMacroSubst RWhileRevProj2Lift RWhileRevProj2BT RWhileRevProj2Self RWhileAVSound RWhileAVSpec RWhileP2D RWhileAVSelfApp RWhileH2 RWhileH2Hier RWhileH2Hier2 RWhileCaseInv RWhileGarbageBound; do
   agda --safe $f.agda
 done
 ```

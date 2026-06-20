@@ -87,8 +87,13 @@ spec-correct（H1）と AV 代数健全性、`case` 健全性、ゴミ量的下�
 実 `spec_av` の fp2/fp3 は byte 一致テストで実機検証され、形式的に残る唯一の橋は完全 `spec_av` の非構造部
 （Turing 完全ループ）の自己適用のみで、fuel-indexed モデルが要る。」
 
-## 5. 最終状態（案2：G4・統一 fp1・H2核・非クロージャ全域ハイアラーキ実例を達成）
-- **Agda 形式化は 33 モジュールすべて `--safe` で通過**（postulate 0、唯一の仮定は `RWhileDetConcrete` の `funext`）。
+## 5. 最終状態（案2：G4・統一 fp1・H2核・非クロージャ全域ハイアラーキ・一般適用ハイアラーキを達成）
+- **Agda 形式化は 34 モジュールすべて `--safe` で通過**（postulate 0、唯一の仮定は `RWhileDetConcrete` の `funext`）。
+- **Phase A2 step1 達成（`RWhileH2Hier2.agda`）**：A1 の「適用をリテラル quote 限定」を外し、同じ言語 `Tm` 上に
+  **大ステップ評価関係 `prog · x ⇓ v`**（`⇓ap` が関数位置を評価して一般適用、fuel 不要）を与える。関係なので `--safe`
+  で全域定義可・部分性＝導出無し。決定性 `⇓-det`、H1（両方向）・H2 を自明スペシャライザで discharge、fp1/fp2/fp3 を
+  一般適用つき関係定理として導出。**残る完全 A2＝ループ付き AV spec をこのモデルで表現**（route A、future。再帰構造は
+  `RWhileH2` で済）。
 - **Phase A1 達成（`RWhileH2Hier.agda`）**：Inst の `papp`/`mkpapp` 構成子を**実プログラム構成**に置換した
   全域・非クロージャのハイアラーキ実例。小さな適用言語 `Tm`（input/quote/pair/car/cdr/application＋builder）と
   汎用全域 `run`、自明スペシャライザ `spec p s = apT (quo p)(pr (quo s) inp)`（＝論文 rspec：p,s を埋めて実行）、
