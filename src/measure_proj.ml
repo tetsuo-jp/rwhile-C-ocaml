@@ -56,8 +56,26 @@ let report_hist name body =
     name h.seq h.ass h.rep h.cond h.loop h.other;
   Printf.printf "  [%s] nodes inside CLoop bodies = %d\n" name (loop_nodes body)
 
+(* diagnostic: does spec_av unroll a STATIC-bounded loop?  Specialise <subject>
+ * to a static value and report the residual's size + CLoop count. *)
+let looptest spec_av subj_file sval =
+  let subj = parse_prog subj_file in
+  let pd = Program2DataRwhile.program2data subj in
+  let resid = EvalRwhile.evalProgram spec_av (spec_in pd sval) in
+  Printf.printf "looptest %s  (static=%s):\n" subj_file
+    (PrintRwhile.printTree PrintRwhile.prtValT sval);
+  Printf.printf "  residual = %d nodes\n" (cn resid);
+  (match Program2DataRwhile.data2program resid with
+   | Prog (_, _, body, _) -> report_hist "residual" body)
+
 let () =
   let spec_av = parse_prog (dir ^ "/spec_av.rwhile") in
+  if Array.length Sys.argv >= 4 && Sys.argv.(1) = "looptest" then begin
+    let sch = open_in Sys.argv.(3) in
+    let sv = ParRwhile.pValT LexRwhile.token (Lexing.from_channel sch) in
+    close_in sch;
+    looptest spec_av Sys.argv.(2) sv; exit 0
+  end;
   let rimin   = parse_prog (dir ^ "/ri_min.rwhile") in
   let pd_spec  = Program2DataRwhile.program2data spec_av in
   let pd_rimin = Program2DataRwhile.program2data rimin in

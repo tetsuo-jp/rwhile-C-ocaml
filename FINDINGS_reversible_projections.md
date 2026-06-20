@@ -117,6 +117,13 @@
   ⇒ **post-hoc 簡約は天井（~0.73×|spec_av|）。comp2 ≪ |spec_av| には Phase 2b（ストア index の静的化＝
   変数 index が静的なとき `from..until` 歩行を特殊化時に静的アンロール）が必須**。これが本研究の本丸。
 
+- **Phase 2b-2 設計＋決定的診断（`analysis_store_bti.md`）**：`measure_proj looptest` で
+  `[spec_av]((ri_seq.('S.('swap.('id.('swap.nil))))))` の残余が **CLoop=0 CCond=0**（静的命令リスト上の
+  ループ完全展開・静的分岐解決済）と実測。⇒ **spec_av のループ展開機構は正しく動作**＝comp2 の 125 CLoop は
+  ループ機構不備ではなく**純粋に index J（内側プログラムポインタ Cd 由来）が動的**であることが原因と確定。
+  **修正は「index/Cd を静的に保つ」(partially-static 環境 or BT 維持) に一点集中**でよい（ループ特殊化は不変）。
+  真因の本質は online 値運搬 AV vs offline BT 分離（HANDOFF/§2）。実装は spec_av_bti.rwhile で fp1 ゲート保護下。
+
 ## 8. 未解決・今後
 
 - ゴミ最小化の hard 集合（AV 代数の uncompute 規律可逆書換、Vl の store-reversal）。
