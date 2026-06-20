@@ -250,11 +250,22 @@ done by the accumulator induction `rev-rest`.
   general application.  Remaining: the LOOPING AV specialiser of spec_av in this
   model (route A, future) — its recursive structure is in RWhileH2.
 
+- `RWhileSimpSound.agda` — **soundness of the residual simplifier `src/Simp.ml`**
+  (idea 1, Phase 2a).  Machine-checks the semantic core of its two transforms:
+  (1) the constant-folding rewrites on the residual expression language
+  (`hd`/`tl`/`pairp` of a cons fold to the subresult — meaning-preserving), and
+  (2) dead reversible-branch elimination — models the reversible conditional's
+  forward semantics (`condF`, partial via `Maybe`, mirroring EvalRwhile's CCond,
+  asserting the exit test) and proves that constant-true entry+exit tests reduce
+  it to the THEN branch (`deadbranch-true`) and constant-false to the ELSE branch
+  (`deadbranch-false`) — exactly Simp's `if (const) then C else D fi (const) ⇒
+  C|D`, with the dropped branch unreachable and assertions trivially held.
+
 ## Checking
 
 ```
 cd proofs/agda
-for f in RWhileRev RWhileRevFull RWhileValStore RWhileCRep RWhileCRepDet RWhileDet RWhileDetConcrete RWhileExec RWhileExecConcrete RWhileIL RWhileFutamura RWhileFutamura2 RWhileFutamura2Inst RWhileRevFutamura RWhileRevProjPaper RWhileRevProjInst RWhileRevProjGen RWhileCoreExp RWhileFp1Residual RWhileElabCom RWhileMacroSubst RWhileRevProj2Lift RWhileRevProj2BT RWhileRevProj2Self RWhileAVSound RWhileAVSpec RWhileP2D RWhileAVSelfApp RWhileH2 RWhileH2Hier RWhileH2Hier2 RWhileCaseInv RWhileGarbageBound; do
+for f in RWhileRev RWhileRevFull RWhileValStore RWhileCRep RWhileCRepDet RWhileDet RWhileDetConcrete RWhileExec RWhileExecConcrete RWhileIL RWhileFutamura RWhileFutamura2 RWhileFutamura2Inst RWhileRevFutamura RWhileRevProjPaper RWhileRevProjInst RWhileRevProjGen RWhileCoreExp RWhileFp1Residual RWhileElabCom RWhileMacroSubst RWhileRevProj2Lift RWhileRevProj2BT RWhileRevProj2Self RWhileAVSound RWhileAVSpec RWhileP2D RWhileAVSelfApp RWhileH2 RWhileH2Hier RWhileH2Hier2 RWhileSimpSound RWhileCaseInv RWhileGarbageBound; do
   agda --safe $f.agda
 done
 ```

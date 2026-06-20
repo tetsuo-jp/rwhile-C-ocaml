@@ -17,6 +17,7 @@ let () =
   let f_exp = ref false in
   let f_stats = ref false in
   let f_core = ref false in
+  let f_simp = ref false in
   Arg.parse
     [("-inverse", Arg.Set f_inv,  "inversion");
      ("-p2d",     Arg.Set f_p2d,  "translation from programs to data");
@@ -34,7 +35,9 @@ let () =
      ("-stats",   Arg.Set f_stats,
       "after evaluation, print result size (node count / bytes) to stderr");
      ("-core",    Arg.Set f_core,
-      "evaluate via the Core IR abstraction layer (Core.ml; mirrors the Agda-verified core)")]
+      "evaluate via the Core IR abstraction layer (Core.ml; mirrors the Agda-verified core)");
+     ("-simp",    Arg.Set f_simp,
+      "simplify the (residual) program: constant-fold and remove dead reversible branches")]
     (fun s -> files := !files @ [s])
     ("R-WHILE Interpreter (C) Tetsuo Yokoyama\n" ^
        Printf.sprintf "usage: %s [-inverse] [-p2d] [-exp] [-local] [-autofi] [-array] [-hygienic-macros] [-llm-errors] [-stats] [-core] program [data]"
@@ -46,9 +49,10 @@ let () =
      let _ = close_in channel in
      let prog2 = if !f_exp then MacroRwhile.expMacProgram prog1 else prog1 in
      let prog3 = if !f_inv then InvRwhile.invProgram prog2 else prog2 in
+     let prog4 = if !f_simp then Simp.simpProgram prog3 else prog3 in
      print_endline (if !f_p2d
-		   then showValT (Program2DataRwhile.program2data prog3)
-		   else showTree prog3)
+		   then showValT (Program2DataRwhile.program2data prog4)
+		   else showTree prog4)
   | [prog_filename; data_filename] -> 
      let channel = open_in prog_filename in
      let prog = parse channel in 

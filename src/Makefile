@@ -3,7 +3,7 @@ OCAMLC=ocamlfind ocamlc -g -package extlib -linkpkg
 
 all: ri
 
-ri: BNFC_Util.ml AbsRwhile.ml PrintRwhile.ml ParRwhile.mli ParRwhile.ml LexRwhile.ml Desugar.ml InvRwhile.ml Subst.ml MacroRwhile.ml EvalRwhile.ml Program2DataRwhile.ml Core.ml Main.ml
+ri: BNFC_Util.ml AbsRwhile.ml PrintRwhile.ml ParRwhile.mli ParRwhile.ml LexRwhile.ml Desugar.ml InvRwhile.ml Subst.ml MacroRwhile.ml EvalRwhile.ml Program2DataRwhile.ml Core.ml Simp.ml Main.ml
 	$(OCAMLC) -o $@ $^
 
 LexRwhile.ml: LexRwhile.mll

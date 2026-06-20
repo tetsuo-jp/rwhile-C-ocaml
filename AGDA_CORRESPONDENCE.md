@@ -87,8 +87,11 @@ spec-correct（H1）と AV 代数健全性、`case` 健全性、ゴミ量的下�
 実 `spec_av` の fp2/fp3 は byte 一致テストで実機検証され、形式的に残る唯一の橋は完全 `spec_av` の非構造部
 （Turing 完全ループ）の自己適用のみで、fuel-indexed モデルが要る。」
 
-## 5. 最終状態（案2：G4・統一 fp1・H2核・非クロージャ全域ハイアラーキ・一般適用ハイアラーキを達成）
-- **Agda 形式化は 34 モジュールすべて `--safe` で通過**（postulate 0、唯一の仮定は `RWhileDetConcrete` の `funext`）。
+## 5. 最終状態（案2：G4・統一 fp1・H2核・非クロージャ/一般適用ハイアラーキ／案1：簡約器健全性）
+- **Agda 形式化は 35 モジュールすべて `--safe` で通過**（postulate 0、唯一の仮定は `RWhileDetConcrete` の `funext`）。
+- **案1 Phase 2a（`RWhileSimpSound.agda`）**：残余簡約器 `src/Simp.ml` の意味保存を機械検証。定数畳み込み規則
+  （hd/tl/pairp of cons）＋dead 可逆分岐除去（`condF` の reversible cond 前方意味論で、入口・出口テストが定数
+  同真偽なら生き枝へ＝`deadbranch-true`/`deadbranch-false`）。簡約器を「テスト済み」→「証明済み」に格上げ。
 - **Phase A2 step1 達成（`RWhileH2Hier2.agda`）**：A1 の「適用をリテラル quote 限定」を外し、同じ言語 `Tm` 上に
   **大ステップ評価関係 `prog · x ⇓ v`**（`⇓ap` が関数位置を評価して一般適用、fuel 不要）を与える。関係なので `--safe`
   で全域定義可・部分性＝導出無し。決定性 `⇓-det`、H1（両方向）・H2 を自明スペシャライザで discharge、fp1/fp2/fp3 を
