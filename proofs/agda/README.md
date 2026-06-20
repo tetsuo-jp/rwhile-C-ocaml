@@ -209,11 +209,26 @@ done by the accumulator induction `rev-rest`.
   cannot be a universal interpreter for a Turing-complete object language (the
   closure constructor of `RWhileFutamura2Inst` is exactly the sidestep).
 
+- `RWhileH2.agda` — **H2's recursive core, discharged WITHOUT the closure
+  stand-in** (the genuine prize beyond `RWhileFutamura2Inst`).  Defines the AV-
+  expression object language `E` (= spec_av's AV macros AV-HD/AV-TL/AV-CONS/
+  AV-EQ/AV-PAIRP over the holes {static input, two child results, payload}), a
+  *specialiser program* as a finite algebra `Alg` (one `E`-term per Code
+  constructor, mirroring spec_av's `SPEC-EXP-AV-STEP`), and a uniform TOTAL
+  interpreter `cata` (structural fold on Code — total because the modelled
+  `aeval` is structurally terminating, exactly where a Turing-complete `run`
+  could not be).  Proves `self-rep : cata specAlg c a ≡ aeval c a` — the real
+  symbolic evaluator IS a genuine data program under a generic interpreter (no
+  `papp` primitive) — and `specByProg-correct : specByProg ≡ RWhileAVSpec.spec`,
+  so the program-driven specialiser inherits H1.  What is left for a full
+  hierarchy instance on the actual `spec_av` is only its non-structural part
+  (bounded worklist / looping), needing a fuel-indexed model (route A, future).
+
 ## Checking
 
 ```
 cd proofs/agda
-for f in RWhileRev RWhileRevFull RWhileValStore RWhileCRep RWhileCRepDet RWhileDet RWhileDetConcrete RWhileExec RWhileExecConcrete RWhileIL RWhileFutamura RWhileFutamura2 RWhileFutamura2Inst RWhileRevFutamura RWhileRevProjPaper RWhileRevProjInst RWhileRevProjGen RWhileCoreExp RWhileFp1Residual RWhileElabCom RWhileMacroSubst RWhileRevProj2Lift RWhileRevProj2BT RWhileRevProj2Self RWhileAVSound RWhileAVSpec RWhileP2D RWhileAVSelfApp RWhileCaseInv RWhileGarbageBound; do
+for f in RWhileRev RWhileRevFull RWhileValStore RWhileCRep RWhileCRepDet RWhileDet RWhileDetConcrete RWhileExec RWhileExecConcrete RWhileIL RWhileFutamura RWhileFutamura2 RWhileFutamura2Inst RWhileRevFutamura RWhileRevProjPaper RWhileRevProjInst RWhileRevProjGen RWhileCoreExp RWhileFp1Residual RWhileElabCom RWhileMacroSubst RWhileRevProj2Lift RWhileRevProj2BT RWhileRevProj2Self RWhileAVSound RWhileAVSpec RWhileP2D RWhileAVSelfApp RWhileH2 RWhileCaseInv RWhileGarbageBound; do
   agda --safe $f.agda
 done
 ```

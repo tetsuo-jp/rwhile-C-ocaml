@@ -38,11 +38,17 @@
   **実 AV 機構の H1（spec-correct）を統一型で discharge**（`specU-correct`）→ **fp1 が実 AV で無条件成立**（`fp1U`）。
   fp2/fp3 はモジュラ論理 `RWhileFutamura2` を実 `runU`/`specU` でインスタンス化した `WithSelfApp`（H2 を引数に取る）で
   certify＝「実 run/spec に対し階層の論理は健全、残るは H2 ただ一本」。
-  **残り（G1 最後）＝H2 `spec-impl`**（自己表現）。今や具体式 `runU specP (pv·sv) ≡ specU pv sv` に絞れた。
-  これが閉じない理由は2つ：(1) 残余 `Code` は非再帰の一階式言語で `spec`（`aeval` が構造再帰）を表現できない、
-  (2) より本質的に、全域メタ言語（Agda `--safe`）では Turing 完全対象言語の全域万能 `runU` が存在しえない
-  （`RWhileFutamura2Inst` が closure 構成子 `papp` で `run` を全域に保ち H2 を refl で満たすのはこの回避）。
-  実 `spec_av` の ri_min での byte 一致 fp2/fp3 がその経験的証拠。H1（正しさの核）は機械検査済み。
+  **N2 第4段 ✓（H2 の再帰核を非クロージャで discharge）**：`RWhileH2.agda`。AV 式言語 `E`（spec_av の
+  AV マクロ AV-HD/TL/CONS/EQ/PAIRP に対応）と汎用全域インタプリタ `cata`（Code 構造の fold＝`aeval` が
+  構造停止ゆえ全域）を定義し、スペシャライザを**データとしての代数 `specAlg`**（Code タグごとの `E` 項、
+  `SPEC-EXP-AV-STEP` の忠実モデル）で表現。**`self-rep : cata specAlg c a ≡ aeval c a`**＝実記号評価器が
+  `papp` 等の組込み構成子なしに genuine データプログラムであることを機械証明、`specByProg-correct :
+  specByProg ≡ spec` で H1 を継承。Inst の closure 回避より厳密に強い。
+  **残り（G1 最後）＝完全 `spec_av` の H2**：上記は構造的 `aeval` モデルで閉じたが、実 `spec_av` の
+  非構造部（有界ワークリスト＝ループ／Turing 完全）の自己適用は未。具体式 `runU specP (pv·sv) ≡ specU pv sv`
+  を単一プログラム言語で一様に閉じるには **fuel-indexed/部分性モデル（route A）**が要る。理由：(1) 残余 `Code`
+  は非再帰一階式で `spec` を表現不能（→`E`+`cata` で解消）、(2) 全域メタ言語 `--safe` では Turing 完全対象言語の
+  全域万能 `runU` 不在（ループ付き spec_av に残る本質障害）。実機 byte 一致 fp2/fp3 が経験的証拠。H1 は機械検査済み。
 - **G2：`Core.ml ≡ EvalRwhile`（実用上クローズ済 ✓ — N1 実施）。** Agda は両者の**モデル**を別個に
   証明（`RWhileCoreExp`/`RWhileElabCom`）。OCaml レベルの等価は、`core-equiv` 群（`test_core_equiv_corpus`/
   `test_core_equiv_selfinterp`）が**実例コーパス7本＋完全自己解釈器 ri.rwhile の p2d 入力3本**で
@@ -76,17 +82,20 @@
 fp1（mix）と可逆 fp1、fp2/fp3 のモジュラ定理、BTA 修正・ゴミ二分律も機械検査済み。さらに **実 AV 機構の
 spec-correct（H1）と AV 代数健全性、`case` 健全性、ゴミ量的下界、`p2d`/`d2p` 往復も機械検査済み**。
 **単一値型に統一した実 AV 機構で fp1 を無条件に証明し（`RWhileAVSelfApp.fp1U`）、fp2/fp3 は実 `runU`/`specU` に
-対するモジュラ論理として certify**（残る入力は H2 一本）。実 `spec_av` の fp2/fp3 は byte 一致テストで実機検証され、
-形式的に残る唯一の橋が H2（自己適用の自己言語表現）で、その所在は具体式に絞り込まれている。」
+対するモジュラ論理として certify**（残る入力は H2 一本）。さらに **H2 の再帰核を非クロージャで discharge**
+（`RWhileH2.self-rep`：実 `aeval` は汎用全域インタプリタ上の genuine データプログラム、`specByProg ≡ spec`）。
+実 `spec_av` の fp2/fp3 は byte 一致テストで実機検証され、形式的に残る唯一の橋は完全 `spec_av` の非構造部
+（Turing 完全ループ）の自己適用のみで、fuel-indexed モデルが要る。」
 
-## 5. 最終状態（案2：G4 と統一 fp1 を達成、H2 を一点に絞り原因を厳密化）
-- **Agda 形式化は 31 モジュールすべて `--safe` で通過**（postulate 0、唯一の仮定は `RWhileDetConcrete` の `funext`）。
+## 5. 最終状態（案2：G4・統一 fp1・H2 再帰核を達成、残るは Turing 完全部のみ）
+- **Agda 形式化は 32 モジュールすべて `--safe` で通過**（postulate 0、唯一の仮定は `RWhileDetConcrete` の `funext`）。
 - **済**：可逆性/決定性/翻訳意味保存/衛生/可逆fp1/モジュラfp2-3/BTA/ゴミ二分律・**量的下界**/`case`健全性/
-  **AV 代数健全性**/**実 AV の H1 spec-correct**/**`p2d`/`d2p` 往復（G4）**/**統一値型での実 AV fp1（`fp1U`、無条件）**。
-  OCaml 側は `core-equiv` で `Core.ml ≡ EvalRwhile` をコーパス保証、実機 fp2/fp3 は byte 一致、特殊化有効性は
-  `specialization-gain` で回帰ガード。
-- **未解決（一点に縮小）＝H2 `spec-impl`**：`runU specP (pv·sv) ≡ specU pv sv`。`RWhileAVSelfApp.WithSelfApp` が
-  これを引数に取り fp2/fp3 を導く（階層論理は実 run/spec で健全）。閉じない原因は明確：(1) 残余 `Code` は非再帰の
-  一階式言語で `spec`（`aeval` の構造再帰）を表現不能、(2) 全域メタ言語 `--safe` では Turing 完全対象言語の全域万能
-  `runU` が存在しえない（`RWhileFutamura2Inst` の closure 回避がこの証左）。**真の解は対象言語を再帰付きに拡張するか
-  fuel-indexed/部分性モデルへ移す**こと。実機 `spec_av` の byte 一致 fp2/fp3 が経験的証拠。
+  **AV 代数健全性**/**実 AV の H1 spec-correct**/**`p2d`/`d2p` 往復（G4）**/**統一値型での実 AV fp1（`fp1U`、無条件）**/
+  **H2 の再帰核を非クロージャで discharge（`RWhileH2.self-rep`：`aeval` は汎用全域インタプリタ上の genuine データ
+  プログラム、`specByProg ≡ spec`）**。OCaml 側は `core-equiv` で `Core.ml ≡ EvalRwhile` をコーパス保証、
+  実機 fp2/fp3 は byte 一致、特殊化有効性は `specialization-gain` で回帰ガード。
+- **未解決（縮小）＝完全 `spec_av` の H2**：構造的 `aeval` の自己表現は `RWhileH2` で閉じた（Inst の closure 回避より
+  厳密に強い）。残るは実 `spec_av` の**非構造部（有界ワークリスト＝ループ／Turing 完全）**を単一プログラム言語で
+  一様に表現する自己適用で、これには **fuel-indexed/部分性モデル（route A）**が必要。理由：全域メタ言語 `--safe` では
+  Turing 完全対象言語の全域万能 `runU` が存在しえない（ループ付き spec_av に残る本質障害）。実機 byte 一致 fp2/fp3 が
+  その経験的証拠。**＝案2は「構造モデルで H1＋H2核を達成、Turing 完全部のみ future work」**。
