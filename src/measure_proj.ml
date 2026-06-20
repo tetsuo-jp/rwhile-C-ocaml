@@ -22,6 +22,40 @@ let parse_prog filename =
 let cn = EvalRwhile.count_nodes
 let spec_in prog src = VCons (prog, VCons (VAtom (Atom "'S"), src))
 
+(* command-constructor histogram, to diagnose what dominates a residual *)
+type hist = { mutable seq:int; mutable ass:int; mutable rep:int;
+              mutable cond:int; mutable loop:int; mutable other:int }
+let rec hcom h = function
+  | CSeq (a, b)         -> h.seq  <- h.seq  + 1; hcom h a; hcom h b
+  | CAss _              -> h.ass  <- h.ass  + 1
+  | CRep _              -> h.rep  <- h.rep  + 1
+  | CCond (_, t, e, _)  -> h.cond <- h.cond + 1; hbr h t; hbe h e
+  | CLoop (_, d, l, _)  -> h.loop <- h.loop + 1; hbd h d; hbl h l
+  | CLocal (_, c)       -> hcom h c
+  | _                   -> h.other <- h.other + 1
+and hbr h = function BThen c -> hcom h c | BThenNone -> ()
+and hbe h = function BElse c -> hcom h c | BElseNone -> ()
+and hbd h = function BDo c -> hcom h c | BDoNone -> ()
+and hbl h = function BLoop c -> hcom h c | BLoopNone -> ()
+
+(* nodes of program-as-data sitting inside loop bodies (the dynamic store walks) *)
+let rec loop_nodes = function
+  | CSeq (a, b)        -> loop_nodes a + loop_nodes b
+  | CCond (_, t, e, _) -> brn t + ben e
+  | CLoop (_, d, l, _) as c ->
+     cn (Program2DataRwhile.program2data (Prog ([], RIdent "X", c, RIdent "X")))
+  | CLocal (_, c)      -> loop_nodes c
+  | _ -> 0
+and brn = function BThen c -> loop_nodes c | BThenNone -> 0
+and ben = function BElse c -> loop_nodes c | BElseNone -> 0
+
+let report_hist name body =
+  let h = { seq=0; ass=0; rep=0; cond=0; loop=0; other=0 } in
+  hcom h body;
+  Printf.printf "  [%s] CSeq=%d CAss=%d CRep=%d CCond=%d CLoop=%d other=%d\n"
+    name h.seq h.ass h.rep h.cond h.loop h.other;
+  Printf.printf "  [%s] nodes inside CLoop bodies = %d\n" name (loop_nodes body)
+
 let () =
   let spec_av = parse_prog (dir ^ "/spec_av.rwhile") in
   let rimin   = parse_prog (dir ^ "/ri_min.rwhile") in
@@ -54,5 +88,9 @@ let () =
     let r_orig = EvalRwhile.evalProgram comp2_prog (inp "'swap") in
     let r_simp = EvalRwhile.evalProgram comp2_simp (inp "'swap") in
     Printf.printf "[comp2](('S.swap)) == B : %b\n" (r_orig = b_swap);
-    Printf.printf "[comp2_simp](('S.swap)) == B : %b   (preserves meaning)\n" (r_simp = b_swap)
+    Printf.printf "[comp2_simp](('S.swap)) == B : %b   (preserves meaning)\n" (r_simp = b_swap);
+    (* breakdown: what dominates comp2 (before/after Simp)? *)
+    Printf.printf "breakdown (constructor histogram + nodes under loops):\n";
+    (match comp2_prog with Prog (_, _, body, _) -> report_hist "comp2     " body);
+    (match comp2_simp with Prog (_, _, body, _) -> report_hist "comp2_simp" body)
   end

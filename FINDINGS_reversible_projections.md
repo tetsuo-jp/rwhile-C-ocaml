@@ -108,6 +108,15 @@
   comp2 < 0.5× 級の真の Futamura 利得には**束縛時刻改善（BTI）**が要る（spec_av を、静的プログラム構造への
   ディスパッチが自己適用で静的展開されるよう注釈/二段階化）。Phase 2＝BTI、Phase 3＝オンライン展開。
 
+- **Phase 2b-1 診断（`measure_proj full` の breakdown）**＝「なぜ縮まないか」を定量化：
+  comp2 の構成子ヒストグラム `CSeq=1533 CAss=758 CRep=1120 CCond=219 CLoop=125`。
+  **(i) Simp 前後でヒストグラムが完全に同一**（CCond=219 不変）なのに −26%＝**削減は全て式の定数畳み込み**で、
+  **dead 可逆分岐は0個除去**（comp2 のディスパッチは op 依存で動的、両側定数の cond が無い）。
+  **(ii) bulk は 125 個の CLoop（動的ストア index 歩行＝AUX/LOOKUP/UPDATE）**に集中（ループ本体ノードが支配的。
+  proxy はネスト重複で過大計上だが定性的に明白）。Simp はループに触れない。
+  ⇒ **post-hoc 簡約は天井（~0.73×|spec_av|）。comp2 ≪ |spec_av| には Phase 2b（ストア index の静的化＝
+  変数 index が静的なとき `from..until` 歩行を特殊化時に静的アンロール）が必須**。これが本研究の本丸。
+
 ## 8. 未解決・今後
 
 - ゴミ最小化の hard 集合（AV 代数の uncompute 規律可逆書換、Vl の store-reversal）。
