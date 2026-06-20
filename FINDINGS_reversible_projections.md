@@ -90,6 +90,24 @@
   (spec_av_clean ≡ spec_av)。
 - 関連 Agda（`proofs/agda/`）：`RWhileRevProj2BT`(束縛時刻の真因)、`RWhileRevProj2Self`(目標形)。
 
+## 9. 最適化スペシャライザに向けて（案1 Phase 1：意味保存の残余簡約器）
+
+2026-06-20。「本物の fp2＝生成コンパイラ comp2 が解釈を上回る（comp2 < |spec_av|）」を目指す研究の初手。
+
+- **ベースライン（`src/measure_proj.ml`, `make measure_proj`）**：`|spec_av|=817,701`、`|ri_min|=163`、
+  fp1 残余 swap=103（**0.63×ri_min＝fp1 は既に最適化**）/id=63、**comp2=`[spec_av]((spec_av.ri_min))`=812,515
+  （0.994×|spec_av|）＝自明自己適用**（生成コンパイラが spec_av をほぼ凍結、Futamura 利得なし）。
+- **レバー1：意味保存・可逆性保存の残余簡約器 `src/Simp.ml`**。2変換のみ：(1) 閉じた（変数無し）式を
+  実評価器 `evalExp []` で定数畳み込み（構成上正しい）、(2) **dead 可逆分岐除去**＝
+  `if E then C else D fi F` で E・F が定数同真偽なら生き枝へ（`真→C`/`偽→D`）。捨てる枝は前方も逆方向も
+  実行されず、定数表明は常に充足＝意味・可逆性保存。
+- **結果（実測）**：comp2 を **812,515→597,961 nodes（73.6%＝−26.4%）**、ratio **0.994×→0.731×|spec_av|**。
+  正当性：`[comp2_simp](('S.swap)) == B`（fp1 残余と byte 一致, `measure_proj full` で確認）。
+  ＝**comp2 は自己適用で生じた定数 dead 分岐を実際に抱えており**、簡約で除去できる。
+- **限界と次手**：comp2 の本体（spec_av の解釈機構）は op 入力に依存し**動的**＝定数畳み込みでは消えない。
+  comp2 < 0.5× 級の真の Futamura 利得には**束縛時刻改善（BTI）**が要る（spec_av を、静的プログラム構造への
+  ディスパッチが自己適用で静的展開されるよう注釈/二段階化）。Phase 2＝BTI、Phase 3＝オンライン展開。
+
 ## 8. 未解決・今後
 
 - ゴミ最小化の hard 集合（AV 代数の uncompute 規律可逆書換、Vl の store-reversal）。
