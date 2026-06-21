@@ -106,3 +106,28 @@ mirror-correct (vcn {a} {b} va vb) =
 mirror-invol : ∀ {t} → IsVal t → mirror (mirror t) ≡ t
 mirror-invol vnv = refl
 mirror-invol (vcn va vb) = cong₂ cn (mirror-invol va) (mirror-invol vb)
+
+------------------------------------------------------------------------
+-- A second worked recursion: the structural IDENTITY fold reconstructs its
+-- input.  This is the primitive a recursive specialiser uses to TRAVERSE and
+-- rebuild a program (rather than embed it whole like the trivial specialiser).
+
+idFold : Tm
+idFold = cata (quo nv) (cn (car inp) (cdr inp))
+
+idFold-correct : ∀ {t} → IsVal t → idFold · t ⇓ t
+idFold-correct vnv = ⇓cataN (⇓quo nv nv)
+idFold-correct (vcn {a} {b} va vb) =
+  ⇓cataC (idFold-correct va) (idFold-correct vb)
+         (⇓cn (⇓car (⇓inp (cn a b))) (⇓cdr (⇓inp (cn a b))))
+
+------------------------------------------------------------------------
+-- Toward #5 step 2 (the recursive specialiser): `cata` lets a program TRAVERSE
+-- and transform data structurally (mirror, idFold above).  The remaining core
+-- is to make the fold emit a RUNNABLE residual — i.e. construct *quoted program*
+-- structure as it recurses — so that the folded result behaves as the source on
+-- the dynamic input.  In this Tm model a rebuilt cons-tree is data, not a
+-- runnable program (running a `cn` evaluates its parts; only `quo`/`ap` give
+-- application), so the recursive specialiser must thread program construction
+-- through the fold.  That quoted-construction-under-recursion is the heart of a
+-- self-applicable looping specialiser — the continuing research of #5.
