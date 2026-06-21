@@ -105,7 +105,9 @@ spec-correct（H1）と AV 代数健全性、`case` 健全性、ゴミ量的下�
   `cogen` は実プログラム）。全域の鍵＝適用をリテラル quote 限定（自明 spec が出すのはこの形だけ、fuel 不要）。
   一般適用＋ループ付き AV spec は fuel が要る＝Phase A2。
 - **済**：可逆性/決定性/翻訳意味保存/衛生/可逆fp1/モジュラfp2-3/BTA/ゴミ二分律・**量的下界**/`case`健全性/
-  **AV 代数健全性**/**実 AV の H1 spec-correct**/**`p2d`/`d2p` 往復（G4）**/**統一値型での実 AV fp1（`fp1U`、無条件）**/
+  **AV 代数健全性**/**実 AV の H1 spec-correct**/**`p2d`/`d2p` 往復（G4：残余 Code＋制御コア program、
+  `RWhileP2DProg` 単射性込み）**/**ゴミ三点（下界 |garbage|≥|fiber|＋普遍達成 input-preserving＋可逆源 clean
+  ＝二分律の定量化）**/**統一値型での実 AV fp1（`fp1U`、無条件）**/
   **H2 の再帰核を非クロージャで discharge（`RWhileH2.self-rep`：`aeval` は汎用全域インタプリタ上の genuine データ
   プログラム、`specByProg ≡ spec`）**。OCaml 側は `core-equiv` で `Core.ml ≡ EvalRwhile` をコーパス保証、
   実機 fp2/fp3 は byte 一致、特殊化有効性は `specialization-gain` で回帰ガード。
