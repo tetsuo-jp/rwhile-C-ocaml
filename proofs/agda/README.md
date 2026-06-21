@@ -195,6 +195,15 @@ done by the accumulator induction `rev-rest`.
   program2data ≡ id` and the corollary `p2d-injective` (a program is uniquely
   recoverable from its data form — the injectivity the paper's `rspec` relies on).
 
+- `RWhileP2DProg.agda` — **program⇄data round-trip for the control core** (gap G4,
+  extends RWhileP2D from the residual `Code` to whole programs): expressions
+  (var/val/cons/hd/tl/eq/pairp), patterns (var/val/cons), commands
+  (seq/ass/rep/cond/loop) and the program wrapper, with
+  `dProg (transProg p) ≡ p` (and the exp/pat/com lemmas).  Models the clean
+  variable-index encoding (`unnat (natV n) ≡ n`); the OCaml `transRIdent` has an
+  incidental off-by-one, so its round-trip is identity only up to a consistent
+  index relabelling — the clean encoding is the meaningful invariant.
+
 - `RWhileAVSelfApp.agda` — **the hierarchy for the real AV machinery in ONE value
   type** (case 2).  Sets `U = Val` and uses RWhileP2D to make the real residual
   evaluator act on a single type: `runU pv d = ⟦ data2program pv ⟧c d`,
@@ -265,7 +274,7 @@ done by the accumulator induction `rev-rest`.
 
 ```
 cd proofs/agda
-for f in RWhileRev RWhileRevFull RWhileValStore RWhileCRep RWhileCRepDet RWhileDet RWhileDetConcrete RWhileExec RWhileExecConcrete RWhileIL RWhileFutamura RWhileFutamura2 RWhileFutamura2Inst RWhileRevFutamura RWhileRevProjPaper RWhileRevProjInst RWhileRevProjGen RWhileCoreExp RWhileFp1Residual RWhileElabCom RWhileMacroSubst RWhileRevProj2Lift RWhileRevProj2BT RWhileRevProj2Self RWhileAVSound RWhileAVSpec RWhileP2D RWhileAVSelfApp RWhileH2 RWhileH2Hier RWhileH2Hier2 RWhileSimpSound RWhileCaseInv RWhileGarbageBound; do
+for f in RWhileRev RWhileRevFull RWhileValStore RWhileCRep RWhileCRepDet RWhileDet RWhileDetConcrete RWhileExec RWhileExecConcrete RWhileIL RWhileFutamura RWhileFutamura2 RWhileFutamura2Inst RWhileRevFutamura RWhileRevProjPaper RWhileRevProjInst RWhileRevProjGen RWhileCoreExp RWhileFp1Residual RWhileElabCom RWhileMacroSubst RWhileRevProj2Lift RWhileRevProj2BT RWhileRevProj2Self RWhileAVSound RWhileAVSpec RWhileP2D RWhileP2DProg RWhileAVSelfApp RWhileH2 RWhileH2Hier RWhileH2Hier2 RWhileSimpSound RWhileCaseInv RWhileGarbageBound; do
   agda --safe $f.agda
 done
 ```

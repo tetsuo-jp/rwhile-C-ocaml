@@ -56,10 +56,11 @@
   または抽出）は G3。
 - **G3：リテラル OCaml は抽出/証明されていない。** `frun`/`eval_core` は手書きで evalCom を模倣
   （README「Honest scope」）。
-- **G4（一部クローズ ✓）：`p2d`/`data2program` の往復を Agda 化した。** `RWhileP2D.agda` が残余 `Code` の
-  `program2data`/`data2program` と `data2program ∘ program2data ≡ id`・`p2d-injective` を機械検査
-  （射影機構の中核プログラム⇄データの核）。**残り**：式言語全体・`all_cleared` 不変条件・surface R-WHILE
-  プログラム全体の `p2d`（現状は AV 残余 `Code` のみ）・パーサは依然 Agda 範囲外。
+- **G4（大幅クローズ ✓）：`p2d`/`data2program` の往復を Agda 化した。** `RWhileP2D.agda` が残余 `Code` の
+  往復＋`p2d-injective` を、**`RWhileP2DProg.agda` が制御コア（exp/pat/com/program）の往復
+  `dProg(transProg p) ≡ p`** を機械検査（変数 index はクリーン unary 符号化でモデル＝OCaml の off-by-one は
+  一貫リラベルの incidental quirk）。**残り**：`all_cleared` 不変条件・残りの surface 構文（CShow/CLocal/
+  CAutoFi/CArrAss、p2d 対象外）・パーサは依然 Agda 範囲外。
 
 ## 3. 次手（費用対効果順）
 
@@ -88,7 +89,7 @@ spec-correct（H1）と AV 代数健全性、`case` 健全性、ゴミ量的下�
 （Turing 完全ループ）の自己適用のみで、fuel-indexed モデルが要る。」
 
 ## 5. 最終状態（案2：G4・統一 fp1・H2核・非クロージャ/一般適用ハイアラーキ／案1：簡約器健全性）
-- **Agda 形式化は 35 モジュールすべて `--safe` で通過**（postulate 0、唯一の仮定は `RWhileDetConcrete` の `funext`）。
+- **Agda 形式化は 36 モジュールすべて `--safe` で通過**（postulate 0、唯一の仮定は `RWhileDetConcrete` の `funext`）。
 - **案1 Phase 2a（`RWhileSimpSound.agda`）**：残余簡約器 `src/Simp.ml` の意味保存を機械検証。定数畳み込み規則
   （hd/tl/pairp of cons）＋dead 可逆分岐除去（`condF` の reversible cond 前方意味論で、入口・出口テストが定数
   同真偽なら生き枝へ＝`deadbranch-true`/`deadbranch-false`）。簡約器を「テスト済み」→「証明済み」に格上げ。
