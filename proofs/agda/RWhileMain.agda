@@ -27,6 +27,8 @@
 --                          as a fuel-indexed machine computing the bottom-up fold (sound/complete/monotone)
 --   worklist-spec-sound    Tier-2 #5 (eng2): that worklist carrying the REAL AV algebra (avCons/avHd/avTl)
 --                          assembles AV residuals that are γ-sound w.r.t. concrete eval (partial-static)
+--   Core.worklist-store-sound  Tier-2 #5 (eng3): a PARTIAL-STATIC MULTI-SLOT store (each slot an independent
+--                          AV); under consistency the worklist residual is γ-sound (store-ex-sound = witness)
 --   optrev-invert          option-2: the OPTIMISED (interpreter-free) op-list residual is REVERSIBLE
 --                          (inverse = inverted, reversed op-list) — optimisation ∧ reversibility
 --   selfbridge             option-2 bridge: RevProj2Self (abstract) and HierRecSelf (relational) agree
@@ -115,3 +117,10 @@ open RWhileH2Worklist.Witness public
 -- evaluation -- spec_av's looping AV specialiser, concretised and verified.
 open import RWhileH2WorklistAV public
   using (avEval; avEval-sound; worklist-spec-sound; worklist-fuel-sound)
+
+-- Tier-2 #5 (engineering, last piece): the PARTIAL-STATIC MULTI-SLOT store --
+-- each slot an independent AV (static or dynamic); under a consistency condition
+-- (static slots match the runtime store) the worklist residual is γ-sound.
+open import RWhileH2WorklistStore public using (Consistent; cSlot; cSlot-sound; module Core)
+open RWhileH2WorklistStore.Witness public
+  using () renaming (residual to store-residual; sound to store-ex-sound; consistent to store-consistent)

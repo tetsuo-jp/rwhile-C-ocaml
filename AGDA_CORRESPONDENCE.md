@@ -89,7 +89,15 @@ spec-correct（H1）と AV 代数健全性、`case` 健全性、ゴミ量的下�
 （Turing 完全ループ）の自己適用のみで、fuel-indexed モデルが要る。」
 
 ## 5. 最終状態（案2：G4・統一 fp1・H2核・非クロージャ/一般適用ハイアラーキ／案1：簡約器健全性＋選択肢2）
-- **Agda 形式化は 46 モジュールすべて `--safe` で通過**（postulate 0、唯一の仮定は `RWhileDetConcrete` の `funext`）。
+- **Agda 形式化は 47 モジュールすべて `--safe` で通過**（postulate 0、唯一の仮定は `RWhileDetConcrete` の `funext`）。
+- **Tier-2 #5 工学3（`RWhileH2WorklistStore.agda`）＝partial-static 多スロット store（最後のピース）**：spec_av の
+  実ストア `Vl` は独立した AV の列（一部スロットが静的 `S v`、一部が動的）。これを `List AV` でモデル化し、
+  スロットアクセスは `cSlot n = cHd (cTl^n cVar)`（AUX/LOOKUP の walk、`cSlot-sound`）、範囲外は動的 `D (cSlot n)`
+  に既定。新概念は **整合性 `Consistent s ρ`**（各スロットの AV が runtime store ρ の実スロットに概念化一致＝
+  静的スロットは ρ と一致せねばならない）。整合性の下で worklist 残余が **γ 健全**：`γ (avEval s ex) ρ ≡ ⟦ ex ⟧ ρ`
+  （`Core.worklist-store-sound`、全 AV 演算込み）。Witness は静的スロット0＋動的スロット1 から部分静的残余
+  `C (S vtrue) (D (cSlot 1))` を実際に組み立て、`(vtrue · σ)` 形の任意 runtime store で健全。
+  ＝**spec_av の特殊化機構（ループ＋AV全代数＋partial-static 多スロット store＋γ健全性）が機械検証で出揃った**。
 - **Tier-2 #5 工学2（`RWhileH2WorklistAV.agda`）＝ワークリストに実 AV 代数＋全演算＋ストア access を搭載**：
   上記ワークリスト機械に `RWhileAVSound` の実 AV 演算（`avCons`/`avHd`/`avTl`/`avEq`/`avPairp`、`'S`/`'D`/`'C`）を
   載せ、式言語 Ex（**store-indexed var**/val/cons/hd/tl/eq/pairp）を辿って **AV 残余を組み立てる**（spec_av の
