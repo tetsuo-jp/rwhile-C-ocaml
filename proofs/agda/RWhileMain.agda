@@ -24,6 +24,8 @@
 --   optrev-invert          option-2: the OPTIMISED (interpreter-free) op-list residual is REVERSIBLE
 --                          (inverse = inverted, reversed op-list) — optimisation ∧ reversibility
 --   selfbridge             option-2 bridge: RevProj2Self (abstract) and HierRecSelf (relational) agree
+--   full-integration       option-2: specialising a fold-of-dispatches interpreter removes BOTH the fold
+--                          and the dispatch at once (flat, dispatch-free residual)
 --
 
 -- `--safe`, no postulates/holes.
@@ -79,3 +81,11 @@ open OptRev.Witness public using ()
 import RWhileSelfBridge as SelfBridge
 open SelfBridge.Witness public using ()
   renaming (bridge to selfbridge; bridge-exact to selfbridge-exact)
+
+-- option 2: the INTEGRATION — a realistic interpreter folds a DISPATCHING step
+-- over an op-list; specialising removes BOTH overheads at once (fold unrolled to
+-- a flat chain AND every dispatch resolved): `full` + `compileFull-dispatchFree`.
+import RWhileH2HierFull as Full
+open Full.Witness public using ()
+  renaming (full to full-integration; compileFull-dispatchFree to full-dispatchFree;
+            intStep-has-dispatch to full-int-has-dispatch; ex to full-ex)
