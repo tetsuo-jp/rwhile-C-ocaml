@@ -270,6 +270,15 @@ done by the accumulator induction `rev-rest`.
   (`deadbranch-false`) — exactly Simp's `if (const) then C else D fi (const) ⇒
   C|D`, with the dropped branch unreachable and assertions trivially held.
 
+- `RWhileH2HierRec.agda` — **Phase B / #5 (step 1): a recursion-capable big-step
+  hierarchy**, the enabler for the LOOPING AV specialiser (beyond RWhileH2Hier2's
+  embed-and-apply).  Extends `_·_⇓_` with a structural fold `cata z f` recursing
+  on the input's cons-structure; proves the relation deterministic (`⇓-det`) and
+  gives a worked, machine-checked recursive program (`mirrorP`, a recursive tree
+  mirror) with full correctness (`mirror-correct`) and involution.  A recursive
+  specialiser is a `cata` folding a program into residual code; its fp1/2/3
+  follow by the H1-then-hierarchy route (continuing work of #5).
+
 - `RWhileMain.agda` — **capstone**: re-exports the headline machine-checked
   results (spec-correct/H1, the p2d round-trips + injectivity, fp1U, self-rep,
   the two Futamura-hierarchy instances `hier-*`/`gen-*`, simplifier soundness),
@@ -279,7 +288,7 @@ done by the accumulator induction `rev-rest`.
 
 ```
 cd proofs/agda
-for f in RWhileRev RWhileRevFull RWhileValStore RWhileCRep RWhileCRepDet RWhileDet RWhileDetConcrete RWhileExec RWhileExecConcrete RWhileIL RWhileFutamura RWhileFutamura2 RWhileFutamura2Inst RWhileRevFutamura RWhileRevProjPaper RWhileRevProjInst RWhileRevProjGen RWhileCoreExp RWhileFp1Residual RWhileElabCom RWhileMacroSubst RWhileRevProj2Lift RWhileRevProj2BT RWhileRevProj2Self RWhileAVSound RWhileAVSpec RWhileP2D RWhileP2DProg RWhileAVSelfApp RWhileH2 RWhileH2Hier RWhileH2Hier2 RWhileSimpSound RWhileCaseInv RWhileGarbageBound RWhileMain; do
+for f in RWhileRev RWhileRevFull RWhileValStore RWhileCRep RWhileCRepDet RWhileDet RWhileDetConcrete RWhileExec RWhileExecConcrete RWhileIL RWhileFutamura RWhileFutamura2 RWhileFutamura2Inst RWhileRevFutamura RWhileRevProjPaper RWhileRevProjInst RWhileRevProjGen RWhileCoreExp RWhileFp1Residual RWhileElabCom RWhileMacroSubst RWhileRevProj2Lift RWhileRevProj2BT RWhileRevProj2Self RWhileAVSound RWhileAVSpec RWhileP2D RWhileP2DProg RWhileAVSelfApp RWhileH2 RWhileH2Hier RWhileH2Hier2 RWhileSimpSound RWhileCaseInv RWhileGarbageBound RWhileH2HierRec RWhileMain; do
   agda --safe $f.agda
 done
 ```
