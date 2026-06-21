@@ -23,6 +23,8 @@
 --                          dispatch node (the real spec_av `=? Tag 'op`), proven dispatch-free + correct
 --   fp2-fuel / runF-*      Tier-2 #5: a FUEL-INDEXED total interpreter coinciding with the big-step
 --                          relation; fp1/fp2/fp3 lifted to fuel-level (the H2 fuel/partiality model)
+--   worklist-correct       Tier-2 #5 (eng): the real spec_av WORKLIST (stack machine, begin/end markers)
+--                          as a fuel-indexed machine computing the bottom-up fold (sound/complete/monotone)
 --   optrev-invert          option-2: the OPTIMISED (interpreter-free) op-list residual is REVERSIBLE
 --                          (inverse = inverted, reversed op-list) — optimisation ∧ reversibility
 --   selfbridge             option-2 bridge: RevProj2Self (abstract) and HierRecSelf (relational) agree
@@ -97,3 +99,11 @@ open Full.Witness public using ()
 -- statements -- the fuel/partiality model for the looping self-application (H2).
 open import RWhileH2Fuel public
   using (runF; runF-sound; runF-complete; runF-correct; fp1-fuel; fp2-fuel; fp3-fuel)
+
+-- Tier-2 #5 (engineering): the real spec_av WORKLIST (SPEC-EXP-AV stack machine,
+-- begin/end markers) concretised as a fuel-indexed abstract machine, proven to
+-- compute the bottom-up fold (machine-correct) and fuel-sound/complete/monotone.
+open import RWhileH2Worklist using (module Core)
+open RWhileH2Worklist.Witness public
+  using () renaming (machine-correct to worklist-correct; ex to worklist-ex
+                    ; machineF-sound to worklist-sound; machineF-complete to worklist-complete)

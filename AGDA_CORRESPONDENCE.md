@@ -89,7 +89,15 @@ spec-correct（H1）と AV 代数健全性、`case` 健全性、ゴミ量的下�
 （Turing 完全ループ）の自己適用のみで、fuel-indexed モデルが要る。」
 
 ## 5. 最終状態（案2：G4・統一 fp1・H2核・非クロージャ/一般適用ハイアラーキ／案1：簡約器健全性＋選択肢2）
-- **Agda 形式化は 44 モジュールすべて `--safe` で通過**（postulate 0、唯一の仮定は `RWhileDetConcrete` の `funext`）。
+- **Agda 形式化は 45 モジュールすべて `--safe` で通過**（postulate 0、唯一の仮定は `RWhileDetConcrete` の `funext`）。
+- **Tier-2 #5 工学（`RWhileH2Worklist.agda`）＝実 spec_av のワークリストを燃料モデルに具体化**：`SPEC-EXP-AV`/
+  `PAT-READ-ITER` は明示的**スタックマシン**（ワークリスト `Cd`＋結果スタック `RSt`、begin/end マーカ、
+  AV-CONS でボトムアップ結合）で、`cata` の構造再帰**ではない**非構造ループ（`from..until`）。これを忠実に
+  モデル化＝タスクスタック（`doE e`/`comb`）の**燃料付きマシン** `machineF`（1ステップ=1タスク、cf. `runF`）。
+  マシン関係 `_⟱_` でボトムアップ fold `metaFold` を計算することを証明（`machine-spec`/`machine-correct`、
+  抽象機械の正当性補題）し、燃料版を健全 `machineF-sound`・完全 `machineF-complete`（線形ゆえ `⊔` 不要）・
+  単調 `machineF-mono-≤` で `_⟱_` と一致。Witness（木の再構成＝PAT-READ-ITER 相当）で具体計算。
+  **＝H2 の燃料モデル上に実 spec_av の looping ワークリスト機構を具体化（理論障害は解消済、残りは AV 代数の移植）**。
 - **Tier-2 #5 達成（`RWhileH2Fuel.agda`）＝route A の fuel/部分性モデルを構築**：`RWhileH2Hier2` の一般適用
   言語に**燃料付き全域インタプリタ** `runF : ℕ → Tm → Tm → Maybe Tm`（`apT` が計算済プログラムを計算済引数に
   適用＝Turing 完全部、燃料が `nothing` で打ち切り）を与え、大ステップ関係 `_·_⇓_` と**一致**を証明：
