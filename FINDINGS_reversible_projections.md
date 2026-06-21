@@ -102,6 +102,22 @@
   `get_steps`、evalCom 1回=1ステップ）。`measure_proj` で実測：`[B](('a.'b))=5 steps` 対
   `[ri_min]((swap.('a.'b)))=8 steps`（残余 **0.62×**）。⇒ fp1 残余は**サイズ（0.63×）だけでなく実行ステップでも
   高速**（静的ディスパッチが特殊化時に解決済）。サイズ偏重でなく速度でも特殊化が効いている実証。
+  - **Jones 最適性テーブル（`./measure_proj jones`, 2026-06-22）**：複数の (インタプリタ, プログラム) 対で
+    残余 vs 解釈の実行ステップ比を実測。
+
+    | interp | program | \|resid\| | resid | interp | ratio |
+    |---|---|---:|---:|---:|---:|
+    | ri_min | swap | 103 | 5 | 8 | **0.62×** |
+    | ri_min | id | 63 | 5 | 5 | 1.00× |
+    | ri_seq | [swap] | 153 | 13 | 18 | 0.72× |
+    | ri_seq | [swap;swap] | 1243 | 23 | 29 | 0.79× |
+    | ri_seq | [swap;id;swap] | 1281 | 29 | 37 | 0.78× |
+    | ri_seq | [swap*4] | 3423 | 43 | 51 | 0.84× |
+    | ri_seq | [id*6] | 303 | 43 | 55 | 0.78× |
+
+    解釈オーバヘッド（静的ディスパッチ＋ri_seq の op 列ループ）が残余では除去され、**全例で残余 ≤ 解釈ステップ**
+    （`id` 単体は no-op で最適化余地ゼロ＝honest な 1.00×）。op 列ループ系（ri_seq）は loop 簿記が消え一貫して速い。
+    出力一致（正当性）も各行で検査済（MISMATCH なし）。
 - **ベースライン（`src/measure_proj.ml`, `make measure_proj`）**：`|spec_av|=817,701`、`|ri_min|=163`、
   fp1 残余 swap=103（**0.63×ri_min＝fp1 は既に最適化**）/id=63、**comp2=`[spec_av]((spec_av.ri_min))`=812,515
   （0.994×|spec_av|）＝自明自己適用**（生成コンパイラが spec_av をほぼ凍結、Futamura 利得なし）。

@@ -21,6 +21,42 @@ let parse_prog filename =
 
 let cn = EvalRwhile.count_nodes
 let spec_in prog src = VCons (prog, VCons (VAtom (Atom "'S"), src))
+let atom s = VAtom (Atom s)
+let rec vlist = function [] -> VNil | x :: xs -> VCons (x, vlist xs)
+
+(* Jones-optimality battery: for each (interpreter, source program, data) the fp1
+ * residual B = [spec_av]((int.('S.src))) should run [B](d) in FEWER evalCom steps
+ * than the interpreter [int]((src.d)) -- the interpretation layer is removed and
+ * (for ri_seq) the static op-list loop is unrolled.  Prints residual size and the
+ * exec-step ratio (resid/interp); ratio < 1 quantifies Jones optimality. *)
+let jones spec_av =
+  let ab = VCons (atom "'a", atom "'b") in
+  let rimin = parse_prog (dir ^ "/ri_min.rwhile") in
+  let riseq = parse_prog (dir ^ "/ri_seq.rwhile") in
+  let sw = atom "'swap" and id = atom "'id" in
+  let cases =
+    [ ("ri_min", rimin, sw, ab, "swap");
+      ("ri_min", rimin, id, ab, "id");
+      ("ri_seq", riseq, vlist [sw], ab, "[swap]");
+      ("ri_seq", riseq, vlist [sw; sw], ab, "[swap;swap]");
+      ("ri_seq", riseq, vlist [sw; id; sw], ab, "[swap;id;swap]");
+      ("ri_seq", riseq, vlist [sw; sw; sw; sw], ab, "[swap*4]");
+      ("ri_seq", riseq, vlist [id; id; id; id; id; id], ab, "[id*6]") ]
+  in
+  Printf.printf "Jones optimality: fp1 residual exec-steps vs interpreter exec-steps\n";
+  Printf.printf "  %-7s %-15s %8s %7s %7s %7s\n" "interp" "program" "|resid|" "resid" "interp" "ratio";
+  List.iter (fun (iname, iprog, src, d, label) ->
+      let pd = Program2DataRwhile.program2data iprog in
+      let b = EvalRwhile.evalProgram spec_av (spec_in pd src) in
+      let bp = Program2DataRwhile.data2program b in
+      EvalRwhile.reset_steps (); let ro = EvalRwhile.evalProgram bp d in
+      let sr = EvalRwhile.get_steps () in
+      EvalRwhile.reset_steps (); let io = EvalRwhile.evalProgram iprog (VCons (src, d)) in
+      let si = EvalRwhile.get_steps () in
+      Printf.printf "  %-7s %-15s %8d %7d %7d %6.2fx%s\n" iname label (cn b) sr si
+        (float_of_int sr /. float_of_int si) (if ro = io then "" else "  MISMATCH!"))
+    cases;
+  exit 0
 
 (* command-constructor histogram, to diagnose what dominates a residual *)
 type hist = { mutable seq:int; mutable ass:int; mutable rep:int;
@@ -109,6 +145,8 @@ let gate spec_file =
 
 let () =
   if Array.length Sys.argv >= 3 && Sys.argv.(1) = "gate" then gate Sys.argv.(2);
+  if Array.length Sys.argv >= 2 && Sys.argv.(1) = "jones" then
+    jones (parse_prog (dir ^ "/spec_av.rwhile"));
   let spec_av = parse_prog (dir ^ "/spec_av.rwhile") in
   if Array.length Sys.argv >= 4 && Sys.argv.(1) = "looptest" then begin
     let sch = open_in Sys.argv.(3) in
