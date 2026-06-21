@@ -21,7 +21,7 @@
 
 module RWhileGarbageBound where
 
-open import Data.Product using (_×_; _,_; proj₂)
+open import Data.Product using (_×_; _,_; proj₁; proj₂)
 open import Data.Unit using (⊤; tt)
 open import Data.Nat using (ℕ)
 open import Relation.Binary.PropositionalEquality using (_≡_; refl; sym; trans; cong; cong₂)
@@ -90,3 +90,19 @@ module Achievable (In Out : Set) (S : In → Out) where
   -- input-preservation is a reversible simulation of ANY S.
   input-preserving-suffices : Inj resid
   input-preserving-suffices eq = cong proj₂ eq
+
+------------------------------------------------------------------------
+-- CLEAN simulation for a REVERSIBLE source (the dichotomy's reversible side,
+-- quantified).  If S is injective then every fiber is a singleton, so the lower
+-- bound demands no information: garbage = ⊤ (nothing) already gives a reversible
+-- simulation.  This is Bennett's clean simulation — no garbage to uncompute.
+-- Together with `Achievable` (universal upper bound) and the fiber lower bound,
+-- it makes the essential/surplus garbage dichotomy quantitative: surplus = 0
+-- iff S is injective.
+
+module Clean (In Out : Set) (S : In → Out) (S-inj : Inj S) where
+  open Bound In Out ⊤ S (λ _ → tt)        -- garbage = ⊤ (no information)
+
+  -- with no garbage, the residual is still reversible (clean simulation).
+  clean-resid-inj : Inj resid
+  clean-resid-inj eq = S-inj (cong proj₁ eq)
