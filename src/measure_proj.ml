@@ -68,7 +68,47 @@ let looptest spec_av subj_file sval =
   (match Program2DataRwhile.data2program resid with
    | Prog (_, _, body, _) -> report_hist "residual" body)
 
+(* fp1 safety gate: check that a CANDIDATE specialiser (e.g. a spec_av_bti work
+ * copy) still produces CORRECT, REVERSIBLE fp1 residuals before/after a BTI edit.
+ * Criterion (hard): for op in {swap,id} and several inputs d, the residual
+ * B_op = [cand]((ri_min.op)) satisfies  [B_op](d) == [ri_min]((op.d))  (meaning)
+ * and  [inv B_op]([B_op](d)) == d  (reversibility).  Baseline fp1 sizes
+ * (swap=103, id=63) are reported as drift info but do NOT gate (an optimising
+ * edit may legitimately change them).  Exits 0 on PASS, 1 on FAIL. *)
+let gate spec_file =
+  let cand = parse_prog spec_file in
+  let rimin = parse_prog (dir ^ "/ri_min.rwhile") in
+  let pd_rimin = Program2DataRwhile.program2data rimin in
+  let tests = [ VCons (VAtom (Atom "'a"), VAtom (Atom "'b"));
+                VCons (VNil, VNil);
+                VCons (VCons (VAtom (Atom "'x"), VAtom (Atom "'y")), VAtom (Atom "'z")) ] in
+  let check op =
+    try
+      let b = EvalRwhile.evalProgram cand (spec_in pd_rimin (VAtom (Atom op))) in
+      let bp = Program2DataRwhile.data2program b in   (* may raise on malformed residual *)
+      let meaning_ok = List.for_all (fun d ->
+          let lhs = (try Some (EvalRwhile.evalProgram bp d) with _ -> None) in
+          let rhs = (try Some (EvalRwhile.evalProgram rimin (VCons (VAtom (Atom op), d))) with _ -> None) in
+          lhs <> None && lhs = rhs) tests in
+      let rev_ok = List.for_all (fun d ->
+          try EvalRwhile.evalProgram (InvRwhile.invProgram bp) (EvalRwhile.evalProgram bp d) = d
+          with _ -> false) tests in
+      Printf.printf "  op=%-5s size=%-4d meaning=%b reversible=%b\n" op (cn b) meaning_ok rev_ok;
+      (meaning_ok && rev_ok, cn b)
+    with e ->
+      Printf.printf "  op=%-5s ERROR (%s)\n" op (Printexc.to_string e);
+      (false, 0)
+  in
+  Printf.printf "fp1 gate on %s:\n" spec_file;
+  let s_ok, s_sz = check "'swap" in
+  let i_ok, i_sz = check "'id" in
+  Printf.printf "  fp1 sizes swap=%d id=%d (baseline 103/63 unchanged=%b)\n"
+    s_sz i_sz (s_sz = 103 && i_sz = 63);
+  if s_ok && i_ok then (Printf.printf "GATE PASS (meaning + reversibility)\n"; exit 0)
+  else (Printf.printf "GATE FAIL\n"; exit 1)
+
 let () =
+  if Array.length Sys.argv >= 3 && Sys.argv.(1) = "gate" then gate Sys.argv.(2);
   let spec_av = parse_prog (dir ^ "/spec_av.rwhile") in
   if Array.length Sys.argv >= 4 && Sys.argv.(1) = "looptest" then begin
     let sch = open_in Sys.argv.(3) in

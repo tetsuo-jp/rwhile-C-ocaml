@@ -15,6 +15,15 @@ Simp 後: 同一ヒストグラム, 597,961 nodes (0.731×)  ← 削減は全て
 - **bulk は 125 個の CLoop**。これは spec_av のストアアクセス `AUX(Vl,J,…)`（`from (=? Cnt nil) loop … until (=? Cnt J)` で index J まで店を歩く）が **comp2 に残余化**されたもの。`LOOKUP`/`UPDATE` は `AUX; (read|write); INV-AUX`。
 - post-hoc 簡約（Simp）はループ本体に触れない＝**天井 0.73×**。comp2≪|spec_av| には**ループ＝ストア機構そのものの束縛時刻改善**が必須。
 
+### Simp 天井が「構造的」である裏取り（2026-06-21）
+`Simp.simpCom` は実は **CLoop 本体に再帰している**（`Simp.ml:64` の `simpDo`/`simpLoop`）。
+それでも `nodes inside CLoop bodies` が Simp 前後で **完全に不変**（1,157,729 → 1,157,729）なのは、
+ループ本体がほぼ全て **`CRep`（パターン置換 `cons U Vl <= Vl; …`＝ストア歩行 AUX 本体）** で、
+`simpCom` は `CRep` を素通し（`Simp.ml:57`）、かつ `Vl` が動的なので畳み込める**閉じた式が存在しない**ため。
+⇒ **0.73× は Simp の調整不足ではなく構造的天井**。唯一のレバーは BTA（index 静的化）であることが確定。
+（漏れ点も特定：`SPEC-EXP-AV-STEP` の `'var => LOOKUP(Vl, EArg, SX)`（`spec_av.rwhile:333`）。
+EArg は内側 work-stack `Cd` 由来で、自己適用下では outer から動的化＝AUX 残余化。）
+
 ## 2. 真因（束縛時刻の漏れ）
 
 `comp2` の契約：`[comp2](d) = [spec_av]((ri_min . d))`。すなわち comp2 は **ri_min を処理する内側 spec_av を、プログラム入力 = ri_min（静的）で特殊化した残余**。
@@ -49,9 +58,14 @@ HANDOFF_fp2.md / FINDINGS §2 の通り、spec_av は **online で「静的値�
 
 ## 4. 検証プロトコル（必須・各段で緑維持）
 
-開発は**コピー `examples/spec_av_bti.rwhile`** で行い、動作中の `spec_av.rwhile` は触らない。各変更後：
+開発は**コピー `examples/spec_av_bti.rwhile`**（作成済み・初期は exact copy）で行い、動作中の
+`spec_av.rwhile` は触らない。各変更後：
 
-1. **fp1 ゲート**（高速）：`./measure_proj` で fp1 残余 swap=103・id=63 が**不変**（`spec_av_bti` に差し替えて比較）。崩れたら即 revert。
+1. **fp1 ゲート**（高速・自動）：`./measure_proj gate ../examples/spec_av_bti.rwhile`。
+   op∈{swap,id}・複数入力 d で **意味**（`[B_op](d) == [ri_min]((op.d))`）と**可逆性**
+   （`[inv B_op]([B_op](d)) == d`）を検査し、**`GATE PASS` / rc=0** を要求（壊れたら `GATE FAIL` / rc=1、
+   malformed 残余も例外捕捉して FAIL）。fp1 サイズ swap=103/id=63 はドリフト情報として表示（最適化で
+   変わりうるのでハード判定はしない）。崩れたら即 revert。
 2. **comp2 計測**：`./measure_proj full` で comp2/|spec_av| と breakdown（CLoop 数）が**減る**ことを確認。目標 CLoop≪125、ratio<0.5×。
 3. **fp2/fp3 緑**：`second-projection` 群（d2p 直接評価で残余 byte 一致）。
 4. **可逆性**：可逆版があれば `INV` round-trip。
