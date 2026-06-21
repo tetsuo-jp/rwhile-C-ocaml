@@ -19,6 +19,8 @@
 --   deadbranch-true/false  soundness of the residual simplifier's dead-branch elimination
 --   recself-correct        option-2 lift: an OPTIMISING residual (interpreter eliminated, uses
 --                          runtime input) in the recursion-capable relation; compilation recurses on ops
+--   disp-eliminated        option-2: specialising to a static op DELETES the interpreter's runtime
+--                          dispatch node (the real spec_av `=? Tag 'op`), proven dispatch-free + correct
 --
 -- `--safe`, no postulates/holes.
 ------------------------------------------------------------------------
@@ -51,3 +53,11 @@ open import RWhileH2HierRec public
 import RWhileH2HierRecSelf as RecSelf
 open RecSelf.Witness public
   renaming (compileOps-correct to recself-correct; ex to recself-ex)
+
+-- option 2: STATIC DISPATCH RESOLUTION — specialising the interpreter to a
+-- static op deletes its runtime dispatch node (the real spec_av `=? Tag 'op`
+-- mechanism), proven dispatch-free, correct, and non-vacuous.
+import RWhileH2HierDispatch as Disp
+open Disp.Witness public
+  renaming (spec-correct to disp-spec-correct; dispatch-eliminated to disp-eliminated;
+            int-has-dispatch to disp-int-has-dispatch; ex to disp-ex)
