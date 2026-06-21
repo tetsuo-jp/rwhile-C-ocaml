@@ -15,6 +15,7 @@
 --   gen-fp1/2/3, ⇓-det    the hierarchy with general first-class application (big-step), deterministic
 --   mirrorP-reversible    a recursive (cata) program proven its-own-inverse at the relation level
 --   reify-spec-correct    #5 step2 (constant family): a recursive specialiser emitting a RUNNABLE residual (H1)
+--   prepend-spec-correct  #5 step2b: an INPUT-DEPENDENT residual (live `inp` + quoted static), H1
 --   deadbranch-true/false  soundness of the residual simplifier's dead-branch elimination
 --
 -- `--safe`, no postulates/holes.
@@ -37,4 +38,6 @@ open import RWhileH2Hier2 public using (⇓-det)
 
 -- a genuinely RECURSIVE (cata-defined) program that is its own inverse, proven
 -- reversible at the relation level — recursion ∧ reversibility in one theorem.
-open import RWhileH2HierRec public using (mirrorP; mirrorP-reversible; reify; reify-spec-correct)
+open import RWhileH2HierRec public
+  using (mirrorP; mirrorP-reversible; reify; reify-spec-correct
+        ; prependSpec; prepend-spec-correct)

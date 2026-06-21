@@ -186,9 +186,42 @@ reify-spec-correct :
 reify-spec-correct {t} x vt = build t , reify-builds vt , build-runs x vt
 
 ------------------------------------------------------------------------
--- BEYOND the constant family: specialising a program that USES its dynamic input
--- (so the residual must contain live `inp`/`car`/`cdr`, not only `quo`/`cn`) is
--- the general looping spec_av.  The constant case above shows the mechanism
--- (cata emitting runnable quoted structure) works; lifting it to input-dependent
--- residuals — threading the dynamic projections through the fold — is the
--- continuing research of #5.
+-- #5 STEP 2b — an INPUT-DEPENDENT residual (the first step BEYOND the constant
+-- family).  We specialise  λx. cn t x  (prepend the static value `t` in front of
+-- the DYNAMIC input) to a static `t`.  The specialiser is
+--
+--     prependSpec = cn reify (quo inp)
+--
+-- its residual  prependResid t = cn (build t) inp  mixes the quoted-static
+-- structure `build t` (produced by the recursive `reify` fold) with a LIVE `inp`
+-- — so the residual genuinely USES its dynamic input, unlike the constant case.
+-- H1 still holds: running the residual on any `x` computes the source `cn t x`.
+
+prependSpec : Tm
+prependSpec = cn reify (quo inp)
+
+prependResid : Tm → Tm
+prependResid t = cn (build t) inp
+
+-- the residual is runnable and computes the source semantics on any input.
+prepend-runs : ∀ {t} (x : Tm) → IsVal t → prependResid t · x ⇓ cn t x
+prepend-runs x vt = ⇓cn (build-runs x vt) (⇓inp x)
+
+-- the specialiser (containing the recursive `reify`) emits that residual, and
+-- H1 holds: ⟦prependSpec·t⟧ x ≡ ⟦λx. cn t x⟧ x = cn t x — an input-dependent
+-- recursive specialisation, machine-checked.
+prepend-spec-correct :
+  ∀ {t} (x : Tm) → IsVal t →
+  Σ Tm (λ R → (prependSpec · t ⇓ R) × (R · x ⇓ cn t x))
+prepend-spec-correct {t} x vt =
+  prependResid t
+  , ⇓cn (reify-builds vt) (⇓quo inp t)
+  , prepend-runs x vt
+
+------------------------------------------------------------------------
+-- BEYOND step 2b: a GENERAL input-dependent recursive specialiser (the residual
+-- threading dynamic projections car/cdr through the cata fold over an arbitrary
+-- source program) is the full looping spec_av.  Steps 2 and 2b show both
+-- ingredients work — cata emitting runnable quoted structure (step 2) and
+-- residuals carrying a live `inp` (step 2b); composing them over a folded source
+-- program is the continuing research of #5.
