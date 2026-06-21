@@ -142,12 +142,53 @@ idFold-correct (vcn {a} {b} va vb) =
          (⇓cn (⇓car (⇓inp (cn a b))) (⇓cdr (⇓inp (cn a b))))
 
 ------------------------------------------------------------------------
--- Toward #5 step 2 (the recursive specialiser): `cata` lets a program TRAVERSE
--- and transform data structurally (mirror, idFold above).  The remaining core
--- is to make the fold emit a RUNNABLE residual — i.e. construct *quoted program*
--- structure as it recurses — so that the folded result behaves as the source on
--- the dynamic input.  In this Tm model a rebuilt cons-tree is data, not a
--- runnable program (running a `cn` evaluates its parts; only `quo`/`ap` give
--- application), so the recursive specialiser must thread program construction
--- through the fold.  That quoted-construction-under-recursion is the heart of a
--- self-applicable looping specialiser — the continuing research of #5.
+-- #5 STEP 2 (the recursive specialiser) — DISCHARGED for the constant-output
+-- family.  The step-2 obstruction was "make the fold emit a RUNNABLE residual,
+-- i.e. construct *quoted program* structure as it recurses".  Here we do exactly
+-- that for the simplest non-trivial specialisation: specialising the constant
+-- function `λx. t` (the program that ignores its dynamic input and returns the
+-- static value `t`).  The recursive specialiser
+--
+--     reify = cata (quo (quo nv)) inp
+--
+-- folds the STATIC value `t` into a residual PROGRAM `build t` whose leaves are
+-- `quo nv` and whose nodes are `cn` — a runnable Tm, NOT inert data.  Running
+-- that residual on ANY dynamic input reproduces `t`.  This is genuine
+-- quoted-construction-under-recursion: the fold's base case emits `quo nv`
+-- (a program), and `inp` at each combine re-emits the cons of the two residual
+-- subprograms.  H1 (`reify-spec-correct`) then holds: ⟦reify·t⟧ x ≡ ⟦const t⟧ x.
+
+-- the residual program produced for a static value (quoted leaves, cn nodes).
+build : Tm → Tm
+build nv       = quo nv
+build (cn a b) = cn (build a) (build b)
+build _        = quo nv         -- non-value forms unused (we reify values)
+
+-- (a) the recursive specialiser folds the static value into the residual.
+reify : Tm
+reify = cata (quo (quo nv)) inp
+
+reify-builds : ∀ {t} → IsVal t → reify · t ⇓ build t
+reify-builds vnv = ⇓cataN (⇓quo (quo nv) nv)
+reify-builds (vcn {a} {b} va vb) =
+  ⇓cataC (reify-builds va) (reify-builds vb) (⇓inp (cn (build a) (build b)))
+
+-- (b) the residual is RUNNABLE: on ANY dynamic input it reproduces the static t.
+build-runs : ∀ {t} (x : Tm) → IsVal t → build t · x ⇓ t
+build-runs x vnv               = ⇓quo nv x
+build-runs x (vcn {a} {b} va vb) = ⇓cn (build-runs x va) (build-runs x vb)
+
+-- H1 for the constant family: specialise once (reify·t ⇓ R), then R on any
+-- dynamic input x computes the source's output t = ⟦λ_. t⟧ x.  A self-contained
+-- machine-checked recursive specialiser emitting a runnable residual.
+reify-spec-correct :
+  ∀ {t} (x : Tm) → IsVal t → Σ Tm (λ R → (reify · t ⇓ R) × (R · x ⇓ t))
+reify-spec-correct {t} x vt = build t , reify-builds vt , build-runs x vt
+
+------------------------------------------------------------------------
+-- BEYOND the constant family: specialising a program that USES its dynamic input
+-- (so the residual must contain live `inp`/`car`/`cdr`, not only `quo`/`cn`) is
+-- the general looping spec_av.  The constant case above shows the mechanism
+-- (cata emitting runnable quoted structure) works; lifting it to input-dependent
+-- residuals — threading the dynamic projections through the fold — is the
+-- continuing research of #5.
