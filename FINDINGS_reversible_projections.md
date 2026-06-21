@@ -76,6 +76,24 @@
   真の消去は AV 代数(AV-HD/TL/UNCONS/EQ)の uncompute 規律可逆書き換え＋Vl の store-reversal。
 - **合算（deloc + N-sizing）：1739→755 nodes（-57%）、`[comp]` 正答維持**。
 
+- **ゴミ下界の実機テーブル（`./measure_proj garbage`, #4, 2026-06-22）**：証明済み下界
+  `|ゴミ|≥|fiber|`（Agda `RWhileGarbageBound.garbage-injective-on-fiber`）を有限領域上で実機確認。
+  深さ2の木38個を領域とし、非単射源 S を fiber に分類。
+
+  | source | #fibers | maxfib | LB(bits) | S 単射 | 入力保存 g=x | lossy g=nil |
+  |---|---:|---:|---:|---|---|---|
+  | hd（cdr 破棄） | 6 | 7 | 3 | false | inj(OK) | NONINJ |
+  | tl（car 破棄） | 6 | 7 | 3 | false | inj(OK) | NONINJ |
+  | atomize（cons 潰し） | 3 | 36 | 6 | false | inj(OK) | NONINJ |
+  | const-nil（最大非単射） | 1 | 38 | 6 | false | inj(OK) | NONINJ |
+
+  - **下界**：最大 fiber に対し可逆シミュレーションは `⌈log₂ maxfib⌉` ビット以上のゴミを要する（LB 列）。
+  - **達成可能性（`Achievable`）**：入力保存 g=x は全源で resid=(S x, x) が単射＝普遍的な可逆化（下界に一致）。
+  - **必要性（`Witness`）**：lossy g=nil は S が単射のときのみ可逆＝maxfib>1（非単射）では必ず非単射に崩れる
+    ＝ゴミは**必要**。`const-nil` は領域全体が1 fiber＝入力全体の保持が強制される最大非単射の証人。
+  - 非可逆な源は R-WHILE プログラムとして直接書けない（`all_cleared` 違反）ため、S は「可逆化に
+    ゴミを払うべき数学的関数」をモデル化したもの。理論（Agda）⇔実機を接続。
+
 ## 7. 成果物マップ
 
 | ファイル | 役割 | タグ |

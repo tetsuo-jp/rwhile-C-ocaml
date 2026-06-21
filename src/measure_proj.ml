@@ -44,6 +44,55 @@ and clloop = function BLoop c -> count_loops c | BLoopNone -> 0
 
 let body_loops prog = match prog with Prog (_, _, b, _) -> count_loops b
 
+(* #4: empirical garbage LOWER BOUND.  For a NON-INJECTIVE source S (a function we
+ * wish to simulate reversibly), any reversible simulation keeps resid x=(S x,g x)
+ * with resid injective; then g must be injective on every fiber of S, so the
+ * garbage carries >= |fiber| distinct values (>= ceil(log2|fiber|) bits) -- the
+ * Agda RWhileGarbageBound.garbage-injective-on-fiber.  We enumerate a finite
+ * domain, group it into fibers, and check: (a) input-preserving g=x makes resid
+ * injective and meets the bound exactly (Achievable), while (b) lossy g=nil makes
+ * resid injective IFF S is already injective (necessity).  A non-reversible source
+ * cannot be a valid R-WHILE program directly (it would violate all_cleared);
+ * these S model the mathematical functions we must pay garbage to reverse. *)
+let ceil_log2 n =
+  let rec go acc p = if p >= n then acc else go (acc + 1) (p * 2) in
+  if n <= 1 then 0 else go 0 1
+
+let garbage () =
+  (* enumerate trees with leaves in {nil,'a} up to a small depth, deduped *)
+  let rec gen d =
+    let leaves = [VNil; atom "'a"] in
+    if d = 0 then leaves
+    else let s = gen (d - 1) in
+      leaves @ List.concat_map (fun l -> List.map (fun r -> VCons (l, r)) s) s in
+  let dom = List.sort_uniq compare (gen 2) in
+  let inj l = List.length (List.sort_uniq compare l) = List.length l in
+  let max_fiber s =
+    let outs = List.sort_uniq compare (List.map s dom) in
+    List.fold_left (fun m o -> max m (List.length (List.filter (fun x -> s x = o) dom))) 0 outs,
+    List.length outs in
+  let sources =
+    [ "hd",        (function VCons (a, _) -> a | v -> v);     (* drops cdr *)
+      "tl",        (function VCons (_, b) -> b | v -> v);     (* drops car *)
+      "atomize",   (function VCons _ -> atom "'c" | v -> v);  (* collapses all conses *)
+      "const-nil", (fun _ -> VNil) ]                          (* maximally non-injective *)
+  in
+  Printf.printf "Garbage lower bound (|garbage| >= |fiber|): domain = %d trees\n" (List.length dom);
+  Printf.printf "  %-10s %7s %8s %5s %6s %10s %9s\n"
+    "source" "#fibers" "maxfib" "LB" "S-inj" "inputPres" "lossy";
+  List.iter (fun (name, s) ->
+      let mf, nf = max_fiber s in
+      let s_inj = inj (List.map s dom) in
+      let ip_inj = inj (List.map (fun x -> (s x, x)) dom) in        (* g = input *)
+      let lossy_inj = inj (List.map (fun x -> (s x, VNil)) dom) in  (* g = nil *)
+      Printf.printf "  %-10s %7d %8d %5d %6b %10s %9s\n" name nf mf (ceil_log2 mf) s_inj
+        (if ip_inj then "inj(OK)" else "NONINJ") (if lossy_inj then "inj" else "NONINJ"))
+    sources;
+  Printf.printf "input-preserving (g=input) is injective for every source (Achievable: garbage=input\n";
+  Printf.printf "  always suffices); lossy (g=nil) is injective only when S already is -- garbage is\n";
+  Printf.printf "  NECESSARY exactly when maxfib>1, matching |garbage|>=|fiber| (RWhileGarbageBound).\n";
+  exit 0
+
 let jones spec_av =
   let ab = VCons (atom "'a", atom "'b") in
   let abc = vlist [atom "'a"; atom "'b"; atom "'c"] in
@@ -172,6 +221,7 @@ let () =
   if Array.length Sys.argv >= 3 && Sys.argv.(1) = "gate" then gate Sys.argv.(2);
   if Array.length Sys.argv >= 2 && Sys.argv.(1) = "jones" then
     jones (parse_prog (dir ^ "/spec_av.rwhile"));
+  if Array.length Sys.argv >= 2 && Sys.argv.(1) = "garbage" then garbage ();
   let spec_av = parse_prog (dir ^ "/spec_av.rwhile") in
   if Array.length Sys.argv >= 4 && Sys.argv.(1) = "looptest" then begin
     let sch = open_in Sys.argv.(3) in
