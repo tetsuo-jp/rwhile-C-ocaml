@@ -89,7 +89,15 @@ spec-correct（H1）と AV 代数健全性、`case` 健全性、ゴミ量的下�
 （Turing 完全ループ）の自己適用のみで、fuel-indexed モデルが要る。」
 
 ## 5. 最終状態（案2：G4・統一 fp1・H2核・非クロージャ/一般適用ハイアラーキ／案1：簡約器健全性＋選択肢2）
-- **Agda 形式化は 45 モジュールすべて `--safe` で通過**（postulate 0、唯一の仮定は `RWhileDetConcrete` の `funext`）。
+- **Agda 形式化は 46 モジュールすべて `--safe` で通過**（postulate 0、唯一の仮定は `RWhileDetConcrete` の `funext`）。
+- **Tier-2 #5 工学2（`RWhileH2WorklistAV.agda`）＝ワークリストに実 AV 代数を搭載**：上記ワークリスト機械に
+  `RWhileAVSound` の実 AV 演算（`avCons`/`avHd`/`avTl`、`'S`/`'D`/`'C`）を載せ、式言語 Ex（var/val/cons/hd/tl）
+  を辿って **AV 残余を組み立てる**（spec_av の SPEC-EXP-AV そのもの）。マシン関係 `_⟱_` で `avEval ex` を組むこと
+  （`machine-spec`/`machine-correct`）と燃料版（`machineF` sound/complete/mono）を証明し、**健全性**
+  `worklist-spec-sound`：組んだ AV 残余を概念化すると元の具体評価に一致（`γ (avEval ex) ρ ≡ ⟦ ex ⟧ ρ`）。
+  Witness は部分静的残余 `C (S vtrue) (D cVar)`（静的 head ＋ 動的入力）を組み立て γ 健全。
+  ＝**spec_av の looping AV スペシャライザを「ループ機構（ワークリスト＋燃料）＋AV 代数＋γ 健全性」の三位で
+  機械検証**。残りは AV-EQ/PAIRP・ストア（`Vl`）アクセスの搭載のみ。
 - **Tier-2 #5 工学（`RWhileH2Worklist.agda`）＝実 spec_av のワークリストを燃料モデルに具体化**：`SPEC-EXP-AV`/
   `PAT-READ-ITER` は明示的**スタックマシン**（ワークリスト `Cd`＋結果スタック `RSt`、begin/end マーカ、
   AV-CONS でボトムアップ結合）で、`cata` の構造再帰**ではない**非構造ループ（`from..until`）。これを忠実に

@@ -25,6 +25,8 @@
 --                          relation; fp1/fp2/fp3 lifted to fuel-level (the H2 fuel/partiality model)
 --   worklist-correct       Tier-2 #5 (eng): the real spec_av WORKLIST (stack machine, begin/end markers)
 --                          as a fuel-indexed machine computing the bottom-up fold (sound/complete/monotone)
+--   worklist-spec-sound    Tier-2 #5 (eng2): that worklist carrying the REAL AV algebra (avCons/avHd/avTl)
+--                          assembles AV residuals that are γ-sound w.r.t. concrete eval (partial-static)
 --   optrev-invert          option-2: the OPTIMISED (interpreter-free) op-list residual is REVERSIBLE
 --                          (inverse = inverted, reversed op-list) — optimisation ∧ reversibility
 --   selfbridge             option-2 bridge: RevProj2Self (abstract) and HierRecSelf (relational) agree
@@ -107,3 +109,9 @@ open import RWhileH2Worklist using (module Core)
 open RWhileH2Worklist.Witness public
   using () renaming (machine-correct to worklist-correct; ex to worklist-ex
                     ; machineF-sound to worklist-sound; machineF-complete to worklist-complete)
+
+-- Tier-2 #5 (engineering, step 2): the worklist carrying the REAL AV algebra
+-- (avCons/avHd/avTl), assembling AV residuals that are γ-sound w.r.t. concrete
+-- evaluation -- spec_av's looping AV specialiser, concretised and verified.
+open import RWhileH2WorklistAV public
+  using (avEval; avEval-sound; worklist-spec-sound; worklist-fuel-sound)
