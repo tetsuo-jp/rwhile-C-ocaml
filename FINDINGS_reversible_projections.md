@@ -132,6 +132,24 @@
   **修正は「index/Cd を静的に保つ」(partially-static 環境 or BT 維持) に一点集中**でよい（ループ特殊化は不変）。
   真因の本質は online 値運搬 AV vs offline BT 分離（HANDOFF/§2）。実装は spec_av_bti.rwhile で fp1 ゲート保護下。
 
+- **Phase 2c：選択肢2（本番改造を回避し、最適化スペシャライザの本質を Agda で機械検証）** 2026-06-21。
+  本番 spec_av の online→offline-AV 再設計（高リスク・大規模・「必要だが不十分」既証）を回避し、HANDOFF の
+  選択肢2（小コア/関係モデルを正として意味保存翻訳で橋渡し）を進めた。実 spec_av の2大オーバヘッド＝
+  **op-list 走査（fold）とタグ分岐（case）**の最適化除去を、`--safe` で機械検証（全41モジュール緑）：
+  - `RWhileH2HierRec.agda`：構造再帰子 `cata` 入りの大ステップ関係 `_·_⇓_`。再帰プログラム例 `mirrorP`
+    （関係レベル可逆性 `mirrorP-reversible`）、走る残余を生成する再帰スペシャライザ `reify`（定数族 H1
+    `reify-spec-correct`）と入力依存残余 `prependSpec`（`prepend-spec-correct`）＝quoted-construction-under-recursion。
+  - `RWhileH2HierRecSelf.agda`：`RWhileRevProj2Self` の最適化性（**解釈系除去・runtime 入力使用・over-static なし**）
+    を関係モデルへ持ち上げ。op-list を直接 `ap`-チェイン残余へ畳み込む `compileOps`（合成 `g∘f=ap(quo g)f`）が
+    任意入力で `foldOps` 一致（`compileOps-correct`、op-list 上の真の再帰）。
+  - `RWhileH2HierDispatch.agda`：実 spec_av の `=? Tag 'op` 機構。実行時分岐インタプリタ `int`（`PDisp` ノード）を
+    静的 op に特殊化すると残余から `PDisp` が消える（`dispatch-eliminated`/`spec-correct`、`int-has-dispatch` で非自明）。
+  - `RWhileOptRev.agda`：**最適化∧可逆性**。最適化（解釈系除去）op-list 残余はそれ自身可逆で、逆は invList
+    （逆 op を逆順）で構文的に与えられる（`foldOps-invert`、Bool トグル対合で witness）。
+  - すべて `RWhileMain.agda`（キャップストーン）に再輸出。**含意**：comp2 を本番で縮める BTA は研究規模だが、
+    「最適化スペシャライザ＝解釈系を消した可逆残余が存在し正しい」という #1 の本質は、実 spec_av に構造的に近い
+    再帰可能関係モデルで機械検証済み。本番化（offline-AV）は将来研究、橋渡し定理が次の足場。
+
 ## 8. 未解決・今後
 
 - ゴミ最小化の hard 集合（AV 代数の uncompute 規律可逆書換、Vl の store-reversal）。

@@ -88,8 +88,17 @@ spec-correct（H1）と AV 代数健全性、`case` 健全性、ゴミ量的下�
 実 `spec_av` の fp2/fp3 は byte 一致テストで実機検証され、形式的に残る唯一の橋は完全 `spec_av` の非構造部
 （Turing 完全ループ）の自己適用のみで、fuel-indexed モデルが要る。」
 
-## 5. 最終状態（案2：G4・統一 fp1・H2核・非クロージャ/一般適用ハイアラーキ／案1：簡約器健全性）
-- **Agda 形式化は 36 モジュールすべて `--safe` で通過**（postulate 0、唯一の仮定は `RWhileDetConcrete` の `funext`）。
+## 5. 最終状態（案2：G4・統一 fp1・H2核・非クロージャ/一般適用ハイアラーキ／案1：簡約器健全性＋選択肢2）
+- **Agda 形式化は 41 モジュールすべて `--safe` で通過**（postulate 0、唯一の仮定は `RWhileDetConcrete` の `funext`）。
+- **案1 Phase 2c（選択肢2＝最適化スペシャライザの本質を機械検証）** 2026-06-21。本番 spec_av の高リスク再設計を
+  回避し、再帰可能関係モデルで「解釈系を消した可逆残余の存在と正しさ」を証明（FINDINGS §9 Phase 2c に詳細）。
+  - `RWhileH2HierRec`：`cata` 入り大ステップ関係。`mirrorP-reversible`（再帰∧可逆）／`reify-spec-correct`（定数族 H1、
+    走る残余生成）／`prepend-spec-correct`（入力依存残余）＝quoted-construction-under-recursion。
+  - `RWhileH2HierRecSelf`：`RWhileRevProj2Self` の最適化性（解釈系除去・runtime 入力使用・over-static なし）を関係へ
+    持ち上げ。`compileOps-correct`（op-list を `ap`-チェイン残余へ畳み込む真の再帰）。
+  - `RWhileH2HierDispatch`：静的ディスパッチ解決（`=? Tag 'op`）。`dispatch-eliminated`（残余から分岐ノード消去）。
+  - `RWhileOptRev`：最適化∧可逆（`foldOps-invert`、逆は invList で構文的）。
+  - `RWhileMain`：上記の見出し定理を再輸出するキャップストーン（recself/disp/optrev/reify/prepend/mirrorP-reversible）。
 - **案1 Phase 2a（`RWhileSimpSound.agda`）**：残余簡約器 `src/Simp.ml` の意味保存を機械検証。定数畳み込み規則
   （hd/tl/pairp of cons）＋dead 可逆分岐除去（`condF` の reversible cond 前方意味論で、入口・出口テストが定数
   同真偽なら生き枝へ＝`deadbranch-true`/`deadbranch-false`）。簡約器を「テスト済み」→「証明済み」に格上げ。
