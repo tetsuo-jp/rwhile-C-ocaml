@@ -21,6 +21,8 @@
 --                          runtime input) in the recursion-capable relation; compilation recurses on ops
 --   disp-eliminated        option-2: specialising to a static op DELETES the interpreter's runtime
 --                          dispatch node (the real spec_av `=? Tag 'op`), proven dispatch-free + correct
+--   fp2-fuel / runF-*      Tier-2 #5: a FUEL-INDEXED total interpreter coinciding with the big-step
+--                          relation; fp1/fp2/fp3 lifted to fuel-level (the H2 fuel/partiality model)
 --   optrev-invert          option-2: the OPTIMISED (interpreter-free) op-list residual is REVERSIBLE
 --                          (inverse = inverted, reversed op-list) — optimisation ∧ reversibility
 --   selfbridge             option-2 bridge: RevProj2Self (abstract) and HierRecSelf (relational) agree
@@ -89,3 +91,9 @@ import RWhileH2HierFull as Full
 open Full.Witness public using ()
   renaming (full to full-integration; compileFull-dispatchFree to full-dispatchFree;
             intStep-has-dispatch to full-int-has-dispatch; ex to full-ex)
+
+-- Tier-2 #5: a FUEL-INDEXED total interpreter coinciding with the big-step
+-- relation (sound+complete+monotone), lifting fp1/fp2/fp3 to fuel-level total
+-- statements -- the fuel/partiality model for the looping self-application (H2).
+open import RWhileH2Fuel public
+  using (runF; runF-sound; runF-complete; runF-correct; fp1-fuel; fp2-fuel; fp3-fuel)

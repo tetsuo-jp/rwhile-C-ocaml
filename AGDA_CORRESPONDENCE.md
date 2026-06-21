@@ -89,7 +89,15 @@ spec-correct（H1）と AV 代数健全性、`case` 健全性、ゴミ量的下�
 （Turing 完全ループ）の自己適用のみで、fuel-indexed モデルが要る。」
 
 ## 5. 最終状態（案2：G4・統一 fp1・H2核・非クロージャ/一般適用ハイアラーキ／案1：簡約器健全性＋選択肢2）
-- **Agda 形式化は 41 モジュールすべて `--safe` で通過**（postulate 0、唯一の仮定は `RWhileDetConcrete` の `funext`）。
+- **Agda 形式化は 44 モジュールすべて `--safe` で通過**（postulate 0、唯一の仮定は `RWhileDetConcrete` の `funext`）。
+- **Tier-2 #5 達成（`RWhileH2Fuel.agda`）＝route A の fuel/部分性モデルを構築**：`RWhileH2Hier2` の一般適用
+  言語に**燃料付き全域インタプリタ** `runF : ℕ → Tm → Tm → Maybe Tm`（`apT` が計算済プログラムを計算済引数に
+  適用＝Turing 完全部、燃料が `nothing` で打ち切り）を与え、大ステップ関係 `_·_⇓_` と**一致**を証明：
+  健全性 `runF-sound`・完全性 `runF-complete`・単調性 `runF-mono-≤`。これにより関係的 fp1/fp2/fp3 が
+  **燃料レベルの全域定理** `fp1-fuel`/`fp2-fuel`/`fp3-fuel`（十分な燃料が存在すれば成立）に格上げ。
+  `runF-correct`（`= ⇓-det ∘ runF-sound`）で燃料計算値が関係の値と一致。**＝H2 が要求していた
+  fuel-indexed モデルを構築し、ループ付き自己適用を `--safe` 全域で表現**（残るは実 spec_av のワークリストを
+  この `runF` 上に具体化する工学）。
 - **案1 Phase 2c（選択肢2＝最適化スペシャライザの本質を機械検証）** 2026-06-21。本番 spec_av の高リスク再設計を
   回避し、再帰可能関係モデルで「解釈系を消した可逆残余の存在と正しさ」を証明（FINDINGS §9 Phase 2c に詳細）。
   - `RWhileH2HierRec`：`cata` 入り大ステップ関係。`mirrorP-reversible`（再帰∧可逆）／`reify-spec-correct`（定数族 H1、
