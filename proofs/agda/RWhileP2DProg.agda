@@ -27,7 +27,7 @@
 module RWhileP2DProg where
 
 open import Data.Nat using (ℕ; zero; suc)
-open import Relation.Binary.PropositionalEquality using (_≡_; refl; cong; cong₂)
+open import Relation.Binary.PropositionalEquality using (_≡_; refl; sym; trans; cong; cong₂)
 open import RWhileAVSound using (Val; ⟨⟩; _·_)
 
 ------------------------------------------------------------------------
@@ -180,3 +180,9 @@ dProg∘t (prog x c y) = cong₃ prog (unnat-natV x) (dCom∘t c) (unnat-natV y)
   where cong₃ : ∀ {A B C D : Set} (f : A → B → C → D)
                {a a′ b b′ c c′} → a ≡ a′ → b ≡ b′ → c ≡ c′ → f a b c ≡ f a′ b′ c′
         cong₃ f refl refl refl = refl
+
+-- corollary: program encoding is INJECTIVE (a program is uniquely recoverable
+-- from its data form), mirroring RWhileP2D.p2d-injective for the control core.
+transProg-injective : ∀ {x y} → transProg x ≡ transProg y → x ≡ y
+transProg-injective {x} {y} eq =
+  trans (sym (dProg∘t x)) (trans (cong dProg eq) (dProg∘t y))
