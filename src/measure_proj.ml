@@ -29,22 +29,45 @@ let rec vlist = function [] -> VNil | x :: xs -> VCons (x, vlist xs)
  * than the interpreter [int]((src.d)) -- the interpretation layer is removed and
  * (for ri_seq) the static op-list loop is unrolled.  Prints residual size and the
  * exec-step ratio (resid/interp); ratio < 1 quantifies Jones optimality. *)
+(* count CLoop nodes in a program body (an interpreter loops; a compiled residual
+ * should be loop-free). *)
+let rec count_loops = function
+  | CSeq (a, b)        -> count_loops a + count_loops b
+  | CCond (_, t, e, _) -> clthen t + clelse e
+  | CLoop (_, d, l, _) -> 1 + cldo d + clloop l
+  | CLocal (_, c)      -> count_loops c
+  | _ -> 0
+and clthen = function BThen c -> count_loops c | BThenNone -> 0
+and clelse = function BElse c -> count_loops c | BElseNone -> 0
+and cldo = function BDo c -> count_loops c | BDoNone -> 0
+and clloop = function BLoop c -> count_loops c | BLoopNone -> 0
+
+let body_loops prog = match prog with Prog (_, _, b, _) -> count_loops b
+
 let jones spec_av =
   let ab = VCons (atom "'a", atom "'b") in
+  let abc = vlist [atom "'a"; atom "'b"; atom "'c"] in
   let rimin = parse_prog (dir ^ "/ri_min.rwhile") in
   let riseq = parse_prog (dir ^ "/ri_seq.rwhile") in
+  let riperm = parse_prog (dir ^ "/ri_perm.rwhile") in
   let sw = atom "'swap" and id = atom "'id" in
+  let opab = atom "'ab" and opbc = atom "'bc" in
   let cases =
-    [ ("ri_min", rimin, sw, ab, "swap");
-      ("ri_min", rimin, id, ab, "id");
-      ("ri_seq", riseq, vlist [sw], ab, "[swap]");
-      ("ri_seq", riseq, vlist [sw; sw], ab, "[swap;swap]");
-      ("ri_seq", riseq, vlist [sw; id; sw], ab, "[swap;id;swap]");
-      ("ri_seq", riseq, vlist [sw; sw; sw; sw], ab, "[swap*4]");
-      ("ri_seq", riseq, vlist [id; id; id; id; id; id], ab, "[id*6]") ]
+    [ ("ri_min",  rimin,  sw, ab, "swap");
+      ("ri_min",  rimin,  id, ab, "id");
+      ("ri_seq",  riseq,  vlist [sw], ab, "[swap]");
+      ("ri_seq",  riseq,  vlist [sw; sw], ab, "[swap;swap]");
+      ("ri_seq",  riseq,  vlist [sw; id; sw], ab, "[swap;id;swap]");
+      ("ri_seq",  riseq,  vlist [sw; sw; sw; sw], ab, "[swap*4]");
+      ("ri_seq",  riseq,  vlist [id; id; id; id; id; id], ab, "[id*6]");
+      ("ri_perm", riperm, vlist [opab], abc, "[ab]");
+      ("ri_perm", riperm, vlist [opbc], abc, "[bc]");
+      ("ri_perm", riperm, vlist [opab; opbc], abc, "[ab;bc]");
+      ("ri_perm", riperm, vlist [opab; opbc; opab], abc, "[ab;bc;ab]=rev") ]
   in
   Printf.printf "Jones optimality: fp1 residual exec-steps vs interpreter exec-steps\n";
-  Printf.printf "  %-7s %-15s %8s %7s %7s %7s\n" "interp" "program" "|resid|" "resid" "interp" "ratio";
+  Printf.printf "  (loops = CLoop nodes in residual: 0 = compiled/loop-free; interpreters loop)\n";
+  Printf.printf "  %-7s %-16s %8s %5s %7s %7s %7s\n" "interp" "program" "|resid|" "loops" "resid" "interp" "ratio";
   List.iter (fun (iname, iprog, src, d, label) ->
       let pd = Program2DataRwhile.program2data iprog in
       let b = EvalRwhile.evalProgram spec_av (spec_in pd src) in
@@ -53,9 +76,11 @@ let jones spec_av =
       let sr = EvalRwhile.get_steps () in
       EvalRwhile.reset_steps (); let io = EvalRwhile.evalProgram iprog (VCons (src, d)) in
       let si = EvalRwhile.get_steps () in
-      Printf.printf "  %-7s %-15s %8d %7d %7d %6.2fx%s\n" iname label (cn b) sr si
+      Printf.printf "  %-7s %-16s %8d %5d %7d %7d %6.2fx%s\n" iname label (cn b) (body_loops bp) sr si
         (float_of_int sr /. float_of_int si) (if ro = io then "" else "  MISMATCH!"))
     cases;
+  Printf.printf "interpreter loops: ri_min=%d ri_seq=%d ri_perm=%d (all unrolled to 0 in residuals)\n"
+    (body_loops rimin) (body_loops riseq) (body_loops riperm);
   exit 0
 
 (* command-constructor histogram, to diagnose what dominates a residual *)

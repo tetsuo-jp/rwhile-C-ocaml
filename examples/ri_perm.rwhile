@@ -1,0 +1,44 @@
+(* ri_perm.rwhile - a reversible interpreter for a small PERMUTATION bytecode,
+ * written so the AV specializer (spec_av) specializes it cleanly (like ri_seq):
+ *   - depth-1 cons patterns only (each `cons X Y <= Z` peels one level)
+ *   - control is a STATIC loop over the (static) op list -> spec_av unrolls it
+ * so specialising the interpreter to a FIXED program COMPILES the op-sequence
+ * into a straight-line (loop-free) reversible permutation -- a non-trivial
+ * "killer" Futamura example beyond the single-op ri_min/ri_seq.
+ *
+ * Interpreted program = a list of transposition ops [op1,...,opn]; data = a
+ * triple L = (a.(b.(c.nil))).  Ops (each an involution; together generate S_3):
+ *   'ab : swap positions 1,2   [a,b,c] -> [b,a,c]
+ *   'bc : swap positions 2,3   [a,b,c] -> [a,c,b]
+ *   else: 'id  (no-op)
+ * Applying [o1,...,on] runs o1 then ... then on on L.
+ * Output = (Prog . L')  (Prog restored/echoed, like ri_seq -> reversible). *)
+
+macro APPLY-OP(Op, L)
+  if =? Op 'ab then
+    cons A R  <= L;
+    cons B R2 <= R;
+    L <= cons B (cons A R2)
+  fi =? Op 'ab;
+  if =? Op 'bc then
+    cons A2 R3 <= L;
+    cons B2 R4 <= R3;
+    cons C  R5 <= R4;
+    L <= cons A2 (cons C (cons B2 R5))
+  fi =? Op 'bc
+
+read In;
+  cons Prog L <= In;
+  (* run each op in Prog on L, accumulating consumed ops (reversed) in Done *)
+  from (=? Done nil) loop
+    cons Op Prog <= Prog;
+    APPLY-OP(Op, L);
+    Done <= cons Op Done
+  until (=? Prog nil);
+  (* restore Prog = reverse(Done) so it can be echoed (keeps everything reversible) *)
+  from (=? Prog nil) loop
+    cons Op2 Done <= Done;
+    Prog <= cons Op2 Prog
+  until (=? Done nil);
+  In <= cons Prog L;
+write In
