@@ -1,0 +1,34 @@
+{-# OPTIONS --safe #-}
+------------------------------------------------------------------------
+-- Capstone: the HEADLINE machine-checked results of the development, collected
+-- (and re-checked together) in one place for citation.  Importing this module
+-- type-checks all the marquee theorems at once.  See AGDA_CORRESPONDENCE.md and
+-- proofs/agda/README.md for the full module ↔ result map and the remaining
+-- obligation (H2 for the full looping spec_av).
+--
+--   spec-correct          H1: ⟦spec p s⟧ d ≡ ⟦p⟧ (s·d) for the real AV machinery
+--   d2p∘p2d / p2d-injective   residual Code program⇄data round-trip + injectivity (G4)
+--   dProg∘t / transProg-injective  control-core program⇄data round-trip + injectivity (G4)
+--   fp1U / specU-correct  fp1 unconditional for the real AV specialiser, unified value type
+--   self-rep / specByProg-correct  H2's recursive core, non-closure (aeval is a data program)
+--   hier-fp1/2/3          the Futamura hierarchy as proven theorems (non-closure instance)
+--   gen-fp1/2/3, ⇓-det    the hierarchy with general first-class application (big-step), deterministic
+--   deadbranch-true/false  soundness of the residual simplifier's dead-branch elimination
+--
+-- `--safe`, no postulates/holes.
+------------------------------------------------------------------------
+
+module RWhileMain where
+
+open import RWhileAVSpec   public using (spec-correct)
+open import RWhileP2D      public using (d2p∘p2d; p2d-injective)
+open import RWhileP2DProg  public using (dProg∘t; transProg-injective)
+open import RWhileAVSelfApp public using (fp1U; specU-correct)
+open import RWhileH2       public using (self-rep; specByProg-correct)
+open import RWhileSimpSound public using (deadbranch-true; deadbranch-false)
+
+-- the two hierarchy instances both export fp1/fp2/fp3; re-export with prefixes.
+open import RWhileH2Hier  public using ()
+  renaming (fp1 to hier-fp1; fp2 to hier-fp2; fp3 to hier-fp3; fp3-int to hier-fp3-int)
+open import RWhileH2Hier2 public using (⇓-det)
+  renaming (fp1-fwd to gen-fp1-fwd; fp1-bwd to gen-fp1-bwd; fp2 to gen-fp2; fp3 to gen-fp3)

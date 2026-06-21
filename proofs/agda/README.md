@@ -270,11 +270,16 @@ done by the accumulator induction `rev-rest`.
   (`deadbranch-false`) — exactly Simp's `if (const) then C else D fi (const) ⇒
   C|D`, with the dropped branch unreachable and assertions trivially held.
 
+- `RWhileMain.agda` — **capstone**: re-exports the headline machine-checked
+  results (spec-correct/H1, the p2d round-trips + injectivity, fp1U, self-rep,
+  the two Futamura-hierarchy instances `hier-*`/`gen-*`, simplifier soundness),
+  so importing one module type-checks all the marquee theorems together.
+
 ## Checking
 
 ```
 cd proofs/agda
-for f in RWhileRev RWhileRevFull RWhileValStore RWhileCRep RWhileCRepDet RWhileDet RWhileDetConcrete RWhileExec RWhileExecConcrete RWhileIL RWhileFutamura RWhileFutamura2 RWhileFutamura2Inst RWhileRevFutamura RWhileRevProjPaper RWhileRevProjInst RWhileRevProjGen RWhileCoreExp RWhileFp1Residual RWhileElabCom RWhileMacroSubst RWhileRevProj2Lift RWhileRevProj2BT RWhileRevProj2Self RWhileAVSound RWhileAVSpec RWhileP2D RWhileP2DProg RWhileAVSelfApp RWhileH2 RWhileH2Hier RWhileH2Hier2 RWhileSimpSound RWhileCaseInv RWhileGarbageBound; do
+for f in RWhileRev RWhileRevFull RWhileValStore RWhileCRep RWhileCRepDet RWhileDet RWhileDetConcrete RWhileExec RWhileExecConcrete RWhileIL RWhileFutamura RWhileFutamura2 RWhileFutamura2Inst RWhileRevFutamura RWhileRevProjPaper RWhileRevProjInst RWhileRevProjGen RWhileCoreExp RWhileFp1Residual RWhileElabCom RWhileMacroSubst RWhileRevProj2Lift RWhileRevProj2BT RWhileRevProj2Self RWhileAVSound RWhileAVSpec RWhileP2D RWhileP2DProg RWhileAVSelfApp RWhileH2 RWhileH2Hier RWhileH2Hier2 RWhileSimpSound RWhileCaseInv RWhileGarbageBound RWhileMain; do
   agda --safe $f.agda
 done
 ```
