@@ -13,6 +13,13 @@ let vfalse = VNil
    yields exactly vtrue/vfalse. *)
 let is_true (v : valT) : bool = v <> VNil
 
+(* execution-step counter: incremented once per command executed by evalCom.
+ * A cheap, additive measure of run-time cost (for comparing a specialised
+ * residual against the interpreter it was specialised from). *)
+let eval_steps = ref 0
+let reset_steps () = eval_steps := 0
+let get_steps () = !eval_steps
+
 (* Extension feature flags -- set by Main.ml command-line options *)
 let enable_local  = ref false
 let enable_autofi = ref false
@@ -371,7 +378,9 @@ and inv_evalPat s = function
 			   ~hint:"a cons pattern (cons p1 p2) requires a cons value; got a non-cons (often nil), so the data shape does not match the pattern"
 			   ("Cannot match cons pattern " ^ printTree prtPat p ^ " against non-cons value " ^ printTree prtValT v ^ " (in inv_evalPat.PCons)")
 
-and evalCom (s : store) : com -> store = function
+and evalCom (s : store) (c : com) : store =
+  incr eval_steps;
+  match c with
   | CMac (_, _) -> eval_error ~category:"internal"
                      ~hint:"macros must be expanded before evaluation; evalProgram runs expMacProgram first"
                      "Impossible happened.  Macro must not appear in runtime."

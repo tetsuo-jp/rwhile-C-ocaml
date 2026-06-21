@@ -94,6 +94,10 @@
 
 2026-06-20。「本物の fp2＝生成コンパイラ comp2 が解釈を上回る（comp2 < |spec_av|）」を目指す研究の初手。
 
+- **実行コスト（Jones 最適性の次元、#13）**：`EvalRwhile` に加算的ステップカウンタ（`eval_steps`/`reset_steps`/
+  `get_steps`、evalCom 1回=1ステップ）。`measure_proj` で実測：`[B](('a.'b))=5 steps` 対
+  `[ri_min]((swap.('a.'b)))=8 steps`（残余 **0.62×**）。⇒ fp1 残余は**サイズ（0.63×）だけでなく実行ステップでも
+  高速**（静的ディスパッチが特殊化時に解決済）。サイズ偏重でなく速度でも特殊化が効いている実証。
 - **ベースライン（`src/measure_proj.ml`, `make measure_proj`）**：`|spec_av|=817,701`、`|ri_min|=163`、
   fp1 残余 swap=103（**0.63×ri_min＝fp1 は既に最適化**）/id=63、**comp2=`[spec_av]((spec_av.ri_min))`=812,515
   （0.994×|spec_av|）＝自明自己適用**（生成コンパイラが spec_av をほぼ凍結、Futamura 利得なし）。

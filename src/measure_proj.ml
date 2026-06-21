@@ -87,6 +87,17 @@ let () =
   Printf.printf "fp1 residual [spec_av]((ri_min.swap)) = %d nodes (%.2fx |ri_min|)\n"
     (cn b_swap) (float_of_int (cn b_swap) /. float_of_int (cn pd_rimin));
   Printf.printf "fp1 residual [spec_av]((ri_min.id))   = %d nodes\n" (cn b_id);
+  (* execution-cost (Jones-optimality dimension): the fp1 residual runs in fewer
+   * evalCom steps than the interpreter, since static dispatch was resolved. *)
+  let ab = VCons (VAtom (Atom "'a"), VAtom (Atom "'b")) in
+  let b_prog = Program2DataRwhile.data2program b_swap in
+  EvalRwhile.reset_steps (); ignore (EvalRwhile.evalProgram b_prog ab);
+  let steps_resid = EvalRwhile.get_steps () in
+  EvalRwhile.reset_steps ();
+  ignore (EvalRwhile.evalProgram rimin (VCons (VAtom (Atom "'swap"), ab)));
+  let steps_int = EvalRwhile.get_steps () in
+  Printf.printf "exec steps: [B](('a.'b))=%d  vs  [ri_min]((swap.('a.'b)))=%d  (residual %.2fx)\n"
+    steps_resid steps_int (float_of_int steps_resid /. float_of_int steps_int);
   if Array.length Sys.argv >= 2 && Sys.argv.(1) = "full" then begin
     Printf.printf "computing comp2 = [spec_av]((spec_av.ri_min)) (slow)...\n%!";
     let comp2 = EvalRwhile.evalProgram spec_av (spec_in pd_spec pd_rimin) in
