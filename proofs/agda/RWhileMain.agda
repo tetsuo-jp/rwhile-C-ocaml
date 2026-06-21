@@ -13,6 +13,7 @@
 --   self-rep / specByProg-correct  H2's recursive core, non-closure (aeval is a data program)
 --   hier-fp1/2/3          the Futamura hierarchy as proven theorems (non-closure instance)
 --   gen-fp1/2/3, ⇓-det    the hierarchy with general first-class application (big-step), deterministic
+--   mirrorP-reversible    a recursive (cata) program proven its-own-inverse at the relation level
 --   deadbranch-true/false  soundness of the residual simplifier's dead-branch elimination
 --
 -- `--safe`, no postulates/holes.
@@ -32,3 +33,7 @@ open import RWhileH2Hier  public using ()
   renaming (fp1 to hier-fp1; fp2 to hier-fp2; fp3 to hier-fp3; fp3-int to hier-fp3-int)
 open import RWhileH2Hier2 public using (⇓-det)
   renaming (fp1-fwd to gen-fp1-fwd; fp1-bwd to gen-fp1-bwd; fp2 to gen-fp2; fp3 to gen-fp3)
+
+-- a genuinely RECURSIVE (cata-defined) program that is its own inverse, proven
+-- reversible at the relation level — recursion ∧ reversibility in one theorem.
+open import RWhileH2HierRec public using (mirrorP; mirrorP-reversible)

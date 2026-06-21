@@ -27,7 +27,8 @@
 
 module RWhileH2HierRec where
 
-open import Relation.Binary.PropositionalEquality using (_≡_; refl; cong; cong₂)
+open import Relation.Binary.PropositionalEquality using (_≡_; refl; cong; cong₂; subst)
+open import Data.Product using (Σ; _×_; _,_)
 
 ------------------------------------------------------------------------
 -- A small language: values (nv / cn) and programs (inp/car/cdr/quo/ap/cata).
@@ -106,6 +107,25 @@ mirror-correct (vcn {a} {b} va vb) =
 mirror-invol : ∀ {t} → IsVal t → mirror (mirror t) ≡ t
 mirror-invol vnv = refl
 mirror-invol (vcn va vb) = cong₂ cn (mirror-invol va) (mirror-invol vb)
+
+-- mirror preserves value-hood (so the output can be re-run).
+mirror-isval : ∀ {t} → IsVal t → IsVal (mirror t)
+mirror-isval vnv = vnv
+mirror-isval (vcn va vb) = vcn (mirror-isval vb) (mirror-isval va)
+
+-- REVERSIBILITY AT THE PROGRAM LEVEL (the paper's central theme, on a genuinely
+-- RECURSIVE program).  Running `mirrorP` produces some output `s`, and running
+-- `mirrorP` AGAIN on `s` recovers the original input `t` — both as actual `⇓`
+-- derivations in the relation.  This is a machine-checked reversible recursive
+-- computation: a `cata`-defined loop that is its own inverse.
+mirrorP-reversible :
+  ∀ {t} → IsVal t → Σ Tm (λ s → (mirrorP · t ⇓ s) × (mirrorP · s ⇓ t))
+mirrorP-reversible {t} vt =
+  mirror t
+  , mirror-correct vt
+  , subst (λ z → mirrorP · mirror t ⇓ z)
+          (mirror-invol vt)
+          (mirror-correct (mirror-isval vt))
 
 ------------------------------------------------------------------------
 -- A second worked recursion: the structural IDENTITY fold reconstructs its
