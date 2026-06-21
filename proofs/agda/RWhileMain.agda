@@ -23,7 +23,9 @@
 --                          dispatch node (the real spec_av `=? Tag 'op`), proven dispatch-free + correct
 --   optrev-invert          option-2: the OPTIMISED (interpreter-free) op-list residual is REVERSIBLE
 --                          (inverse = inverted, reversed op-list) — optimisation ∧ reversibility
+--   selfbridge             option-2 bridge: RevProj2Self (abstract) and HierRecSelf (relational) agree
 --
+
 -- `--safe`, no postulates/holes.
 ------------------------------------------------------------------------
 
@@ -70,3 +72,10 @@ open Disp.Witness public using ()
 import RWhileOptRev as OptRev
 open OptRev.Witness public using ()
   renaming (foldOps-invert to optrev-invert; ex to optrev-ex)
+
+-- option 2: the TRANSLATION BRIDGE — RWhileRevProj2Self (abstract op-list) and
+-- RWhileH2HierRecSelf (relational) agree: both compile to a residual computing
+-- foldOps; the abstract residual's data IS the relational residual's value.
+import RWhileSelfBridge as SelfBridge
+open SelfBridge.Witness public using ()
+  renaming (bridge to selfbridge; bridge-exact to selfbridge-exact)
