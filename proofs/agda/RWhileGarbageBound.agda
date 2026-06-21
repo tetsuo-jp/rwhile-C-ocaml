@@ -72,3 +72,21 @@ module Witness where
   garbage-keeps-whole-input : Inj (λ (x : ℕ) → x)
   garbage-keeps-whole-input gxy =
     garbage-injective-on-fiber resid-inj refl refl gxy
+
+------------------------------------------------------------------------
+-- ACHIEVABILITY (the matching upper bound).  The lower bound says any reversible
+-- simulation of S must keep garbage that distinguishes each fiber.  This is
+-- ACHIEVABLE for EVERY S: keeping the whole input as garbage (g = id) makes the
+-- residual injective — input-preservation is a universal reversible simulation
+-- (the general form of RWhileRevProjGen.input-preserving-inj).  Together with
+-- the lower bound this pins the picture: garbage IS necessary (lower bound) and
+-- input-as-garbage always SUFFICES (upper bound); the two meet exactly at the
+-- maximally non-injective (constant) source, where the whole input is forced
+-- (`Witness`), so the input-preserving bound is tight there.
+
+module Achievable (In Out : Set) (S : In → Out) where
+  open Bound In Out In S (λ x → x)        -- garbage = the input itself
+
+  -- input-preservation is a reversible simulation of ANY S.
+  input-preserving-suffices : Inj resid
+  input-preserving-suffices eq = cong proj₂ eq
