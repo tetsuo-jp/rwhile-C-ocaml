@@ -98,6 +98,13 @@ let () =
   let steps_int = EvalRwhile.get_steps () in
   Printf.printf "exec steps: [B](('a.'b))=%d  vs  [ri_min]((swap.('a.'b)))=%d  (residual %.2fx)\n"
     steps_resid steps_int (float_of_int steps_resid /. float_of_int steps_int);
+  (* reversibility: the generated residual is a reversible program -- its
+   * syntactic inverse (InvRwhile.invProgram) undoes it. *)
+  let out = EvalRwhile.evalProgram b_prog ab in
+  let back = EvalRwhile.evalProgram (InvRwhile.invProgram b_prog) out in
+  Printf.printf "residual reversibility: [B](('a.'b))=%s ; [inv B](that)=%s ; round-trips: %b\n"
+    (PrintRwhile.printTree PrintRwhile.prtValT out)
+    (PrintRwhile.printTree PrintRwhile.prtValT back) (back = ab);
   if Array.length Sys.argv >= 2 && Sys.argv.(1) = "full" then begin
     Printf.printf "computing comp2 = [spec_av]((spec_av.ri_min)) (slow)...\n%!";
     let comp2 = EvalRwhile.evalProgram spec_av (spec_in pd_spec pd_rimin) in
