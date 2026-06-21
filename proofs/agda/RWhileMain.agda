@@ -17,6 +17,8 @@
 --   reify-spec-correct    #5 step2 (constant family): a recursive specialiser emitting a RUNNABLE residual (H1)
 --   prepend-spec-correct  #5 step2b: an INPUT-DEPENDENT residual (live `inp` + quoted static), H1
 --   deadbranch-true/false  soundness of the residual simplifier's dead-branch elimination
+--   recself-correct        option-2 lift: an OPTIMISING residual (interpreter eliminated, uses
+--                          runtime input) in the recursion-capable relation; compilation recurses on ops
 --
 -- `--safe`, no postulates/holes.
 ------------------------------------------------------------------------
@@ -41,3 +43,11 @@ open import RWhileH2Hier2 public using (⇓-det)
 open import RWhileH2HierRec public
   using (mirrorP; mirrorP-reversible; reify; reify-spec-correct
         ; prependSpec; prepend-spec-correct)
+
+-- option 2: RevProj2Self's OPTIMISING residual (interpreter eliminated, uses
+-- runtime input) lifted into the recursion-capable relation, with compilation a
+-- genuine recursion over the source op-list.  `recself-correct` = the lifted
+-- compileOps-correct; `recself-ex` a concrete machine-checked instance.
+import RWhileH2HierRecSelf as RecSelf
+open RecSelf.Witness public
+  renaming (compileOps-correct to recself-correct; ex to recself-ex)
