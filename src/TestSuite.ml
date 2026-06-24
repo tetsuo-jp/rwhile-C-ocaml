@@ -597,6 +597,22 @@ let test_file_rep () =
   let expected = parse_file_val (examples_dir ^ "/list123.val") in
   Alcotest.(check valT_testable) "rep.rwhile" expected result
 
+(* COLLECT-REFS (案1-B selective-dynamicize helper) is reversible: running it
+   forward then INV on a full command tree preserves the tree (out == in) with no
+   assertion error.  This locks in the grammar-directed case+begin/end-marker
+   COLLECT-REFS proven via the examples/test_collect_refs.rwhile harness. *)
+let test_collect_refs_roundtrip () =
+  let prog = parse_file_program (examples_dir ^ "/test_collect_refs.rwhile") in
+  let tree = parse_val
+    ("('seq . (('ass . (('var . nil) . ('hd . ('var . (nil . nil))))) . "
+     ^ "('cond . (('eq . (('var . nil) . ('val . 'swap))) . "
+     ^ "(('rep . (('var . nil) . ('var . (nil . nil)))) . "
+     ^ "(('loop . (('var . (nil . nil)) . (('rep . (('var . nil) . ('val . nil))) . "
+     ^ "(('ass . (('var . (nil . nil)) . ('val . nil))) . (('var . nil) . nil))))) . "
+     ^ "(('val . nil) . nil)))))))") in
+  let out = EvalRwhile.evalProgram prog tree in
+  Alcotest.(check valT_testable) "COLLECT-REFS forward->INV preserves tree" tree out
+
 let test_file_enumeration () =
   let prog = parse_file_program (examples_dir ^ "/enumeration.rwhile") in
   let data = parse_file_val (examples_dir ^ "/nil.val") in
@@ -2297,6 +2313,7 @@ let () =
       Alcotest.test_case "transExp/d_exp structural round trip" `Quick test_wire_roundtrip_structural;
       Alcotest.test_case "decode com c0 (matches Agda parseCom)" `Quick test_wire_com_decode;
       Alcotest.test_case "transCom/d_com structural round trip" `Quick test_wire_com_roundtrip_structural;
+      Alcotest.test_case "COLLECT-REFS forward->INV preserves tree" `Quick test_collect_refs_roundtrip;
     ];
     "eval-integration", [
       Alcotest.test_case "identity" `Quick test_eval_identity;
