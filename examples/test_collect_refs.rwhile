@@ -1,45 +1,112 @@
 (* test_collect_refs.rwhile — fast reversibility harness for COLLECT-REFS (案1-B).
- * COLLECT-REFS(Tree, Refs): gather every K with ('var.K) a subterm of Tree, into
- * Refs; Tree preserved.  Used by the selective-dynamicize fix.  This harness runs
- * COLLECT-REFS then its inverse and writes the tree back: a correct (reversible)
- * COLLECT-REFS yields output == input with no assertion error (seconds via ./ri,
- * vs minutes for comp2).  Iterate the macro here until green, then port to
- * spec_av_bti.  Markers: ('CrE.nil) end / ('CrB.nil) begin on the work stacks. *)
+ * Grammar-directed: every worklist item is a HEAD-ATOM-TAGGED node (expression
+ * 'var/'val/'cons/'hd/'tl/'eq/'pairp; later commands too).  Untagged arg-tuples
+ * are destructured in-arm by fixed shape and never pushed raw, so `case` dispatch
+ * is clean and the begin/end-marker idiom (as in the proven PAT-READ-ITER) makes
+ * it REVERSIBLE.  COLLECT-REFS(Tree,Refs) gathers every K with ('var.K) a subterm
+ * of Tree; Tree preserved.  Harness: forward then INV; output == input + no error
+ * iff reversible.  Iterate via ./ri (seconds) before porting to spec_av_bti.
+ *
+ * THIS VERSION: expressions only (extend to commands once green). *)
 
 macro COLLECT-REFS-STEP(CrWk, CrWk2, CrRefs)
   cons CrN CrWk <= CrWk;
-  CrIsEnd ^= =? CrN ('CrE . nil);
-  if =? CrN ('CrE . nil) then
-    CrN ^= ('CrE . nil);
-    cons CrY (cons CrX (cons CrBm CrWk2)) <= CrWk2;
-    CrBm ^= ('CrB . nil);
-    CrWk2 <= cons (cons CrX CrY) CrWk2
-  else
-    CrIsPair ^= pair? CrN;
-    if pair? CrN then
-      cons CrH CrT <= CrN;
-      CrIsVar ^= =? CrH 'var;
-      if =? CrH 'var then
-        CrKc ^= CrT;
-        CrRefs <= cons CrKc CrRefs;
-        CrWk2 <= cons (cons CrH CrT) CrWk2
-      else
-        CrIsVal ^= =? CrH 'val;
-        if =? CrH 'val then
-          CrWk2 <= cons (cons CrH CrT) CrWk2
-        else
-          CrWk <= cons CrH (cons CrT (cons ('CrE . nil) CrWk));
-          CrWk2 <= cons ('CrB . nil) CrWk2
-        fi CrIsVal;
-        CrIsVal ^= CrIsVal
-      fi CrIsVar;
-      CrIsVar ^= CrIsVar
-    else
-      CrWk2 <= cons CrN CrWk2
-    fi CrIsPair;
-    CrIsPair ^= CrIsPair
-  fi CrIsEnd;
-  CrIsEnd ^= CrIsEnd
+  case CrN yields CrN of
+      cons 'var CrK =>
+        CrKc ^= CrK; CrRefs <= cons CrKc CrRefs
+        => cons 'var CrK
+    | cons 'val CrV =>
+        CrNop ^= nil; CrNop ^= nil
+        => cons 'val CrV
+    | cons 'cons CrAg =>
+        cons CrX CrY <= CrAg;
+        CrWk <= cons CrX (cons CrY (cons ('consE . nil) CrWk));
+        CrX ^= CrX; CrY ^= CrY
+        => cons 'consB CrAg
+    | cons 'consE CrZ =>
+        cons CrY (cons CrX (cons ('consB . nil) CrWk2)) <= CrWk2;
+        CrAg2 <= cons CrX CrY
+        => cons 'cons CrAg2
+    | cons 'eq CrAgE =>
+        cons CrXe CrYe <= CrAgE;
+        CrWk <= cons CrXe (cons CrYe (cons ('eqE . nil) CrWk));
+        CrXe ^= CrXe; CrYe ^= CrYe
+        => cons 'eqB CrAgE
+    | cons 'eqE CrZe =>
+        cons CrYe2 (cons CrXe2 (cons ('eqB . nil) CrWk2)) <= CrWk2;
+        CrAgE2 <= cons CrXe2 CrYe2
+        => cons 'eq CrAgE2
+    | cons 'hd CrEh =>
+        CrWk <= cons CrEh (cons ('hdE . nil) CrWk);
+        CrEh ^= CrEh
+        => cons 'hdB CrEh
+    | cons 'hdE CrZh =>
+        cons CrEh2 (cons ('hdB . nil) CrWk2) <= CrWk2
+        => cons 'hd CrEh2
+    | cons 'tl CrEt =>
+        CrWk <= cons CrEt (cons ('tlE . nil) CrWk);
+        CrEt ^= CrEt
+        => cons 'tlB CrEt
+    | cons 'tlE CrZt =>
+        cons CrEt2 (cons ('tlB . nil) CrWk2) <= CrWk2
+        => cons 'tl CrEt2
+    | cons 'pairp CrEp =>
+        CrWk <= cons CrEp (cons ('pairpE . nil) CrWk);
+        CrEp ^= CrEp
+        => cons 'pairpB CrEp
+    | cons 'pairpE CrZp =>
+        cons CrEp2 (cons ('pairpB . nil) CrWk2) <= CrWk2
+        => cons 'pairp CrEp2
+    | cons 'seq CrAgS =>
+        cons CrS1 CrS2 <= CrAgS;
+        CrWk <= cons CrS1 (cons CrS2 (cons ('seqE . nil) CrWk));
+        CrS1 ^= CrS1; CrS2 ^= CrS2
+        => cons 'seqB CrAgS
+    | cons 'seqE CrZs =>
+        cons CrS2b (cons CrS1b (cons ('seqB . nil) CrWk2)) <= CrWk2;
+        CrAgS2 <= cons CrS1b CrS2b
+        => cons 'seq CrAgS2
+    | cons 'ass CrAgA =>
+        cons CrA1 CrA2 <= CrAgA;
+        CrWk <= cons CrA1 (cons CrA2 (cons ('assE . nil) CrWk));
+        CrA1 ^= CrA1; CrA2 ^= CrA2
+        => cons 'assB CrAgA
+    | cons 'assE CrZa =>
+        cons CrA2b (cons CrA1b (cons ('assB . nil) CrWk2)) <= CrWk2;
+        CrAgA2 <= cons CrA1b CrA2b
+        => cons 'ass CrAgA2
+    | cons 'rep CrAgR =>
+        cons CrR1 CrR2 <= CrAgR;
+        CrWk <= cons CrR1 (cons CrR2 (cons ('repE . nil) CrWk));
+        CrR1 ^= CrR1; CrR2 ^= CrR2
+        => cons 'repB CrAgR
+    | cons 'repE CrZr =>
+        cons CrR2b (cons CrR1b (cons ('repB . nil) CrWk2)) <= CrWk2;
+        CrAgR2 <= cons CrR1b CrR2b
+        => cons 'rep CrAgR2
+    | cons 'cond CrAgC =>
+        cons CrCe (cons CrCc (cons CrCd (cons CrCf nil))) <= CrAgC;
+        CrWk <= cons CrCe (cons CrCc (cons CrCd (cons CrCf (cons ('condE . nil) CrWk))));
+        CrCe ^= CrCe; CrCc ^= CrCc; CrCd ^= CrCd; CrCf ^= CrCf
+        => cons 'condB CrAgC
+    | cons 'condE CrZc =>
+        cons CrCf2 (cons CrCd2 (cons CrCc2 (cons CrCe2 (cons ('condB . nil) CrWk2)))) <= CrWk2;
+        CrAgC2 <= cons CrCe2 (cons CrCc2 (cons CrCd2 (cons CrCf2 nil)))
+        => cons 'cond CrAgC2
+    | cons 'loop CrAgL =>
+        cons CrLe (cons CrLd (cons CrLl (cons CrLf nil))) <= CrAgL;
+        CrWk <= cons CrLe (cons CrLd (cons CrLl (cons CrLf (cons ('loopE . nil) CrWk))));
+        CrLe ^= CrLe; CrLd ^= CrLd; CrLl ^= CrLl; CrLf ^= CrLf
+        => cons 'loopB CrAgL
+    | cons 'loopE CrZl =>
+        cons CrLf2 (cons CrLl2 (cons CrLd2 (cons CrLe2 (cons ('loopB . nil) CrWk2)))) <= CrWk2;
+        CrAgL2 <= cons CrLe2 (cons CrLd2 (cons CrLl2 (cons CrLf2 nil)))
+        => cons 'loop CrAgL2
+    | Rest =>
+        CrNop2 ^= nil; CrNop2 ^= nil
+        => Rest
+  end;
+  CrWk2 <= cons CrN CrWk2
 
 macro COLLECT-REFS(CrTree, CrRefs)
   CrWk <= cons CrTree nil;
