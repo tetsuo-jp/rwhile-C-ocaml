@@ -161,4 +161,5 @@ open import RWhileLoopBTA public
 -- involutive) -- residualising preserves reversibility; the implementation only
 -- has to emit this shape.
 open import RWhileLoopBTARev public
-  using (resLoop; resLoop-inv; resLoop-reversible; resLoop-inv-inv)
+  using (resLoop; resLoop-inv; resLoop-reversible; resLoop-inv-inv
+        ; constEntry-no-iter)

@@ -95,6 +95,10 @@ spec-correct（H1）と AV 代数健全性、`case` 健全性、ゴミ量的下�
   テストを Val 状態述語（残余コード実行の truthiness）に、本体を残余命令にして `RWhileRevFull.Core Val` の `loop` に一致
   （`resLoop`）。`resLoop-inv`（inv は entry/exit 入替＝refl）／`resLoop-reversible`（`inv-sound`：forward s⇒t ⟹ inverse t⇒s）／
   `resLoop-inv-inv`（`inv-inv`：二重反転＝恒等）。⇒ **residualize は可逆性を保存**＝実装はこの形を emit するだけでよい。
+  さらに **`constEntry-no-iter`**：entry を定数 true に畳む（AV-LIFT(`S vtrue`)＝`cVal vtrue`）と、可逆ループの `r-iter`
+  （loop-back で entry が false 必須）が成立せず**反復不能**＝非可逆。⇒ 「静的 entry・動的 exit」ループの residualize は
+  entry を**定数化してはならず**、制御スロット（Cnt 等）を dynamicize して entry テストを**再特殊化**し実テストとして残す
+  必要がある（実装が守るべき subtlety を機械検証）。
 - **案1-B ループ束縛時刻の決定（`RWhileLoopBTA.agda`, Agda-first）＝comp2 第2障害の修正青写真**：selective dynamicize で
   内側インタプリタが unroll を開始した後に出た spec_av の `'error <= '41`（'lcheck 動的 exit）の正しい修正規則を
   実装より先に Agda で証明。テストの AV を静的真理値に解決する `staticTruth`（`S`→既知, `C`→cons ゆえ true, `D`→不明）と
