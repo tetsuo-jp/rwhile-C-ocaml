@@ -228,6 +228,24 @@ let looptest spec_av subj_file sval =
   (match Program2DataRwhile.data2program resid with
    | Prog (_, _, body, _) -> report_hist "residual" body)
 
+(* dyncond: fp1-scale soundness probe for the DYNAMIC-cond/loop residualisation.
+ * Specialise examples/fp_dyncond_bug.rwhile (a valid reversible program with a
+ * dynamic-input conditional) with the candidate spec, then evaluate the residual:
+ *   [comp](d) = 'one for non-nil d, 'two for d = nil.
+ * If the selective-dynamicize 'cond path is unsound, this fp1-scale residual is
+ * wrong (seconds, vs minutes for comp2). *)
+let dyncond spec_file =
+  let cand = parse_prog spec_file in
+  let prog = parse_prog (dir ^ "/fp_dyncond_bug.rwhile") in
+  let pd = Program2DataRwhile.program2data prog in
+  let comp = EvalRwhile.evalProgram cand (spec_in pd VNil) in
+  let comp_prog = Program2DataRwhile.data2program comp in
+  let r1 = EvalRwhile.evalProgram comp_prog (VAtom (Atom "'x")) in
+  let r2 = EvalRwhile.evalProgram comp_prog VNil in
+  let s v = PrintRwhile.printTree PrintRwhile.prtValT v in
+  Printf.printf "dyncond %s: comp=%d nodes ; [comp]('x)=%s (expect 'one) ; [comp](nil)=%s (expect 'two)\n"
+    spec_file (cn comp) (s r1) (s r2)
+
 (* fp1 safety gate: check that a CANDIDATE specialiser (e.g. a spec_av_bti work
  * copy) still produces CORRECT, REVERSIBLE fp1 residuals before/after a BTI edit.
  * Criterion (hard): for op in {swap,id} and several inputs d, the residual
@@ -269,6 +287,7 @@ let gate spec_file =
 
 let () =
   if Array.length Sys.argv >= 3 && Sys.argv.(1) = "gate" then gate Sys.argv.(2);
+  if Array.length Sys.argv >= 3 && Sys.argv.(1) = "dyncond" then (dyncond Sys.argv.(2); exit 0);
   if Array.length Sys.argv >= 2 && Sys.argv.(1) = "jones" then
     jones (parse_prog (dir ^ "/spec_av.rwhile"));
   if Array.length Sys.argv >= 2 && Sys.argv.(1) = "garbage" then garbage ();

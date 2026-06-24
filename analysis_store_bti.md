@@ -141,6 +141,13 @@ comp2-loops に**正しさチェック**（`[comp2]('S.op)==B`）＋サイズ表
 - **次の切り分け**：fp1 規模で selective 'cond 単体の健全性を確認（`examples/fp_dyncond_bug.rwhile` を spec_av_bti で
   特殊化し `[comp](d)` が正答か）。'cond-selective が壊れていれば fundamental、健全なら loop-BTA 側。
 - **状態**: spec_av_bti は fp1 ゲート緑だが **comp2 不正**の WIP。Agda 青写真は完成・正。spec_av 本番は無改造・repo 緑。
+- **切り分け（`measure_proj dyncond`, fp1 規模・秒）**：`fp_dyncond_bug`（動的 cond の正当な可逆プログラム）を
+  spec_av／spec_av_bti 両方で特殊化 → **両方正答**（comp=125, `[comp]('x)='one`, `[comp](nil)='two`）。
+  ⇒ **selective dynamicize＋loop-BTA は単純な動的 cond では健全**。comp2 が不正なのは**自己適用特有**＝spec_av 自身の
+  複雑な機構（AV ストア構築 AV-INIT／MKAV の動的 cond／入れ子ループ・AV-LIFT）を特殊化するときのみ顕在化。
+  残余を見ると内側 spec_av の AV-LIFT/ストア/AUX が runtime 残余化されており、selective が残す partial-static ストアと
+  これらの相互作用が疑わしい。**次**：comp2 規模で、selective が内側 spec_av のどの機構を壊すか特定（dump 差分／
+  内側 AV-LIFT・AUX の入力 AV を追跡）。深いデバッグ（数分/回）。道具：`measure_proj dyncond`/`comp2-loops`(正しさ込み)。
 
 ### 実装試行2（2026-06-23, /loop-next B round 1）＝可逆性の真因を特定（重要）
 高速ハーネス `examples/test_collect_refs.rwhile`（`./ri` で `COLLECT-REFS`→`INV-COLLECT-REFS` 往復を秒で検査。
