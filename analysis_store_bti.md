@@ -126,6 +126,22 @@ residual = 1281 nodes,  CSeq=14 CAss=9 CRep=6 CCond=0 CLoop=0
   residualize。現在 entry のみ）＝**未着手の深い課題**。(2) は 'loop/'lcheck の改造＋可逆性で、selective とは独立の大物。
 - **到達点**: 可逆 COLLECT-REFS（最難所）＋selective dynamicize は完成・統合・fp1 緑。残＝loop-BTA。spec_av 本番は無改造。
 
+### 実装試行5（2026-06-24/25, Agda 先行で loop-BTA 実装）＝comp2 が 0.005× に激減も**正しさバグ**
+Agda 青写真（`RWhileLoopBTA`＝決定規則／`RWhileLoopBTARev`＝residual loop 可逆＋`constEntry-no-iter`＝entry 定数化禁止、
+全51 --safe）に従い spec_av_bti の `'loop` を実装：entry に加え **exit `LpF` も特殊化**、`(LpTE=='S)∧(LpTF=='S)` で
+判定、両方静的→unroll、片方でも動的→residualize（raw 源テスト＋body を emit、定数化しない）。measure_proj の
+comp2-loops に**正しさチェック**（`[comp2]('S.op)==B`）＋サイズ表示を追加。
+- **'41 解消・劇的 unroll**：comp2 **125→4 CLoop**、**812515→10691 nodes（0.994×→0.005×）**＝内側インタプリタが
+  大量 unroll（selective＋loop-BTA が機能）。残る 4 loop は genuinely-dynamic（正しく residualize）。
+- **だが `[comp2]('S.swap)==B : false`（id も false）＝comp2 が不正**。writes-only/reads+writes どちらでも false
+  （under-materialize 仮説は外れ）。残余を見ると内側 spec_av の AV-LIFT ループ・ストア構築・AUX 歩行が runtime に
+  残余化されており、何かを計算するが B を produce しない。
+- **疑い**：selective が残す **partial-static ストア**（一部静的・一部動的）と、DYNAMICIZE-ALL が全動的を保証していた
+  前提で書かれた内側 spec_av の後続処理との相互作用で残余が壊れる。または loop-BTA residualize の意味が微妙に違う。
+- **次の切り分け**：fp1 規模で selective 'cond 単体の健全性を確認（`examples/fp_dyncond_bug.rwhile` を spec_av_bti で
+  特殊化し `[comp](d)` が正答か）。'cond-selective が壊れていれば fundamental、健全なら loop-BTA 側。
+- **状態**: spec_av_bti は fp1 ゲート緑だが **comp2 不正**の WIP。Agda 青写真は完成・正。spec_av 本番は無改造・repo 緑。
+
 ### 実装試行2（2026-06-23, /loop-next B round 1）＝可逆性の真因を特定（重要）
 高速ハーネス `examples/test_collect_refs.rwhile`（`./ri` で `COLLECT-REFS`→`INV-COLLECT-REFS` 往復を秒で検査。
 comp2 数分が不要）を作成し、`COLLECT-REFS` の可逆性バグを**秒単位で局所化**：

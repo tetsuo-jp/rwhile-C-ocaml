@@ -193,6 +193,17 @@ let comp2_loops spec_av pd_spec pd_rimin spec_in =
    output_string oc (PrintRwhile.printTree PrintRwhile.prtProgram comp2_prog);
    close_out oc;
    Printf.printf "(dumped residual to /tmp/comp2_resid.rwhile)\n%!");
+  Printf.printf "comp2 = %d nodes  (ratio %.3f x |spec_av|)\n"
+    (cn comp2) (float_of_int (cn comp2) /. float_of_int (cn pd_spec));
+  (* CORRECTNESS: [comp2](('S.op)) must equal the fp1 residual B = [spec]((ri_min.op)).
+   * Compares against B built with the SAME candidate specialiser. *)
+  (let inp op = VCons (VAtom (Atom "'S"), VAtom (Atom op)) in
+   let b_swap = EvalRwhile.evalProgram spec_av (spec_in pd_rimin (VAtom (Atom "'swap"))) in
+   let b_id   = EvalRwhile.evalProgram spec_av (spec_in pd_rimin (VAtom (Atom "'id"))) in
+   let r_swap = EvalRwhile.evalProgram comp2_prog (inp "'swap") in
+   let r_id   = EvalRwhile.evalProgram comp2_prog (inp "'id") in
+   Printf.printf "[comp2](('S.swap)) == B : %b\n" (r_swap = b_swap);
+   Printf.printf "[comp2](('S.id))   == B : %b\n" (r_id = b_id));
   let loops = List.rev (collect_loops [] body) in
   Printf.printf "comp2 has %d CLoop(s).  Entry/exit test shapes (deduped, sorted by count):\n"
     (List.length loops);

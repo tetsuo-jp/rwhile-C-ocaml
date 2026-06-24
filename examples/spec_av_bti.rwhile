@@ -378,6 +378,36 @@ macro COLLECT-REFS-STEP(CrWk, CrWk2, CrRefs)
         cons CrY (cons CrX (cons ('consB . nil) CrWk2)) <= CrWk2;
         CrAg2 <= cons CrX CrY
         => cons 'cons CrAg2
+    | cons 'eq CrAgE =>
+        cons CrXe CrYe <= CrAgE;
+        CrWk <= cons CrXe (cons CrYe (cons ('eqE . nil) CrWk));
+        CrXe ^= CrXe; CrYe ^= CrYe
+        => cons 'eqB CrAgE
+    | cons 'eqE CrZe =>
+        cons CrYe2 (cons CrXe2 (cons ('eqB . nil) CrWk2)) <= CrWk2;
+        CrAgE2 <= cons CrXe2 CrYe2
+        => cons 'eq CrAgE2
+    | cons 'hd CrEh =>
+        CrWk <= cons CrEh (cons ('hdE . nil) CrWk);
+        CrEh ^= CrEh
+        => cons 'hdB CrEh
+    | cons 'hdE CrZh =>
+        cons CrEh2 (cons ('hdB . nil) CrWk2) <= CrWk2
+        => cons 'hd CrEh2
+    | cons 'tl CrEt =>
+        CrWk <= cons CrEt (cons ('tlE . nil) CrWk);
+        CrEt ^= CrEt
+        => cons 'tlB CrEt
+    | cons 'tlE CrZt =>
+        cons CrEt2 (cons ('tlB . nil) CrWk2) <= CrWk2
+        => cons 'tl CrEt2
+    | cons 'pairp CrEp =>
+        CrWk <= cons CrEp (cons ('pairpE . nil) CrWk);
+        CrEp ^= CrEp
+        => cons 'pairpB CrEp
+    | cons 'pairpE CrZp =>
+        cons CrEp2 (cons ('pairpB . nil) CrWk2) <= CrWk2
+        => cons 'pairp CrEp2
     | cons 'seq CrAgS =>
         cons CrS1 CrS2 <= CrAgS;
         CrWk <= cons CrS1 (cons CrS2 (cons ('seqE . nil) CrWk));
@@ -388,39 +418,39 @@ macro COLLECT-REFS-STEP(CrWk, CrWk2, CrRefs)
         CrAgS2 <= cons CrS1b CrS2b
         => cons 'seq CrAgS2
     | cons 'ass CrAgA =>
-        cons CrAt CrAe <= CrAgA;
-        CrWk <= cons CrAt (cons ('assE . nil) CrWk);
-        CrAt ^= CrAt
-        => cons 'assB CrAe
+        cons CrA1 CrA2 <= CrAgA;
+        CrWk <= cons CrA1 (cons CrA2 (cons ('assE . nil) CrWk));
+        CrA1 ^= CrA1; CrA2 ^= CrA2
+        => cons 'assB CrAgA
     | cons 'assE CrZa =>
-        cons CrAt2 (cons (cons 'assB CrAe2) CrWk2) <= CrWk2;
-        CrAgA2 <= cons CrAt2 CrAe2
+        cons CrA2b (cons CrA1b (cons ('assB . nil) CrWk2)) <= CrWk2;
+        CrAgA2 <= cons CrA1b CrA2b
         => cons 'ass CrAgA2
     | cons 'rep CrAgR =>
         cons CrR1 CrR2 <= CrAgR;
-        CrWk <= cons CrR1 (cons ('repE . nil) CrWk);
-        CrR1 ^= CrR1
-        => cons 'repB CrR2
+        CrWk <= cons CrR1 (cons CrR2 (cons ('repE . nil) CrWk));
+        CrR1 ^= CrR1; CrR2 ^= CrR2
+        => cons 'repB CrAgR
     | cons 'repE CrZr =>
-        cons CrR1b (cons (cons 'repB CrR2b) CrWk2) <= CrWk2;
+        cons CrR2b (cons CrR1b (cons ('repB . nil) CrWk2)) <= CrWk2;
         CrAgR2 <= cons CrR1b CrR2b
         => cons 'rep CrAgR2
     | cons 'cond CrAgC =>
         cons CrCe (cons CrCc (cons CrCd (cons CrCf nil))) <= CrAgC;
-        CrWk <= cons CrCc (cons CrCd (cons ('condE . nil) CrWk));
-        CrCc ^= CrCc; CrCd ^= CrCd
-        => cons 'condB (cons CrCe CrCf)
+        CrWk <= cons CrCe (cons CrCc (cons CrCd (cons CrCf (cons ('condE . nil) CrWk))));
+        CrCe ^= CrCe; CrCc ^= CrCc; CrCd ^= CrCd; CrCf ^= CrCf
+        => cons 'condB CrAgC
     | cons 'condE CrZc =>
-        cons CrCd2 (cons CrCc2 (cons (cons 'condB (cons CrCe2 CrCf2)) CrWk2)) <= CrWk2;
+        cons CrCf2 (cons CrCd2 (cons CrCc2 (cons CrCe2 (cons ('condB . nil) CrWk2)))) <= CrWk2;
         CrAgC2 <= cons CrCe2 (cons CrCc2 (cons CrCd2 (cons CrCf2 nil)))
         => cons 'cond CrAgC2
     | cons 'loop CrAgL =>
         cons CrLe (cons CrLd (cons CrLl (cons CrLf nil))) <= CrAgL;
-        CrWk <= cons CrLd (cons CrLl (cons ('loopE . nil) CrWk));
-        CrLd ^= CrLd; CrLl ^= CrLl
-        => cons 'loopB (cons CrLe CrLf)
+        CrWk <= cons CrLe (cons CrLd (cons CrLl (cons CrLf (cons ('loopE . nil) CrWk))));
+        CrLe ^= CrLe; CrLd ^= CrLd; CrLl ^= CrLl; CrLf ^= CrLf
+        => cons 'loopB CrAgL
     | cons 'loopE CrZl =>
-        cons CrLl2 (cons CrLd2 (cons (cons 'loopB (cons CrLe2 CrLf2)) CrWk2)) <= CrWk2;
+        cons CrLf2 (cons CrLl2 (cons CrLd2 (cons CrLe2 (cons ('loopB . nil) CrWk2)))) <= CrWk2;
         CrAgL2 <= cons CrLe2 (cons CrLd2 (cons CrLl2 (cons CrLf2 nil)))
         => cons 'loop CrAgL2
     | Rest =>
@@ -964,13 +994,27 @@ macro SPEC-STEP-AV(Cd, Cd', RCode)
       AnnT ^= AnnT
     else
      if =? Tag 'loop then
-       (* loop = ('loop . (E . (D . (L . (F . nil))))).  Static control unrolls
-        * via an 'lcheck continuation; dynamic control residualizes the loop. *)
+       (* loop = ('loop . (E . (D . (L . (F . nil))))).  案1-B loop-BTA (verified by
+        * Agda RWhileLoopBTA): UNROLL via 'lcheck ONLY when BOTH the entry AND exit
+        * tests are static; otherwise RESIDUALISE.  Checking only the entry (the old
+        * bug) lets a static-entry/dynamic-exit loop unroll, then 'lcheck gets stuck
+        * on the dynamic exit ('error <= '41).  Residualising keeps the RAW (real)
+        * source tests -- never constant-fold the entry, which would break loop-back
+        * reversibility (Agda constEntry-no-iter) -- and dynamicises the body's slots
+        * (incl. the loop counter, written in the body) so those tests are genuine
+        * runtime tests over the residual store. *)
        cons LpE (cons LpD (cons LpL (cons LpF nil))) <= Arg;
        SPEC-EXP-AV(LpE, LpRE);
        cons LpTE LpVE <= LpRE;
-       LpCEs ^= =? LpTE 'S;
-       if LpCEs then
+       SPEC-EXP-AV(LpF, LpRF);
+       cons LpTF LpVF <= LpRF;
+       LpBoth ^= nil;
+       if =? LpTE 'S then
+         if =? LpTF 'S then LpBoth ^= (nil.nil) fi =? LpTF 'S
+       fi =? LpTE 'S;
+       if LpBoth then
+         (* both static: unroll.  (exit AV remnants unused -- 'lcheck re-checks F.) *)
+         LpTF ^= LpTF; LpVF ^= LpVF;
          if LpVE then
            (* static entry true: run D, then check exit via 'lcheck *)
            LpEc ^= LpE; LpDc ^= LpD; LpLc ^= LpL; LpFc ^= LpF;
@@ -983,25 +1027,22 @@ macro SPEC-STEP-AV(Cd, Cd', RCode)
          LpVE ^= LpVE;
          LpTE ^= 'S
        else
-         (* dynamic entry test: residualize whole loop (entry test lifted).
-          * The body may modify any var, so DYNAMICIZE the store first (runs
-          * before the residual loop), keeping the abstract store consistent. *)
-         LpRE <= cons LpTE LpVE;
-         AV-LIFT(LpRE, LpLEe);
-         LpRE ^= LpRE;
-         LpE ^= LpE;
-         (* 案1-B: selective dynamicize -- only slots the loop body D/L refer to. *)
+         (* entry OR exit dynamic: residualise.  Clear AV remnants, dynamicise the
+          * body's slots, emit the loop with RAW tests + body (real reversible tests
+          * over the now-runtime store). *)
+         LpTE ^= LpTE; LpVE ^= LpVE;
+         LpTF ^= LpTF; LpVF ^= LpVF;
          COLLECT-REFS(LpD, LpRefs);
          COLLECT-REFS(LpL, LpRefs);
          SELECTIVE-DYNAMICIZE(Vl, LpRefs, RCode);
          INV-COLLECT-REFS(LpL, LpRefs);
          INV-COLLECT-REFS(LpD, LpRefs);
-         Arg <= cons LpLEe (cons LpD (cons LpL (cons LpF nil)));
+         Arg <= cons LpE (cons LpD (cons LpL (cons LpF nil)));
          LpCl ^= Arg;
          RCode <= cons (cons 'loop LpCl) RCode;
          Arg ^= Arg
-       fi LpCEs;
-       LpCEs ^= LpCEs
+       fi LpBoth;
+       LpBoth ^= LpBoth
      else
       if =? Tag 'lcheck then
         cons LpE (cons LpD (cons LpL (cons LpF nil))) <= Arg;
