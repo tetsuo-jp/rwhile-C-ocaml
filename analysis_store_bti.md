@@ -76,6 +76,24 @@ residual = 1281 nodes,  CSeq=14 CAss=9 CRep=6 CCond=0 CLoop=0
   過大だと最適化が弱まる（過大でも sound）。これで内側プログラム（FpBody）は静的に残り、インタプリタが展開され、
   かつ残余は d に依存＝**本物の最適化 fp2**。
 
+### 実装試行1（2026-06-23, revert 済）＝設計は妥当・残課題は COLLECT-REFS の可逆性
+選択的 dynamicize を `spec_av_bti` に実装して試行：`MEM-COUNT`＋自動逆で `MEMBER`、マーカ式ワークリスト
+`COLLECT-REFS`（('var.K) 部分木を収集, 'val 直下は走査せず, 一般 cons は再帰）、`SELECTIVE-DYNAMICIZE`、
+'cond/'loop の `DYNAMICIZE-ALL` を `COLLECT-REFS(C);COLLECT-REFS(D);SELECTIVE-DYNAMICIZE;INV-COLLECT-REFS(D);INV-COLLECT-REFS(C)` に差替。
+- **fp1 ゲート PASS（103/63 不変）**＝パース・マクロ展開・静的経路は健全。forward の COLLECT-REFS/SELECTIVE は動作し
+  comp2 生成は `INV-COLLECT-REFS` まで到達（＝設計の方向は妥当）。
+- **赤＝可逆性バグ**：`Assertion pair? CrN is not false`（`INV-COLLECT-REFS` の逆実行で失敗）。原因は
+  `COLLECT-REFS-STEP` の**フラグ自己クリア `Cr* ^= Cr*` が逆方向で壊れる**（`X^=X` 非可逆＝既知 bug2 と同型。
+  逆 if のエントリ test に使うフラグ値が自己クリアで消える）。compute–uncompute（`INV-COLLECT-REFS` で CdRefs を
+  クリア）に依存するため、`COLLECT-REFS` は厳密に可逆でなければならない。
+- **次の一手（fix-the-fix）**：`COLLECT-REFS-STEP` を可逆に作り直す。候補：
+  (a) フラグを自己クリアせず、**消費前の値で `fi`** または値を再構築してから assertion（`case` の output-discriminant 流儀）。
+  (b) `Desugar` の `case` で書く（可逆性自動）——ただし命令木は任意 cons（'cons タグ無し）ゆえ PAT-READ-ITER の
+      `case cons 'cons` 方式は直接使えず、汎用 cons への拡張が要る。
+  (c) compute–uncompute を避け CdRefs を別経路で可逆に廃棄。
+  各手 `measure_proj gate`（fp1 緑）＋`measure_proj comp2-loops ../examples/spec_av_bti.rwhile`（CLoop 125→激減かつ
+  出力が d 依存で正しいか＝no-op プローブと違い定数化しないか）で確認。理論的目処は立ち、残るは可逆ワークリストのデバッグ（多ラウンド）。
+
 ### なぜ漏れるか（既知の本質）
 HANDOFF_fp2.md / FINDINGS §2 の通り、spec_av は **online で「静的値」を運ぶ AV 設計**。自己適用下では内側のプログラムポインタ Cd が outer から見て動的化し、そこから読む EArg も 'D 化 → AUX が残余化。`MKAV`（束縛時刻認識の部分入力）は必要だが不十分で、根本は **online 値運搬 AV と offline 二段階 BT 分離の不整合**（FINDINGS §2 末尾）。
 
