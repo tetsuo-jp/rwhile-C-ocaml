@@ -89,7 +89,16 @@ spec-correct（H1）と AV 代数健全性、`case` 健全性、ゴミ量的下�
 （Turing 完全ループ）の自己適用のみで、fuel-indexed モデルが要る。」
 
 ## 5. 最終状態（案2：G4・統一 fp1・H2核・非クロージャ/一般適用ハイアラーキ／案1：簡約器健全性＋選択肢2）
-- **Agda 形式化は 48 モジュールすべて `--safe` で通過**（postulate 0、唯一の仮定は `RWhileDetConcrete` の `funext`）。
+- **Agda 形式化は 49 モジュールすべて `--safe` で通過**（postulate 0、唯一の仮定は `RWhileDetConcrete` の `funext`）。
+- **Tier-2 #5 検証済みの橋・コマンド層（`RWhileSpecAVWireCom.agda`）＝AST 全体の wire format ↔ モデルを定理化**：
+  式に続き **パターン／コマンド／プログラム**を `Program2DataRwhile.transPat`/`transCom`/`transProgram` ↔
+  `d_pat`/`d_com`/`data2program` に一行写しで橋渡し。`Pat`/`Com`/`Prog` を定義し、`encPat`/`parsePat`、`encCom`/`parseCom`
+  （`'seq`/`'ass`/`'rep`/`'cond`/`'loop`、`'cond`/`'loop` の末尾 nil 終端も忠実）、`encProg`/`parseProg` を与え、
+  **往復定理 `parse-enc-pat`／`parse-enc-com`／`parse-enc-prog`** を証明（＝**AST 全体↔実装 wire format が定理**＝
+  意味保存翻訳の**構文側を完成**）。コマンドに埋め込まれた式は `encEx`/`parseEx` を再利用するので、特殊化器の
+  γ 健全性（`wire-sound`）がコマンド内の全式に適用（`ass-exp-sound`）。OCaml `wire-bridge` 群に `d_com` 相互検証
+  （同一 wire 木の復号＝`parseCom`、atom-free コマンドの `transCom`→`d_com` 往復）を追加。残＝コマンド層の
+  **意味側**（操作的等価）は研究課題（SPEC_AV_CORRESPONDENCE §5）。
 - **Tier-2 #5 検証済みの橋（`RWhileSpecAVWire.agda`）＝実装の wire format ↔ Agda モデルを定理化**：spec_av/p2d は
   式を R-WHILE 値（`'var`/`'val`/`'cons`/`'hd`/`'tl`/`'eq`/`'pairp` タグ付き木）で表す。これまで「目視 transcription」
   だった実装エンコードとモデルの対応を**機械検査済みの定理**に格上げ。wire 値型 `WVal`（7 タグ atom ＋ nil/cons）を

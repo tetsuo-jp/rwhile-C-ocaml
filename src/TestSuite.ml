@@ -416,6 +416,30 @@ let test_wire_roundtrip_structural () =
   let back = Program2DataRwhile.d_exp (Program2DataRwhile.transExp e) in
   Alcotest.(check bool) "d_exp (transExp e) = e" true (back = e)
 
+(* Command layer (mirrors Agda RWhileSpecAVWireCom.Examples.c0):
+   d_com on the exact wire tree of cAss 0 (cons x1 x0) matches Agda parseCom.
+   'ass . (('var . nil) . ('cons . (('var . (nil.nil)) . ('var . nil)))) *)
+let test_wire_com_decode () =
+  let a s = VAtom (Atom s) in
+  let wire =
+    VCons (a "'ass",
+      VCons (VCons (a "'var", VNil),
+        VCons (a "'cons",
+          VCons (VCons (a "'var", VCons (VNil, VNil)),
+                 VCons (a "'var", VNil))))) in
+  let expected =
+    CAss (RIdent "0", ECons (EVar (Var (RIdent "1")), EVar (Var (RIdent "0")))) in
+  Alcotest.(check bool) "d_com matches Agda parseCom c0" true
+    (Program2DataRwhile.d_com wire = expected)
+
+(* transCom then d_com round-trips a variable-free command (skips the 'ass/'var
+   index convention) — mirrors Agda's parse-enc-com. *)
+let test_wire_com_roundtrip_structural () =
+  let c = CSeq (CRep (PVal VNil, PVal (VCons (VNil, VNil))),
+                CRep (PVal (VCons (VNil, VNil)), PVal VNil)) in
+  let back = Program2DataRwhile.d_com (Program2DataRwhile.transCom c) in
+  Alcotest.(check bool) "d_com (transCom c) = c" true (back = c)
+
 (* ===== Integration tests: parse -> eval ===== *)
 
 let test_eval_identity () =
@@ -2271,6 +2295,8 @@ let () =
       Alcotest.test_case "decode ex1 (matches Agda parseEx)" `Quick test_wire_ex1_decode;
       Alcotest.test_case "decode ex2 (matches Agda parseEx)" `Quick test_wire_ex2_decode;
       Alcotest.test_case "transExp/d_exp structural round trip" `Quick test_wire_roundtrip_structural;
+      Alcotest.test_case "decode com c0 (matches Agda parseCom)" `Quick test_wire_com_decode;
+      Alcotest.test_case "transCom/d_com structural round trip" `Quick test_wire_com_roundtrip_structural;
     ];
     "eval-integration", [
       Alcotest.test_case "identity" `Quick test_eval_identity;

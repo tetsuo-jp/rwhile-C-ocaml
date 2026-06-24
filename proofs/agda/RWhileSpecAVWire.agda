@@ -54,6 +54,9 @@ open import RWhileH2WorklistAV using
 
 data Tag : Set where
   tVar tVal tCons tHd tTl tEq tPairp : Tag
+  -- command-layer tags (used by RWhileSpecAVWireCom; the expression parser below
+  -- maps any value headed by these to `nothing`).
+  tSeq tAss tRep tCond tLoop : Tag
 
 data WVal : Set where
   wNil  : WVal
@@ -135,14 +138,7 @@ parseEx (wCons (wAtom tEq) (wCons a b)) with parseEx a | parseEx b
 parseEx (wCons (wAtom tPairp) e) with parseEx e
 ... | just e' = just (exPairp e')
 ... | nothing = nothing
-parseEx wNil                       = nothing
-parseEx (wAtom _)                  = nothing
-parseEx (wCons wNil _)             = nothing
-parseEx (wCons (wCons _ _) _)      = nothing
-parseEx (wCons (wAtom tCons) wNil)         = nothing
-parseEx (wCons (wAtom tCons) (wAtom _))    = nothing
-parseEx (wCons (wAtom tEq) wNil)           = nothing
-parseEx (wCons (wAtom tEq) (wAtom _))      = nothing
+parseEx _ = nothing
 
 ------------------------------------------------------------------------
 -- Round trip: the wire format parses back to the same expression.

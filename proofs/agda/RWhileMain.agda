@@ -132,3 +132,14 @@ open RWhileH2WorklistStore.Witness public
 open import RWhileSpecAVWire public
   using (encEx; parseEx; specWire)
   renaming (parse-enc to wire-parse-enc; wire-sound to wire-spec-sound; bridge to wire-bridge)
+
+-- The wire bridge extended to the WHOLE AST: patterns, commands and programs.
+-- The round trips parsePat/parseCom/parseProg ∘ enc ≡ just make the full
+-- AST ↔ implementation wire format (transPat/transCom/transProgram ↔
+-- d_pat/d_com/data2program) a THEOREM — the syntactic half of a meaning-
+-- preserving translation.
+open import RWhileSpecAVWireCom public
+  using ( encPat; parsePat; parse-enc-pat
+        ; encCom; parseCom; parse-enc-com
+        ; encProg; parseProg; parse-enc-prog
+        ; ass-exp-sound )

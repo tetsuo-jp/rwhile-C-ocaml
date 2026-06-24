@@ -69,19 +69,34 @@ Agda モデル群との**構造的対応**を明示する。完全な意味保�
 復号像の特殊化が健全であることは**機械検査済みの定理**になった。残る目視は「写しが忠実か」だけで、それも
 OCaml `wire-bridge` テストが同一入力で実装と一致を確認している。
 
+## 4c. パターン・コマンド・プログラム層の wire format（**検証済みの橋**、`RWhileSpecAVWireCom`）
+
+§4b を AST 全体に拡張し、意味保存翻訳の**構文側を完成**。
+
+| spec_av.rwhile / p2d | Agda (`RWhileSpecAVWireCom`) | 状態 |
+|---|---|---|
+| `transPat`/`d_pat`（`'cons`/`'var`/`'val`） | `Pat`、`encPat`/`parsePat` | **証明済み**（往復 `parse-enc-pat`） |
+| `transCom`/`d_com`（`'seq`/`'ass`/`'rep`/`'cond`/`'loop`、末尾 nil 終端込み） | `Com`、`encCom`/`parseCom` | **証明済み**（往復 `parse-enc-com`） |
+| `transProgram`/`data2program`（`(('var.i).(c.('var.j)))`） | `Prog`、`encProg`/`parseProg` | **証明済み**（往復 `parse-enc-prog`） |
+| コマンド内の式の健全性 | `ass-exp-sound`（`wire-sound` 再利用） | **証明済み** |
+| 実装側相互検証（同一 wire 木を `d_com` 復号、atom-free コマンドの `transCom`→`d_com` 往復） | OCaml `wire-bridge` 群 | **テスト済み** |
+
+⇒ **AST 全体（式＋パターン＋コマンド＋プログラム）↔ 実装 wire format が定理**になった。残る目視は「写しの忠実さ」のみ。
+
 ## 5. 何が証明され、何が残るか
 
-- **証明済み（全48モジュール `--safe`、公理ゼロ）**：AV 代数の γ 健全性、ワークリスト機械の正当性
+- **証明済み（全49モジュール `--safe`、公理ゼロ）**：AV 代数の γ 健全性、ワークリスト機械の正当性
   （関係＝燃料機械、sound/complete/mono）、ストアアクセスの健全性、整合性下の特殊化の γ 健全性、
-  **式 wire format の往復（`parse-enc`）と復号像の健全性（`wire-sound`）**。
+  **AST 全体（式＋パターン＋コマンド＋プログラム）の wire format 往復（`parse-enc`/`parse-enc-pat`/
+  `parse-enc-com`/`parse-enc-prog`）と式復号像の健全性（`wire-sound`／`ass-exp-sound`）**。
   ＝spec_av の特殊化機構を「ループ機構（ワークリスト＋燃料）＋AV 全代数＋partial-static 多スロット
-  ストア＋γ 健全性＋式 wire format の検証済みの橋」で機械検証。
+  ストア＋γ 健全性＋AST 全体の検証済みの橋」で機械検証。
 - **目視（transcription）対応**：§2/§3/§4 の各「目視」行＝Agda 定義が spec_av マクロを忠実に写していること。
-  式エンコードについては §4b で**往復定理＋OCaml 相互検証**まで進み、純粋な目視は「写しの忠実さ」に縮小。
-  コマンド／ストア更新側（`'seq`/`'ass`/`'rep`/`'cond`/`'loop`、UPDATE 等）の wire 翻訳はまだ未着手。
-- **残（研究規模・任意）**：(a) §4b と同じ往復・健全性をコマンド層（`d_com`/`transCom`）まで広げ、最終的に
-  実装 AST → モデルの**完全な意味保存翻訳**へ。(b) `MKAV`（L895、束縛時刻認識の部分入力）と自己適用下の BT＝
-  comp2 を非自明 fp2 にする本番改造（`HANDOFF_fp2.md`／`analysis_store_bti.md`、高リスク）。理論的核は本対応で
-  出揃っているため、(a)(b) は「実装との橋」を太くする工学であり、本質的障害は無い。
+  wire format（式・パターン・コマンド・プログラム）については §4b/§4c で**往復定理＋OCaml 相互検証**まで進み、
+  意味保存翻訳の**構文側は完成**。純粋な目視は「写しの忠実さ」に縮小。
+- **残（研究規模・任意）**：(a) wire 翻訳の**意味側**＝コマンド層の操作的意味＋AV 特殊化器と操作的等価
+  （`ass-exp-sound` は式の健全性まで。コマンド全体の意味保存はこれの先）。(b) `MKAV`（L895、束縛時刻認識の
+  部分入力）と自己適用下の BT＝comp2 を非自明 fp2 にする本番改造（`HANDOFF_fp2.md`／`analysis_store_bti.md`、
+  高リスク）。理論的核は本対応で出揃っているため、(a)(b) は「実装との橋」を太くする工学であり、本質的障害は無い。
 
 関連：`AGDA_CORRESPONDENCE.md`（全モジュール↔結果マップ）、`HANDOFF_fp2.md`、`FINDINGS_reversible_projections.md`。
