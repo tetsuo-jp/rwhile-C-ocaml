@@ -94,6 +94,23 @@ residual = 1281 nodes,  CSeq=14 CAss=9 CRep=6 CCond=0 CLoop=0
   各手 `measure_proj gate`（fp1 緑）＋`measure_proj comp2-loops ../examples/spec_av_bti.rwhile`（CLoop 125→激減かつ
   出力が d 依存で正しいか＝no-op プローブと違い定数化しないか）で確認。理論的目処は立ち、残るは可逆ワークリストのデバッグ（多ラウンド）。
 
+### 実装試行2（2026-06-23, /loop-next B round 1）＝可逆性の真因を特定（重要）
+高速ハーネス `examples/test_collect_refs.rwhile`（`./ri` で `COLLECT-REFS`→`INV-COLLECT-REFS` 往復を秒で検査。
+comp2 数分が不要）を作成し、`COLLECT-REFS` の可逆性バグを**秒単位で局所化**：
+- **真因＝`flag ^= flag` 自己クリア慣用句は FORWARD 専用**。`AV-HD`/`AV-UNCONS` もこれ（`CT ^= CT` 等）を使うが、
+  それらは spec_av 内で**逆実行されない**から動く。`COLLECT-REFS` は `INV-COLLECT-REFS` で**逆実行する**ため、
+  逆 if の**エントリ条件に使うフラグが nil クリアされ常に誤枝**を取り → `Assertion pair? CrN is not false`。
+- ＝**逆実行されるマクロでは自己クリアフラグは使えない**（既知 bug2「X^=X 非可逆」の一般化）。可逆な条件分岐には、
+  逆エントリ時に**再構成可能な判別**が要る：(i) `Desugar` の `case`（input/output discriminant。PAT-READ-ITER が
+  これで可逆＝fp2/fp3 緑）、または (ii) `AUX` の `=? Cnt J` のような**永続状態テスト**。
+- **`case` 版の障害**：命令木は `'seq.(C1.C2)` 等の**無タグ tuple-cons**を含み、end-marker の再結合が任意 head の
+  cons を出力するため**出力 discriminant が非素**（`case` 健全性違反）。PAT-READ-ITER が成立するのは pattern が
+  `'cons`/`'var`/`'val` で固定タグだから。
+- **次ラウンドの設計候補**：(a) ワークリスト項目を**一律タグ付け**して `case` を適用可能に（無タグ cons を
+  `('node . (H.T))` 等で包む）、(b) 可逆条件を**永続判別状態**で手書き（フラグを自己クリアせず、逆で再計算可能な
+  値で `fi`）、(c) `COLLECT-REFS` を**逆実行しない**設計に（CdRefs を INV-COLLECT-REFS 以外で可逆に廃棄＝
+  例えば SELECTIVE-DYNAMICIZE が消費しながら使う）。ハーネスで秒イテレーション可能。
+
 ### なぜ漏れるか（既知の本質）
 HANDOFF_fp2.md / FINDINGS §2 の通り、spec_av は **online で「静的値」を運ぶ AV 設計**。自己適用下では内側のプログラムポインタ Cd が outer から見て動的化し、そこから読む EArg も 'D 化 → AUX が残余化。`MKAV`（束縛時刻認識の部分入力）は必要だが不十分で、根本は **online 値運搬 AV と offline 二段階 BT 分離の不整合**（FINDINGS §2 末尾）。
 

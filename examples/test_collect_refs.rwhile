@@ -1,0 +1,54 @@
+(* test_collect_refs.rwhile — fast reversibility harness for COLLECT-REFS (案1-B).
+ * COLLECT-REFS(Tree, Refs): gather every K with ('var.K) a subterm of Tree, into
+ * Refs; Tree preserved.  Used by the selective-dynamicize fix.  This harness runs
+ * COLLECT-REFS then its inverse and writes the tree back: a correct (reversible)
+ * COLLECT-REFS yields output == input with no assertion error (seconds via ./ri,
+ * vs minutes for comp2).  Iterate the macro here until green, then port to
+ * spec_av_bti.  Markers: ('CrE.nil) end / ('CrB.nil) begin on the work stacks. *)
+
+macro COLLECT-REFS-STEP(CrWk, CrWk2, CrRefs)
+  cons CrN CrWk <= CrWk;
+  CrIsEnd ^= =? CrN ('CrE . nil);
+  if =? CrN ('CrE . nil) then
+    CrN ^= ('CrE . nil);
+    cons CrY (cons CrX (cons CrBm CrWk2)) <= CrWk2;
+    CrBm ^= ('CrB . nil);
+    CrWk2 <= cons (cons CrX CrY) CrWk2
+  else
+    CrIsPair ^= pair? CrN;
+    if pair? CrN then
+      cons CrH CrT <= CrN;
+      CrIsVar ^= =? CrH 'var;
+      if =? CrH 'var then
+        CrKc ^= CrT;
+        CrRefs <= cons CrKc CrRefs;
+        CrWk2 <= cons (cons CrH CrT) CrWk2
+      else
+        CrIsVal ^= =? CrH 'val;
+        if =? CrH 'val then
+          CrWk2 <= cons (cons CrH CrT) CrWk2
+        else
+          CrWk <= cons CrH (cons CrT (cons ('CrE . nil) CrWk));
+          CrWk2 <= cons ('CrB . nil) CrWk2
+        fi CrIsVal;
+        CrIsVal ^= CrIsVal
+      fi CrIsVar;
+      CrIsVar ^= CrIsVar
+    else
+      CrWk2 <= cons CrN CrWk2
+    fi CrIsPair;
+    CrIsPair ^= CrIsPair
+  fi CrIsEnd;
+  CrIsEnd ^= CrIsEnd
+
+macro COLLECT-REFS(CrTree, CrRefs)
+  CrWk <= cons CrTree nil;
+  from (=? CrWk2 nil) loop
+    COLLECT-REFS-STEP(CrWk, CrWk2, CrRefs)
+  until (=? CrWk nil);
+  cons CrTree nil <= CrWk2
+
+read In;
+  COLLECT-REFS(In, Refs);
+  INV-COLLECT-REFS(In, Refs);
+write In
