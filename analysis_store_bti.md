@@ -111,6 +111,21 @@ residual = 1281 nodes,  CSeq=14 CAss=9 CRep=6 CCond=0 CLoop=0
      ＝精密な assigned-set。context-aware（命令/書きパターン）worklist が要る。
 - **状態**: spec_av_bti は gate 緑の WIP（comp2 は '41 で未達）。次＝COLLECT-REFS を writes-only 化しハーネスで検証→comp2。
 
+### 実装試行4（2026-06-23, 続）＝writes-only 化、'41 の真因は「ループ束縛時刻」と判明（重要）
+- **COLLECT-REFS を writes-only に精密化（ハーネス緑）**：書き込み位置のみ収集（'ass target・'rep 書きパターン）、
+  read 子（'ass の E、'rep の P2、'cond/'loop の test 式）は begin マーカに退避して未走査・保存。**簡略化の発見**：
+  書き込みだけなら式構成子（'hd/'tl/'eq/'pairp）は常に read で skip ゆえ scan 不要＝命令＋書きパターンのみ。
+  往復 OK、命令木で 9→3 refs（精密）。spec_av_bti へ移植（変数数 298→282、FpN=310 で OK）、fp1 ゲート PASS。
+- **comp2 は依然 '41**（'lcheck 動的 exit）。⇒ **over-approx は '41 の主因ではなかった**。
+- **真因の確定**：`ri_min` はループ 0。よって '41 は**内側 spec_av 自身のループ**（AV-INIT/SPEC-CMD-AV/AUX 等）が
+  unroll 時に「**静的 entry・動的 exit**」化したもの。spec_av の loop-unroll 機構（'lcheck）は静的 exit のみ対応で、
+  動的 exit を `'error <= '41` にする。selective dynamicize で内側が unroll 開始した結果、ある内側ループの exit が
+  部分的に動的なストアスロットを読み動的化＝**spec_av の unroller が entry だけ見て exit の束縛時刻を見ていない**。
+- **⇒ comp2 非自明化は 2 段必要**：(1) **selective dynamicize**（DYNAMICIZE-ALL の過剰 materialize を解消＝**完了**、
+  プログラムは静的に残る）＋(2) **ループ束縛時刻解析**（'loop ハンドラが entry∧exit を見て、どちらか動的なら
+  residualize。現在 entry のみ）＝**未着手の深い課題**。(2) は 'loop/'lcheck の改造＋可逆性で、selective とは独立の大物。
+- **到達点**: 可逆 COLLECT-REFS（最難所）＋selective dynamicize は完成・統合・fp1 緑。残＝loop-BTA。spec_av 本番は無改造。
+
 ### 実装試行2（2026-06-23, /loop-next B round 1）＝可逆性の真因を特定（重要）
 高速ハーネス `examples/test_collect_refs.rwhile`（`./ri` で `COLLECT-REFS`→`INV-COLLECT-REFS` 往復を秒で検査。
 comp2 数分が不要）を作成し、`COLLECT-REFS` の可逆性バグを**秒単位で局所化**：
