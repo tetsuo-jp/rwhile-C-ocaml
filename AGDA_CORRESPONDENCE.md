@@ -89,7 +89,15 @@ spec-correct（H1）と AV 代数健全性、`case` 健全性、ゴミ量的下�
 （Turing 完全ループ）の自己適用のみで、fuel-indexed モデルが要る。」
 
 ## 5. 最終状態（案2：G4・統一 fp1・H2核・非クロージャ/一般適用ハイアラーキ／案1：簡約器健全性＋選択肢2）
-- **Agda 形式化は 49 モジュールすべて `--safe` で通過**（postulate 0、唯一の仮定は `RWhileDetConcrete` の `funext`）。
+- **Agda 形式化は 50 モジュールすべて `--safe` で通過**（postulate 0、唯一の仮定は `RWhileDetConcrete` の `funext`）。
+- **案1-B ループ束縛時刻の決定（`RWhileLoopBTA.agda`, Agda-first）＝comp2 第2障害の修正青写真**：selective dynamicize で
+  内側インタプリタが unroll を開始した後に出た spec_av の `'error <= '41`（'lcheck 動的 exit）の正しい修正規則を
+  実装より先に Agda で証明。テストの AV を静的真理値に解決する `staticTruth`（`S`→既知, `C`→cons ゆえ true, `D`→不明）と
+  その γ 健全性 `staticTruth-sound`、動的テストが実行時で変化し静的解決不能な `dynamic-varies`、**正しい unrollable は
+  entry∧exit 両方が静的**（`unrollable`）で entry のみの旧判定が静的entry・動的exit ループ＝'41 状況で誤る
+  （`bug-static-entry-dynamic-exit`）、**動的 exit は常に residualize を強制**（`exit-dynamic-forces-residual`）、燃料ループ上で
+  unroll 1 段の健全性（`unroll-step-sound`／`exit-true-stops`＝'lcheck の2分岐）を機械検証。⇒ 実装は「'loop ハンドラで
+  exit も特殊化し、両方静的でなければ residualize」に従えばよい（[[research-direction-core-language]] 方針＝証明先行）。
 - **Tier-2 #5 検証済みの橋・コマンド層（`RWhileSpecAVWireCom.agda`）＝AST 全体の wire format ↔ モデルを定理化**：
   式に続き **パターン／コマンド／プログラム**を `Program2DataRwhile.transPat`/`transCom`/`transProgram` ↔
   `d_pat`/`d_com`/`data2program` に一行写しで橋渡し。`Pat`/`Com`/`Prog` を定義し、`encPat`/`parsePat`、`encCom`/`parseCom`

@@ -143,3 +143,15 @@ open import RWhileSpecAVWireCom public
         ; encCom; parseCom; parse-enc-com
         ; encProg; parseProg; parse-enc-prog
         ; ass-exp-sound )
+
+-- 案1-B (Agda-first): the LOOP binding-time decision for the optimising
+-- specialiser.  comp2's second obstruction (spec_av's 'lcheck '41) is that the
+-- 'loop handler unrolls on the ENTRY test's binding time alone; once the inner
+-- interpreter unrolls, a static-entry/dynamic-exit loop gets stuck.  This proves
+-- the correct rule: a test's static truth is γ-sound, a dynamic exit ALWAYS
+-- forces residualisation, and the entry-only predicate is wrong on exactly the
+-- '41 scenario -- the verified blueprint for the implementation fix.
+open import RWhileLoopBTA public
+  using ( staticTruth; staticTruth-sound; unrollable
+        ; exit-dynamic-forces-residual; bug-static-entry-dynamic-exit
+        ; unroll-step-sound )
