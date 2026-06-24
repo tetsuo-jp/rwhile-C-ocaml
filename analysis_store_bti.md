@@ -53,7 +53,28 @@ residual = 1281 nodes,  CSeq=14 CAss=9 CRep=6 CCond=0 CLoop=0
     式ディスパッチ `if =? (hd 97) 'var`（97＝式ノード動的, `cons 113 114 <= 97` で EArg=114）→ 125 動的 AUX。
 - ⇒ trivial 化の正体は「**ri_min は外側の静的 Src なのに、内側 spec_av がそれを静的値として保持できず、残余定数 215 として吐き、インタプリタ全体を残余化**」。
 - **修正点は spec_av の入力分解／BT 伝播**（`spec_av.rwhile:922` `cons Prog FpBTS <= In` 以降, L1051 の `'S` 固定タグ）で**内側 Prog を静的 AV のまま保つ**こと。ループ・AV 代数・ストア機構は触らない。
-- 道具：`measure_proj comp2-loops`（dev ツール、加算的）。残余は `/tmp/comp2_resid.rwhile` にダンプされ offline 解析可。
+- 道具：`measure_proj comp2-loops [specfile]`（dev ツール、加算的）。残余は `/tmp/comp2_resid.rwhile` にダンプされ offline 解析可。
+
+### 犯人の確定＝`DYNAMICIZE-ALL`（2026-06-23 プローブで実証）
+残余ダンプを追跡し、漏れの**正確な機序**を特定・実証した：
+- **機序**：fp2（OUTER が INNER spec_av を特殊化）で、INNER の `MKAV(FpBT,…)`（`spec_av.rwhile:939`）は
+  FpBT が動的なので内部 `if MkS`（L896）が OUTER の **'cond 動的テスト経路**（L782-797）に入る。その経路は
+  **`DYNAMICIZE-ALL(Vl, RCode)`**（L288/L792, L827）を呼び、「分岐は任意変数を書きうる」として**OUTER ストア
+  全体を materialize**（各静的スロットを `('var.k) <= lift(slot)` で吐き、全部 'D 化）。これで**静的だった
+  内側プログラム FpBody が残余定数として吐かれ動的化**→内側インタプリタ全体が残余化→125 動的 AUX。
+  残余の `215 <= ri_min定数` はまさに DYNAMICIZE-ALL が静的プログラムスロットを materialize した跡。
+- **実証（プローブ, gate 保護下）**：`spec_av_bti` で DYNAMICIZE-ALL を **no-op** 化 →
+  `measure_proj comp2-loops ../examples/spec_av_bti.rwhile` で **comp2 の CLoop = 125 → 0**（残余 1535→10 行、
+  `215 <=` 消滅）。**fp1 ゲートは緑のまま**（fp1 は op 静的で DYNAMICIZE-ALL を呼ばない）。
+  ⇒ DYNAMICIZE-ALL が trivial 化の唯一の原因と確定。
+- **ただし naive 除去は unsound**：no-op 版の comp2 は出力が**定数**（MKAV 残余を破棄し動的入力 d に依存しない）。
+  DYNAMICIZE-ALL は「動的分岐が実際に書くスロット」の materialize には必要。
+- **正しい修正＝選択的 dynamicize（§3 (A) の具体形）**：'cond/'loop の動的テスト経路で、DYNAMICIZE-ALL の代わりに
+  **分岐（C/D もしくは L/D）が実際に代入するスロットだけ**を materialize/動的化する。これには
+  (1) コマンドの代入スロット集合を走査する macro（'ass の `cons 'var K`、'rep の書き側パターンの 'var を収集）、
+  (2) その集合に限定した `SELECTIVE-DYNAMICIZE(Vl, Set, RCode)`、(3) 可逆性の保持、が要る。集合が過小だと unsound・
+  過大だと最適化が弱まる（過大でも sound）。これで内側プログラム（FpBody）は静的に残り、インタプリタが展開され、
+  かつ残余は d に依存＝**本物の最適化 fp2**。
 
 ### なぜ漏れるか（既知の本質）
 HANDOFF_fp2.md / FINDINGS §2 の通り、spec_av は **online で「静的値」を運ぶ AV 設計**。自己適用下では内側のプログラムポインタ Cd が outer から見て動的化し、そこから読む EArg も 'D 化 → AUX が残余化。`MKAV`（束縛時刻認識の部分入力）は必要だが不十分で、根本は **online 値運搬 AV と offline 二段階 BT 分離の不整合**（FINDINGS §2 末尾）。

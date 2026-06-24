@@ -298,7 +298,13 @@ let () =
     (PrintRwhile.printTree PrintRwhile.prtValT out)
     (PrintRwhile.printTree PrintRwhile.prtValT back) (back = ab);
   if Array.length Sys.argv >= 2 && Sys.argv.(1) = "comp2-loops" then begin
-    comp2_loops spec_av pd_spec pd_rimin spec_in; exit 0
+    (* optional argv.(2): use a CANDIDATE specialiser (e.g. spec_av_bti) for BOTH
+     * outer and inner of the self-application comp2 = [SPEC]((SPEC.ri_min)). *)
+    let spec_c, pd_c =
+      if Array.length Sys.argv >= 3 then
+        let s = parse_prog Sys.argv.(2) in (s, Program2DataRwhile.program2data s)
+      else (spec_av, pd_spec) in
+    comp2_loops spec_c pd_c pd_rimin spec_in; exit 0
   end;
   if Array.length Sys.argv >= 2 && Sys.argv.(1) = "full" then begin
     Printf.printf "computing comp2 = [spec_av]((spec_av.ri_min)) (slow)...\n%!";
