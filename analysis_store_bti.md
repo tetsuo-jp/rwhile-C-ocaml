@@ -94,6 +94,23 @@ residual = 1281 nodes,  CSeq=14 CAss=9 CRep=6 CCond=0 CLoop=0
   各手 `measure_proj gate`（fp1 緑）＋`measure_proj comp2-loops ../examples/spec_av_bti.rwhile`（CLoop 125→激減かつ
   出力が d 依存で正しいか＝no-op プローブと違い定数化しないか）で確認。理論的目処は立ち、残るは可逆ワークリストのデバッグ（多ラウンド）。
 
+### 実装試行3（2026-06-23, dedicated session）＝可逆 COLLECT-REFS 完成＋統合、残2課題を局所化
+- **可逆 COLLECT-REFS 完成（commit 4d2c08f, ハーネス緑）**：文法指向で書き直し（worklist 項目を頭アトムタグ付き
+  ノードに限定、無タグ arg-tuple は arm 内で固定形分解、PAT-READ-ITER 流の case＋begin/end マーカ）。`./ri` で
+  式・命令ツリーとも forward→INV 往復 OK、forward は全 ('var.K) を正しく収集。試行1/2 の可逆性赤を解消。
+- **spec_av_bti へ移植＋配線**：MEM-COUNT/MEMBER/COLLECT-REFS/SELECTIVE-DYNAMICIZE を追加、'cond/'loop の
+  DYNAMICIZE-ALL を COLLECT-REFS(C);COLLECT-REFS(D);SELECTIVE-DYNAMICIZE;INV-COLLECT-REFS(D);INV-COLLECT-REFS(C)
+  に差替。fp1 ゲート PASS（103/63 不変）。
+- **comp2 で2つの後続課題を順に局所化**（各 fix で次が見える＝unroll が実際に進行している証拠）：
+  1. **store サイズ不足**（`cons U Vl <= nil`）：新マクロ追加で spec_av_bti の変数数 219→**298**、FpN=256 を超過。
+     `specsize ../examples/spec_av_bti.rwhile ../examples/spec_av_bti.rwhile 12` で FpN=310/TmpT=300 にリサイズ→解消。
+  2. **'lcheck 動的 exit（`'error <= '41`）**：store 修正後、内側インタプリタが unroll を開始（selective 動作！）。
+     だが内側のループが「静的 entry・動的 exit」になり 'lcheck が処理不能。**有力仮説＝over-approx**：COLLECT-REFS が
+     **読み出しも収集**するため、MKAV 分岐の `cons 'var Ic`（Ic を読むだけ）で Ic スロットを動的化→それを index に
+     使う AUX が動的 exit 化→'41。**修正＝書き込み位置のみ収集**（'ass target・'rep 書きパターンのみ、test/read 式は除外）
+     ＝精密な assigned-set。context-aware（命令/書きパターン）worklist が要る。
+- **状態**: spec_av_bti は gate 緑の WIP（comp2 は '41 で未達）。次＝COLLECT-REFS を writes-only 化しハーネスで検証→comp2。
+
 ### 実装試行2（2026-06-23, /loop-next B round 1）＝可逆性の真因を特定（重要）
 高速ハーネス `examples/test_collect_refs.rwhile`（`./ri` で `COLLECT-REFS`→`INV-COLLECT-REFS` 往復を秒で検査。
 comp2 数分が不要）を作成し、`COLLECT-REFS` の可逆性バグを**秒単位で局所化**：

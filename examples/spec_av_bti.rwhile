@@ -325,6 +325,185 @@ macro DYNAMICIZE-ALL(Vl, RCode)
   until (=? DaRev nil);
   DaK ^= DaK
 
+(* ===== SELECTIVE dynamicization (案1-B fix) =====
+ * DYNAMICIZE-ALL materialises the WHOLE store at a dynamic cond/loop; under self-
+ * application that dynamicises the static inner PROGRAM (the comp2 trivial-ization
+ * leak).  Fix: dynamicise only the slots the dynamic branches actually refer to.
+ * COLLECT-REFS gathers every index K with ('var.K) a subterm of the branches
+ * (grammar-directed, reversible via case + begin/end markers, like PAT-READ-ITER);
+ * MEMBER tests membership; SELECTIVE-DYNAMICIZE materialises only members.  The
+ * program is never referred to by the branches, so it stays static -> the inner
+ * interpreter unrolls and comp2 becomes a real optimising compiler. *)
+
+(* MEM-COUNT(Set, X, Cnt): Cnt += #elements of Set equal to X.  Set, X preserved. *)
+macro MEM-COUNT(McSet, McX, McCnt)
+  McRev ^= nil;
+  from (=? McRev nil) loop
+    cons McEl McSet <= McSet;
+    if =? McEl McX then McCnt <= cons nil McCnt fi =? McEl McX;
+    McRev <= cons McEl McRev
+  until (=? McSet nil);
+  from (=? McSet nil) loop
+    cons McE2 McRev <= McRev;
+    McSet <= cons McE2 McSet
+  until (=? McRev nil)
+
+(* MEMBER(Set, X, Found): Found ^= (X occurs in Set).  Set, X preserved. *)
+macro MEMBER(MmSet, MmX, MmFound)
+  MmCnt ^= nil;
+  MEM-COUNT(MmSet, MmX, MmCnt);
+  MmFound ^= pair? MmCnt;
+  INV-MEM-COUNT(MmSet, MmX, MmCnt)
+
+(* COLLECT-REFS-STEP / COLLECT-REFS(Tree, Refs): gather every K with ('var.K) a
+ * subterm of Tree, into Refs.  Tree preserved.  Worklist tree-fold; every item is
+ * a head-atom-tagged node, untagged arg-tuples destructured in-arm by fixed shape
+ * and never pushed raw, so `case` dispatch is clean and the begin/end-marker idiom
+ * (as in PAT-READ-ITER) is reversible.  Markers: 'consE/'consB etc per node kind. *)
+macro COLLECT-REFS-STEP(CrWk, CrWk2, CrRefs)
+  cons CrN CrWk <= CrWk;
+  case CrN yields CrN of
+      cons 'var CrK =>
+        CrKc ^= CrK; CrRefs <= cons CrKc CrRefs
+        => cons 'var CrK
+    | cons 'val CrV =>
+        CrNop ^= nil; CrNop ^= nil
+        => cons 'val CrV
+    | cons 'cons CrAg =>
+        cons CrX CrY <= CrAg;
+        CrWk <= cons CrX (cons CrY (cons ('consE . nil) CrWk));
+        CrX ^= CrX; CrY ^= CrY
+        => cons 'consB CrAg
+    | cons 'consE CrZ =>
+        cons CrY (cons CrX (cons ('consB . nil) CrWk2)) <= CrWk2;
+        CrAg2 <= cons CrX CrY
+        => cons 'cons CrAg2
+    | cons 'eq CrAgE =>
+        cons CrXe CrYe <= CrAgE;
+        CrWk <= cons CrXe (cons CrYe (cons ('eqE . nil) CrWk));
+        CrXe ^= CrXe; CrYe ^= CrYe
+        => cons 'eqB CrAgE
+    | cons 'eqE CrZe =>
+        cons CrYe2 (cons CrXe2 (cons ('eqB . nil) CrWk2)) <= CrWk2;
+        CrAgE2 <= cons CrXe2 CrYe2
+        => cons 'eq CrAgE2
+    | cons 'hd CrEh =>
+        CrWk <= cons CrEh (cons ('hdE . nil) CrWk);
+        CrEh ^= CrEh
+        => cons 'hdB CrEh
+    | cons 'hdE CrZh =>
+        cons CrEh2 (cons ('hdB . nil) CrWk2) <= CrWk2
+        => cons 'hd CrEh2
+    | cons 'tl CrEt =>
+        CrWk <= cons CrEt (cons ('tlE . nil) CrWk);
+        CrEt ^= CrEt
+        => cons 'tlB CrEt
+    | cons 'tlE CrZt =>
+        cons CrEt2 (cons ('tlB . nil) CrWk2) <= CrWk2
+        => cons 'tl CrEt2
+    | cons 'pairp CrEp =>
+        CrWk <= cons CrEp (cons ('pairpE . nil) CrWk);
+        CrEp ^= CrEp
+        => cons 'pairpB CrEp
+    | cons 'pairpE CrZp =>
+        cons CrEp2 (cons ('pairpB . nil) CrWk2) <= CrWk2
+        => cons 'pairp CrEp2
+    | cons 'seq CrAgS =>
+        cons CrS1 CrS2 <= CrAgS;
+        CrWk <= cons CrS1 (cons CrS2 (cons ('seqE . nil) CrWk));
+        CrS1 ^= CrS1; CrS2 ^= CrS2
+        => cons 'seqB CrAgS
+    | cons 'seqE CrZs =>
+        cons CrS2b (cons CrS1b (cons ('seqB . nil) CrWk2)) <= CrWk2;
+        CrAgS2 <= cons CrS1b CrS2b
+        => cons 'seq CrAgS2
+    | cons 'ass CrAgA =>
+        cons CrA1 CrA2 <= CrAgA;
+        CrWk <= cons CrA1 (cons CrA2 (cons ('assE . nil) CrWk));
+        CrA1 ^= CrA1; CrA2 ^= CrA2
+        => cons 'assB CrAgA
+    | cons 'assE CrZa =>
+        cons CrA2b (cons CrA1b (cons ('assB . nil) CrWk2)) <= CrWk2;
+        CrAgA2 <= cons CrA1b CrA2b
+        => cons 'ass CrAgA2
+    | cons 'rep CrAgR =>
+        cons CrR1 CrR2 <= CrAgR;
+        CrWk <= cons CrR1 (cons CrR2 (cons ('repE . nil) CrWk));
+        CrR1 ^= CrR1; CrR2 ^= CrR2
+        => cons 'repB CrAgR
+    | cons 'repE CrZr =>
+        cons CrR2b (cons CrR1b (cons ('repB . nil) CrWk2)) <= CrWk2;
+        CrAgR2 <= cons CrR1b CrR2b
+        => cons 'rep CrAgR2
+    | cons 'cond CrAgC =>
+        cons CrCe (cons CrCc (cons CrCd (cons CrCf nil))) <= CrAgC;
+        CrWk <= cons CrCe (cons CrCc (cons CrCd (cons CrCf (cons ('condE . nil) CrWk))));
+        CrCe ^= CrCe; CrCc ^= CrCc; CrCd ^= CrCd; CrCf ^= CrCf
+        => cons 'condB CrAgC
+    | cons 'condE CrZc =>
+        cons CrCf2 (cons CrCd2 (cons CrCc2 (cons CrCe2 (cons ('condB . nil) CrWk2)))) <= CrWk2;
+        CrAgC2 <= cons CrCe2 (cons CrCc2 (cons CrCd2 (cons CrCf2 nil)))
+        => cons 'cond CrAgC2
+    | cons 'loop CrAgL =>
+        cons CrLe (cons CrLd (cons CrLl (cons CrLf nil))) <= CrAgL;
+        CrWk <= cons CrLe (cons CrLd (cons CrLl (cons CrLf (cons ('loopE . nil) CrWk))));
+        CrLe ^= CrLe; CrLd ^= CrLd; CrLl ^= CrLl; CrLf ^= CrLf
+        => cons 'loopB CrAgL
+    | cons 'loopE CrZl =>
+        cons CrLf2 (cons CrLl2 (cons CrLd2 (cons CrLe2 (cons ('loopB . nil) CrWk2)))) <= CrWk2;
+        CrAgL2 <= cons CrLe2 (cons CrLd2 (cons CrLl2 (cons CrLf2 nil)))
+        => cons 'loop CrAgL2
+    | Rest =>
+        CrNop2 ^= nil; CrNop2 ^= nil
+        => Rest
+  end;
+  CrWk2 <= cons CrN CrWk2
+
+macro COLLECT-REFS(CrTree, CrRefs)
+  CrWk <= cons CrTree nil;
+  from (=? CrWk2 nil) loop
+    COLLECT-REFS-STEP(CrWk, CrWk2, CrRefs)
+  until (=? CrWk nil);
+  cons CrTree nil <= CrWk2
+
+(* SELECTIVE-DYNAMICIZE(Vl, Refs, RCode): like DYNAMICIZE-ALL but only materialise
+ * / dynamicise slot K when K is in Refs (membership via MEMBER, twice so SdHit is
+ * cleared invertibly -- no flag self-clear).  Refs, preserved. *)
+macro SELECTIVE-DYNAMICIZE(Vl, SdRefs, RCode)
+  SdK ^= nil;
+  SdRev ^= nil;
+  from (=? SdRev nil) loop
+    cons SdSlot Vl <= Vl;
+    MEMBER(SdRefs, SdK, SdHit);
+    if SdHit then
+      cons DaT DaV <= SdSlot;
+      DaMat ^= nil;
+      if =? DaT 'S then
+        if =? DaV nil else DaMat ^= (nil.nil) fi =? DaV nil
+      fi =? DaT 'S;
+      if =? DaT 'C then DaMat ^= (nil.nil) fi =? DaT 'C;
+      SdSlot <= cons DaT DaV;
+      if DaMat then
+        DaKc ^= SdK;
+        AV-LIFT(SdSlot, DaCode);
+        RCode <= cons (cons 'rep (cons (cons 'var DaKc) DaCode)) RCode
+      fi DaMat;
+      DaMat ^= DaMat;
+      cons DaOt DaOv <= SdSlot; DaOt ^= DaOt; DaOv ^= DaOv;
+      DaKc2 ^= SdK;
+      SdRev <= cons (cons 'D (cons 'var DaKc2)) SdRev
+    else
+      SdRev <= cons SdSlot SdRev
+    fi SdHit;
+    MEMBER(SdRefs, SdK, SdHit);
+    SdK <= cons nil SdK
+  until (=? Vl nil);
+  from (=? Vl nil) loop
+    cons SdRS SdRev <= SdRev;
+    Vl <= cons SdRS Vl
+  until (=? SdRev nil);
+  SdK ^= SdK
+
 (* ===== AV-based expression specializer ===== *)
 
 (* SPEC-EXP-AV(E, RE): RE := AV result of specializing expression E against the
@@ -475,7 +654,7 @@ macro PAT-WRITE-AV(P, WA)
  * scratch slot for swap-via-temp.  100 is above every interpreted program's
  * variable indices and within ri.rwhile's store, so it never collides. *)
 macro TEMP-IDX(TmpT)
-  TmpT ^= (nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.nil))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+  TmpT ^= (nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.nil))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
 
 (* SET-SELF-SLOT(I): set store slot I to the self-referential dynamic ('D.('var.I)),
  * re-establishing the no-alias invariant after a runtime move/swap.  I preserved. *)
@@ -800,7 +979,13 @@ macro SPEC-STEP-AV(Cd, Cd', RCode)
         AV-LIFT(RE, LE);
         RE ^= RE;
         E ^= E;
-        DYNAMICIZE-ALL(Vl, RCode);
+        (* 案1-B: selective dynamicize -- only slots the branches C/D refer to,
+           so the static inner program survives (CdRefs built then uncomputed). *)
+        COLLECT-REFS(C, CdRefs);
+        COLLECT-REFS(D, CdRefs);
+        SELECTIVE-DYNAMICIZE(Vl, CdRefs, RCode);
+        INV-COLLECT-REFS(D, CdRefs);
+        INV-COLLECT-REFS(C, CdRefs);
         Arg <= cons LE (cons C (cons D (cons F nil)));
         Ccond ^= Arg;
         RCode <= cons (cons 'cond Ccond) RCode;
@@ -835,7 +1020,12 @@ macro SPEC-STEP-AV(Cd, Cd', RCode)
          AV-LIFT(LpRE, LpLEe);
          LpRE ^= LpRE;
          LpE ^= LpE;
-         DYNAMICIZE-ALL(Vl, RCode);
+         (* 案1-B: selective dynamicize -- only slots the loop body D/L refer to. *)
+         COLLECT-REFS(LpD, LpRefs);
+         COLLECT-REFS(LpL, LpRefs);
+         SELECTIVE-DYNAMICIZE(Vl, LpRefs, RCode);
+         INV-COLLECT-REFS(LpL, LpRefs);
+         INV-COLLECT-REFS(LpD, LpRefs);
          Arg <= cons LpLEe (cons LpD (cons LpL (cons LpF nil)));
          LpCl ^= Arg;
          RCode <= cons (cons 'loop LpCl) RCode;
@@ -939,9 +1129,9 @@ read In;
   cons FpVJ FpJ <= FpPW;  FpVJ ^= 'var;
 
   (* init static-nil AV store (N = 3) *)
-  FpN ^= (nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.nil))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))));
+  FpN ^= (nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.nil))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))));
   AV-INIT(FpN, Vl);
-  FpN ^= (nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.nil))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))));
+  FpN ^= (nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.nil))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))));
 
   (* set V[I'] = MKAV(BT, Src, I'): BT='S -> ('C.(('S.Src).('D.('var.I')))),
      BT='D -> ('D.('var.I')).  Binding-time-aware so fp2 residualises the tag. *)
