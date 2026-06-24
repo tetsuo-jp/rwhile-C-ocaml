@@ -89,7 +89,17 @@ spec-correct（H1）と AV 代数健全性、`case` 健全性、ゴミ量的下�
 （Turing 完全ループ）の自己適用のみで、fuel-indexed モデルが要る。」
 
 ## 5. 最終状態（案2：G4・統一 fp1・H2核・非クロージャ/一般適用ハイアラーキ／案1：簡約器健全性＋選択肢2）
-- **Agda 形式化は 47 モジュールすべて `--safe` で通過**（postulate 0、唯一の仮定は `RWhileDetConcrete` の `funext`）。
+- **Agda 形式化は 48 モジュールすべて `--safe` で通過**（postulate 0、唯一の仮定は `RWhileDetConcrete` の `funext`）。
+- **Tier-2 #5 検証済みの橋（`RWhileSpecAVWire.agda`）＝実装の wire format ↔ Agda モデルを定理化**：spec_av/p2d は
+  式を R-WHILE 値（`'var`/`'val`/`'cons`/`'hd`/`'tl`/`'eq`/`'pairp` タグ付き木）で表す。これまで「目視 transcription」
+  だった実装エンコードとモデルの対応を**機械検査済みの定理**に格上げ。wire 値型 `WVal`（7 タグ atom ＋ nil/cons）を
+  定義し、`Program2DataRwhile.transExp`/`d_exp` を一行ずつ写した**符号器 `encEx : Ex → WVal`** と**パーサ
+  `parseEx : WVal → Maybe Ex`**（変数 index は unary nil-count = `d_count` 準拠）を与え、**往復定理
+  `parse-enc : parseEx (encEx e) ≡ just e`** を証明（＝検証済み Ex は実装 wire format の復号像）。さらに
+  ワークリスト AV 特殊化器の健全性（`avEval-sound`）と合成して **wire レベルの健全性 `wire-sound`／`bridge`**：
+  実装のエンコード式から組む AV 残余が γ で元の意味に概念化する。OCaml 側は新テスト群 `wire-bridge`
+  （`TestSuite.ml`）が同一 wire 木を `d_exp` で復号し Agda `parseEx` と一致、かつ atom-free 式の `transExp`→`d_exp`
+  往復を pin（実装側との相互検証）。
 - **Tier-2 #5 工学3（`RWhileH2WorklistStore.agda`）＝partial-static 多スロット store（最後のピース）**：spec_av の
   実ストア `Vl` は独立した AV の列（一部スロットが静的 `S v`、一部が動的）。これを `List AV` でモデル化し、
   スロットアクセスは `cSlot n = cHd (cTl^n cVar)`（AUX/LOOKUP の walk、`cSlot-sound`）、範囲外は動的 `D (cSlot n)`

@@ -372,6 +372,50 @@ let test_p2d_conss_triple () =
   let expected = VCons (VNil, VCons (VNil, VNil)) in
   Alcotest.(check valT_testable) "conss triple" expected result
 
+(* ===== Wire-format bridge tests =====
+   Cross-validate the Agda model RWhileSpecAVWire (encEx / parseEx) against the
+   implementation's expression encoder/decoder (Program2DataRwhile.transExp /
+   d_exp).  The Agda module mirrors d_exp line by line and proves a round trip
+   parseEx (encEx e) ≡ just e; these tests pin the *same* wire trees and the
+   *same* variable-index convention (unary nil-count, nil = 0) on the OCaml side. *)
+
+(* d_exp on the exact wire tree of Agda's Examples.ex1-wire:
+   'hd . ('cons . (('var . nil) . ('val . (nil . nil)))) *)
+let test_wire_ex1_decode () =
+  let a s = VAtom (Atom s) in
+  let vtrue = VCons (VNil, VNil) in
+  let wire =
+    VCons (a "'hd",
+      VCons (a "'cons",
+        VCons (VCons (a "'var", VNil),
+               VCons (a "'val", vtrue)))) in
+  let expected =
+    EHd (ECons (EVar (Var (RIdent "0")), EVal vtrue)) in
+  Alcotest.(check bool) "d_exp matches Agda parseEx ex1" true
+    (Program2DataRwhile.d_exp wire = expected)
+
+(* d_exp on Agda's Examples.ex2-wire: eq of store slots 1 and 2.
+   'eq . (('var . (nil.nil)) . ('var . (nil.(nil.nil)))) *)
+let test_wire_ex2_decode () =
+  let a s = VAtom (Atom s) in
+  let idx1 = VCons (VNil, VNil) in
+  let idx2 = VCons (VNil, VCons (VNil, VNil)) in
+  let wire =
+    VCons (a "'eq",
+      VCons (VCons (a "'var", idx1),
+             VCons (a "'var", idx2))) in
+  let expected =
+    EEq (EVar (Var (RIdent "1")), EVar (Var (RIdent "2"))) in
+  Alcotest.(check bool) "d_exp matches Agda parseEx ex2" true
+    (Program2DataRwhile.d_exp wire = expected)
+
+(* transExp then d_exp round-trips an atom-free expression (no variables, to skip
+   transRIdent's separate 1-based convention) — mirrors Agda's parse-enc. *)
+let test_wire_roundtrip_structural () =
+  let e = EHd (ECons (EVal VNil, EVal (VCons (VNil, VNil)))) in
+  let back = Program2DataRwhile.d_exp (Program2DataRwhile.transExp e) in
+  Alcotest.(check bool) "d_exp (transExp e) = e" true (back = e)
+
 (* ===== Integration tests: parse -> eval ===== *)
 
 let test_eval_identity () =
@@ -2222,6 +2266,11 @@ let () =
       Alcotest.test_case "conss singleton" `Quick test_p2d_conss;
       Alcotest.test_case "conss pair" `Quick test_p2d_conss_pair;
       Alcotest.test_case "conss triple" `Quick test_p2d_conss_triple;
+    ];
+    "wire-bridge", [
+      Alcotest.test_case "decode ex1 (matches Agda parseEx)" `Quick test_wire_ex1_decode;
+      Alcotest.test_case "decode ex2 (matches Agda parseEx)" `Quick test_wire_ex2_decode;
+      Alcotest.test_case "transExp/d_exp structural round trip" `Quick test_wire_roundtrip_structural;
     ];
     "eval-integration", [
       Alcotest.test_case "identity" `Quick test_eval_identity;

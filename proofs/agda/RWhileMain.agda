@@ -124,3 +124,11 @@ open import RWhileH2WorklistAV public
 open import RWhileH2WorklistStore public using (Consistent; cSlot; cSlot-sound; module Core)
 open RWhileH2WorklistStore.Witness public
   using () renaming (residual to store-residual; sound to store-ex-sound; consistent to store-consistent)
+
+-- VERIFIED BRIDGE to the implementation's wire format: encEx / parseEx mirror
+-- Program2DataRwhile.transExp / d_exp, the round trip parseEx (encEx e) ≡ just e
+-- makes the model↔implementation correspondence a THEOREM, and `wire-sound`
+-- composes it with the worklist AV specialiser's γ-soundness.
+open import RWhileSpecAVWire public
+  using (encEx; parseEx; specWire)
+  renaming (parse-enc to wire-parse-enc; wire-sound to wire-spec-sound; bridge to wire-bridge)
