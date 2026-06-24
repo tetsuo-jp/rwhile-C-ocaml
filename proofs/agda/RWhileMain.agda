@@ -155,3 +155,10 @@ open import RWhileLoopBTA public
   using ( staticTruth; staticTruth-sound; unrollable
         ; exit-dynamic-forces-residual; bug-static-entry-dynamic-exit
         ; unroll-step-sound )
+
+-- 案1-B step (a): the loop the decision RESIDUALISES is a reversible R-WHILE loop
+-- (a `loop` of RWhileRevFull, so its entry/exit-swapped inversion is sound and
+-- involutive) -- residualising preserves reversibility; the implementation only
+-- has to emit this shape.
+open import RWhileLoopBTARev public
+  using (resLoop; resLoop-inv; resLoop-reversible; resLoop-inv-inv)

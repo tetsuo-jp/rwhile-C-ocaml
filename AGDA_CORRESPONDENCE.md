@@ -89,7 +89,12 @@ spec-correct（H1）と AV 代数健全性、`case` 健全性、ゴミ量的下�
 （Turing 完全ループ）の自己適用のみで、fuel-indexed モデルが要る。」
 
 ## 5. 最終状態（案2：G4・統一 fp1・H2核・非クロージャ/一般適用ハイアラーキ／案1：簡約器健全性＋選択肢2）
-- **Agda 形式化は 50 モジュールすべて `--safe` で通過**（postulate 0、唯一の仮定は `RWhileDetConcrete` の `funext`）。
+- **Agda 形式化は 51 モジュールすべて `--safe` で通過**（postulate 0、唯一の仮定は `RWhileDetConcrete` の `funext`）。
+- **案1-B step(a) residualize の可逆性（`RWhileLoopBTARev.agda`）**：loop-BTA が residualize する loop
+  （`from (lift e) do D loop L until (lift f)`）が**可逆な R-WHILE ループ**であることを `RWhileRevFull` から継承して明示。
+  テストを Val 状態述語（残余コード実行の truthiness）に、本体を残余命令にして `RWhileRevFull.Core Val` の `loop` に一致
+  （`resLoop`）。`resLoop-inv`（inv は entry/exit 入替＝refl）／`resLoop-reversible`（`inv-sound`：forward s⇒t ⟹ inverse t⇒s）／
+  `resLoop-inv-inv`（`inv-inv`：二重反転＝恒等）。⇒ **residualize は可逆性を保存**＝実装はこの形を emit するだけでよい。
 - **案1-B ループ束縛時刻の決定（`RWhileLoopBTA.agda`, Agda-first）＝comp2 第2障害の修正青写真**：selective dynamicize で
   内側インタプリタが unroll を開始した後に出た spec_av の `'error <= '41`（'lcheck 動的 exit）の正しい修正規則を
   実装より先に Agda で証明。テストの AV を静的真理値に解決する `staticTruth`（`S`→既知, `C`→cons ゆえ true, `D`→不明）と
