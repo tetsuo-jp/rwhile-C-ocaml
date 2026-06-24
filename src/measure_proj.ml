@@ -166,6 +166,45 @@ let report_hist name body =
     name h.seq h.ass h.rep h.cond h.loop h.other;
   Printf.printf "  [%s] nodes inside CLoop bodies = %d\n" name (loop_nodes body)
 
+(* diagnostic (BTI, gap B): collect the entry/exit test expressions of every
+ * CLoop in a residual.  spec_av's store-walk AUX is
+ *   from (=? Cnt nil) loop ... until (=? Cnt J)
+ * so the EXIT test `=? Cnt J` carries the (residualised) store index J.  Under
+ * self-application the 125 residual CLoops are these walks; the SHAPE of J shows
+ * where the inner program pointer became dynamic (the binding-time leak). *)
+let exp_str e = PrintRwhile.printTree PrintRwhile.prtExp e
+let rec collect_loops acc = function
+  | CSeq (a, b)        -> collect_loops (collect_loops acc a) b
+  | CCond (_, t, e, _) -> cle (clt acc t) e
+  | CLoop (en, d, l, ex) -> cll (cld ((en, ex) :: acc) d) l
+  | CLocal (_, c)      -> collect_loops acc c
+  | _ -> acc
+and clt acc = function BThen c -> collect_loops acc c | BThenNone -> acc
+and cle acc = function BElse c -> collect_loops acc c | BElseNone -> acc
+and cld acc = function BDo c -> collect_loops acc c | BDoNone -> acc
+and cll acc = function BLoop c -> collect_loops acc c | BLoopNone -> acc
+
+let comp2_loops spec_av pd_spec pd_rimin spec_in =
+  Printf.printf "computing comp2 = [spec_av]((spec_av.ri_min)) (slow)...\n%!";
+  let comp2 = EvalRwhile.evalProgram spec_av (spec_in pd_spec pd_rimin) in
+  let comp2_prog = Program2DataRwhile.data2program comp2 in
+  let body = match comp2_prog with Prog (_, _, b, _) -> b in
+  (let oc = open_out "/tmp/comp2_resid.rwhile" in
+   output_string oc (PrintRwhile.printTree PrintRwhile.prtProgram comp2_prog);
+   close_out oc;
+   Printf.printf "(dumped residual to /tmp/comp2_resid.rwhile)\n%!");
+  let loops = List.rev (collect_loops [] body) in
+  Printf.printf "comp2 has %d CLoop(s).  Entry/exit test shapes (deduped, sorted by count):\n"
+    (List.length loops);
+  let tbl = Hashtbl.create 64 in
+  List.iter (fun (en, ex) ->
+      let key = "from " ^ exp_str en ^ "  until " ^ exp_str ex in
+      Hashtbl.replace tbl key (1 + (try Hashtbl.find tbl key with Not_found -> 0)))
+    loops;
+  Hashtbl.fold (fun k c acc -> (c, k) :: acc) tbl []
+  |> List.sort (fun (a, _) (b, _) -> compare b a)
+  |> List.iter (fun (c, k) -> Printf.printf "  [x%d]  %s\n" c k)
+
 (* diagnostic: does spec_av unroll a STATIC-bounded loop?  Specialise <subject>
  * to a static value and report the residual's size + CLoop count. *)
 let looptest spec_av subj_file sval =
@@ -258,6 +297,9 @@ let () =
   Printf.printf "residual reversibility: [B](('a.'b))=%s ; [inv B](that)=%s ; round-trips: %b\n"
     (PrintRwhile.printTree PrintRwhile.prtValT out)
     (PrintRwhile.printTree PrintRwhile.prtValT back) (back = ab);
+  if Array.length Sys.argv >= 2 && Sys.argv.(1) = "comp2-loops" then begin
+    comp2_loops spec_av pd_spec pd_rimin spec_in; exit 0
+  end;
   if Array.length Sys.argv >= 2 && Sys.argv.(1) = "full" then begin
     Printf.printf "computing comp2 = [spec_av]((spec_av.ri_min)) (slow)...\n%!";
     let comp2 = EvalRwhile.evalProgram spec_av (spec_in pd_spec pd_rimin) in

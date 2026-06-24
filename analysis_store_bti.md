@@ -42,6 +42,19 @@ residual = 1281 nodes,  CSeq=14 CAss=9 CRep=6 CCond=0 CLoop=0
 「ループ機構の不備」ではなく**純粋に index J（＝内側プログラムポインタ Cd 由来）が動的**であることが原因と**確定**。
 **修正は「index/プログラムポインタを静的に保つ」（§3 (A)/(B)）に一点集中でよい**（ループ特殊化は触らない）。
 
+### 漏れの正確な局在（2026-06-23 診断, `measure_proj comp2-loops` + 残余ダンプ）
+`measure_proj comp2-loops`（comp2 生成＋全 CLoop の入口/出口テスト式を集計＋残余を `/tmp/comp2_resid.rwhile` にダンプ）で**漏れ箇所を1点に特定**：
+- **125 CLoop は全て AUX/INV-AUX のストア歩行**。出口テストは `=? Cnt J`（Cnt 共有, index J は**実行時変数**）で、index は約9個の相異なる動的変数（v114×18, v66×9, v212×7, v151×4 …）＝ri_min の変数数規模。
+- **根本＝内側プログラム ri_min が「動的な残余定数」として吐かれている**：
+  - 残余 `215 <= ('seq . …)` ＝ ri_min 本文が**残余変数 215 への代入**として出る（spec 時に静的消費されず動的扱い）。
+  - `133 <= cons 215 nil; from =? 216 nil loop cons (cons 214 213) 133 <= 133 … until =? 133 nil` ＝
+    **内側 spec_av のメインコマンドループが丸ごと残余化**（静的な ri_min を動的に歩く）。
+  - 続いて**コマンドタグ分岐 `if =? 214 'ass/'rep/'cond/'loop/'seq` が全部残余化**（214＝コマンドタグが動的）→
+    式ディスパッチ `if =? (hd 97) 'var`（97＝式ノード動的, `cons 113 114 <= 97` で EArg=114）→ 125 動的 AUX。
+- ⇒ trivial 化の正体は「**ri_min は外側の静的 Src なのに、内側 spec_av がそれを静的値として保持できず、残余定数 215 として吐き、インタプリタ全体を残余化**」。
+- **修正点は spec_av の入力分解／BT 伝播**（`spec_av.rwhile:922` `cons Prog FpBTS <= In` 以降, L1051 の `'S` 固定タグ）で**内側 Prog を静的 AV のまま保つ**こと。ループ・AV 代数・ストア機構は触らない。
+- 道具：`measure_proj comp2-loops`（dev ツール、加算的）。残余は `/tmp/comp2_resid.rwhile` にダンプされ offline 解析可。
+
 ### なぜ漏れるか（既知の本質）
 HANDOFF_fp2.md / FINDINGS §2 の通り、spec_av は **online で「静的値」を運ぶ AV 設計**。自己適用下では内側のプログラムポインタ Cd が outer から見て動的化し、そこから読む EArg も 'D 化 → AUX が残余化。`MKAV`（束縛時刻認識の部分入力）は必要だが不十分で、根本は **online 値運搬 AV と offline 二段階 BT 分離の不整合**（FINDINGS §2 末尾）。
 
