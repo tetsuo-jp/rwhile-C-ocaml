@@ -203,7 +203,11 @@ let comp2_loops spec_av pd_spec pd_rimin spec_in =
    let r_swap = EvalRwhile.evalProgram comp2_prog (inp "'swap") in
    let r_id   = EvalRwhile.evalProgram comp2_prog (inp "'id") in
    Printf.printf "[comp2](('S.swap)) == B : %b\n" (r_swap = b_swap);
-   Printf.printf "[comp2](('S.id))   == B : %b\n" (r_id = b_id));
+   Printf.printf "[comp2](('S.id))   == B : %b\n" (r_id = b_id);
+   let snip v = let s = PrintRwhile.printTree PrintRwhile.prtValT v in
+     if String.length s > 160 then String.sub s 0 160 ^ "..." else s in
+   Printf.printf "  B_swap      (%d nodes): %s\n" (cn b_swap) (snip b_swap);
+   Printf.printf "  [comp2]swap (%d nodes): %s\n" (cn r_swap) (snip r_swap));
   let loops = List.rev (collect_loops [] body) in
   Printf.printf "comp2 has %d CLoop(s).  Entry/exit test shapes (deduped, sorted by count):\n"
     (List.length loops);

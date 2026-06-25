@@ -149,6 +149,18 @@ comp2-loops に**正しさチェック**（`[comp2]('S.op)==B`）＋サイズ表
   これらの相互作用が疑わしい。**次**：comp2 規模で、selective が内側 spec_av のどの機構を壊すか特定（dump 差分／
   内側 AV-LIFT・AUX の入力 AV を追跡）。深いデバッグ（数分/回）。道具：`measure_proj dyncond`/`comp2-loops`(正しさ込み)。
 
+### 実装試行6（2026-06-25）＝comp2 誤出力を特定＝原 fp2 の over-static バグが unmask（重要）
+comp2-loops に誤出力の値表示を追加し `[comp2]('S.swap)` の中身を確認：
+- **B_swap（正, 103 nodes）**：`read X; seq(rep…, seq(rep…, …))` ＝ swap 実ロジック。
+- **[comp2]swap（誤, 39 nodes）**：`var2 <= cons 'swap var2` 系＝**'swap を `cons 'val 'swap` で値として埋め込み**、
+  ri_min の cond を dispatch して swap ロジックを生成しない。
+- ⇒ comp2 不正の正体は**原 fp2 の over-static / ASSEMBLE-FP1 バグ**（`spec_av.rwhile:1051` の 'S 固定タグ、
+  [[second-futamura-projection-status]] の長年の難敵）。**DYNAMICIZE-ALL は全機構を runtime 実行することでこれをマスク**
+  していた（trivial だが正）。selective+loop-BTA がこれを unmask した。
+- **結論＝正しい最適化 comp2 には独立な 2 修正が必要**：(1) ループ trivial 化＝**解決済**（selective+loop-BTA、'41 解消、
+  comp2 0.005×）。(2) **原 fp2 over-static binding-time バグ**（MKAV/ASSEMBLE-FP1）＝**未解決・別の深いアーク**。
+  ⇒ loop-BTA は必要条件を満たしたが、comp2 完走には原 fp2 バグの解決も要る。spec_av_bti は dev WIP（fp1 緑・comp2 誤）。
+
 ### 実装試行2（2026-06-23, /loop-next B round 1）＝可逆性の真因を特定（重要）
 高速ハーネス `examples/test_collect_refs.rwhile`（`./ri` で `COLLECT-REFS`→`INV-COLLECT-REFS` 往復を秒で検査。
 comp2 数分が不要）を作成し、`COLLECT-REFS` の可逆性バグを**秒単位で局所化**：
