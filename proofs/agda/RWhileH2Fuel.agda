@@ -238,3 +238,28 @@ fp2-fuel src = runF-complete (fp2 src)
 
 fp3-fuel : ∀ q → Σ ℕ (λ n → runF n cogen q ≡ just (spec specP q))
 fp3-fuel q = runF-complete (fp3 q)
+
+------------------------------------------------------------------------
+-- Worked examples: concrete runs of the fuel interpreter (checked by refl), and
+-- the link runF-sound to the big-step relation.  Documentation + regression.
+
+module Examples where
+  -- the input variable returns the runtime input (one fuel unit).
+  ex-inp : ∀ x → runF 1 inp x ≡ just x
+  ex-inp x = refl
+
+  -- a quotation returns its quoted program.
+  ex-quo : ∀ p x → runF 1 (quo p) x ≡ just p
+  ex-quo p x = refl
+
+  -- a pair of input-projections builds the diagonal pair (two fuel levels).
+  ex-pr : ∀ x → runF 2 (pr inp inp) x ≡ just (pr x x)
+  ex-pr x = refl
+
+  -- first projection of that diagonal recovers the input (three levels).
+  ex-fst : ∀ x → runF 3 (fstT (pr inp inp)) x ≡ just x
+  ex-fst x = refl
+
+  -- the fuel result feeds runF-sound into the big-step relation.
+  ex-⇓ : ∀ x → (pr inp inp) · x ⇓ (pr x x)
+  ex-⇓ x = runF-sound 2 (pr inp inp) x (ex-pr x)
