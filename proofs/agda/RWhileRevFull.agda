@@ -124,3 +124,32 @@ module Core (S : Set) where
 
   inv-complete : ∀ {c s t} → inv c ⊢ t ⇒ s → c ⊢ s ⇒ t
   inv-complete {c} {s} {t} d = subst (λ x → x ⊢ s ⇒ t) (inv-inv c) (inv-sound d)
+
+------------------------------------------------------------------------
+-- Worked examples (S = Bool): a concrete reversible program, a derivation,
+-- involutive inversion, and reversibility via inv-sound.  Checked by refl /
+-- the relation constructors.  Documentation + regression.
+
+module Examples where
+  open import Data.Bool using (Bool; true; false; not)
+  open Core Bool
+
+  -- a concrete reversible atom: the graph of boolean negation.
+  Neg : Rel
+  Neg s t = t ≡ not s
+
+  -- a small reversible program: negate, then negate again.
+  prog : Cmd
+  prog = atom Neg ⨾ atom Neg
+
+  -- inversion is involutive on this concrete program (definitional, η).
+  ex-inv-inv : inv (inv prog) ≡ prog
+  ex-inv-inv = refl
+
+  -- a concrete derivation: prog drives true ⇒ true (via the false midpoint).
+  ex-run : prog ⊢ true ⇒ true
+  ex-run = e-seq (e-atom refl) (e-atom refl)
+
+  -- reversibility: the inverse program runs the result back to the start.
+  ex-rev : inv prog ⊢ true ⇒ true
+  ex-rev = inv-sound ex-run
