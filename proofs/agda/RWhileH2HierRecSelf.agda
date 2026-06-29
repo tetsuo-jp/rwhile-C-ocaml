@@ -71,3 +71,26 @@ module Witness where
   -- compiling [dup, dup] and running on nv yields cn (cn nv nv) (cn nv nv).
   ex : compileOps (tt ∷ tt ∷ []) · nv ⇓ cn (cn nv nv) (cn nv nv)
   ex = compileOps-correct (tt ∷ tt ∷ []) nv
+
+------------------------------------------------------------------------
+-- Witness2: a DIFFERENT total op (prepend nv: d ↦ cn nv d) and the OPTIMISING /
+-- uses-input property made concrete -- the SAME compiled residual runs correctly
+-- on two DISTINCT runtime inputs (the answer is not baked in), and the empty
+-- op-list compiles to the identity residual `inp`.
+
+module Witness2 where
+  open import Data.Unit using (⊤; tt)
+
+  -- prepend-nv as a Tm program: cn (quo nv) inp, total on every input.
+  open Core ⊤ (λ _ d → cn nv d) (λ _ → cn (quo nv) inp)
+            (λ _ d → ⇓cn (⇓quo nv d) (⇓inp d)) public
+
+  -- the residual uses its input: one compiled program, two distinct inputs.
+  ex-nv : compileOps (tt ∷ []) · nv ⇓ cn nv nv
+  ex-nv = compileOps-correct (tt ∷ []) nv
+  ex-cn : compileOps (tt ∷ []) · (cn nv nv) ⇓ cn nv (cn nv nv)
+  ex-cn = compileOps-correct (tt ∷ []) (cn nv nv)
+
+  -- the empty op-list compiles to the identity residual.
+  ex-id : compileOps [] · nv ⇓ nv
+  ex-id = compileOps-correct [] nv
