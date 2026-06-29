@@ -11,6 +11,7 @@
 --   dProg∘t / transProg-injective  control-core program⇄data round-trip + injectivity (G4)
 --   fp1U / specU-correct  fp1 unconditional for the real AV specialiser, unified value type
 --   self-rep / specByProg-correct  H2's recursive core, non-closure (aeval is a data program)
+--   specByProg-H1         fp1 for the SELF-REPRESENTED specialiser (H2-core ∘ H1, data program)
 --   hier-fp1/2/3          the Futamura hierarchy as proven theorems (non-closure instance)
 --   gen-fp1/2/3, ⇓-det    the hierarchy with general first-class application (big-step), deterministic
 --   mirrorP-reversible    a recursive (cata) program proven its-own-inverse at the relation level
@@ -45,7 +46,7 @@ open import RWhileAVSpec   public using (spec-correct)
 open import RWhileP2D      public using (d2p∘p2d; p2d-injective)
 open import RWhileP2DProg  public using (dProg∘t; transProg-injective)
 open import RWhileAVSelfApp public using (fp1U; specU-correct)
-open import RWhileH2       public using (self-rep; specByProg-correct)
+open import RWhileH2       public using (self-rep; specByProg-correct; specByProg-H1)
 open import RWhileSimpSound public using (deadbranch-true; deadbranch-false)
 
 -- the two hierarchy instances both export fp1/fp2/fp3; re-export with prefixes.

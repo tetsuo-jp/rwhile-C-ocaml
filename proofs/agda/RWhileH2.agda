@@ -39,8 +39,9 @@ open import Relation.Binary.PropositionalEquality using (_≡_; refl; cong; cong
 open import RWhileAVSound using
   (Val; ⟨⟩; _·_; AV; S; D; C;
    avHd; avTl; avCons; avEq; avPairp)
-open import RWhileAVSpec using (aeval; spec)
-open import RWhileAVSound using (Code; cVar; cVal; cHd; cTl; cCons; cEq; cPairp; lift)
+open import RWhileAVSpec using (aeval; spec; spec-correct)
+open import RWhileAVSound using (Code; cVar; cVal; cHd; cTl; cCons; cEq; cPairp; lift; ⟦_⟧c)
+open import Relation.Binary.PropositionalEquality using (trans)
 
 ------------------------------------------------------------------------
 -- The AV-expression object language E (= spec_av's AV macros), with holes:
@@ -137,3 +138,32 @@ specByProg p s = lift (cata specAlg p (C (S s) (D cVar)))
 
 specByProg-correct : ∀ p s → specByProg p s ≡ spec p s
 specByProg-correct p s = cong lift (self-rep p (C (S s) (D cVar)))
+
+------------------------------------------------------------------------
+-- H1 for the SELF-REPRESENTED specialiser: composing H2's structural core
+-- (specByProg-correct: the data program `specAlg` run by `cata` equals the real
+-- `spec`) with H1 (spec-correct) gives that the program-driven specialiser is
+-- itself fp1-correct -- the residual it BUILDS AS A PROGRAM, run on d, equals the
+-- source run on the paired input s · d.  This is the structural-level connection
+-- of the real AV specialiser to the Futamura fp1, with the specialiser realised
+-- as honest data (no closure primitive).
+
+specByProg-H1 : ∀ p s d → ⟦ specByProg p s ⟧c d ≡ ⟦ p ⟧c (s · d)
+specByProg-H1 p s d =
+  trans (cong (λ z → ⟦ z ⟧c d) (specByProg-correct p s))
+        (spec-correct p s d)
+
+------------------------------------------------------------------------
+-- Witnesses: the data-program specialiser on concrete Code, checked concretely.
+
+module Witness where
+  -- the data program `specAlg` run by `cata` on a concrete Code computes exactly
+  -- the real symbolic evaluator (a closed instance of self-rep).
+  rep-cons : cata specAlg (cCons cVar (cVal ⟨⟩)) (C (S ⟨⟩) (D cVar))
+           ≡ aeval (cCons cVar (cVal ⟨⟩)) (C (S ⟨⟩) (D cVar))
+  rep-cons = refl
+
+  -- specialising the projection `cTl cVar` (return the dynamic half), AS A DATA
+  -- PROGRAM, yields a residual equal to the identity on the runtime input d.
+  proj-id : ∀ s d → ⟦ specByProg (cTl cVar) s ⟧c d ≡ d
+  proj-id s d = specByProg-H1 (cTl cVar) s d
