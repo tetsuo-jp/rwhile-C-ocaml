@@ -188,3 +188,45 @@ avEq-sound (S x)   (D y)   ρ = cong₂ veq (lift-sound (S x) ρ)   (lift-sound 
 avEq-sound (S x)   (C y z) ρ = cong₂ veq (lift-sound (S x) ρ)   (lift-sound (C y z) ρ)
 avEq-sound (D x)   b       ρ = cong₂ veq (lift-sound (D x) ρ)   (lift-sound b ρ)
 avEq-sound (C x y) b       ρ = cong₂ veq (lift-sound (C x y) ρ) (lift-sound b ρ)
+
+------------------------------------------------------------------------
+-- Worked examples: concrete instances of the AV algebra on representative
+-- annotated values -- static (S), dynamic (D cVar), partially-static cons (C) --
+-- checked by refl.  Documentation + regression for the soundness theorems above.
+
+module Examples where
+  -- a partial-static cons: static head vtrue, dynamic tail (the runtime input).
+  ps : AV
+  ps = C (S vtrue) (D cVar)
+
+  -- γ fills the dynamic hole with ρ.
+  γ-ps : ∀ ρ → γ ps ρ ≡ (vtrue · ρ)
+  γ-ps ρ = refl
+
+  -- avHd of a partial-static cons takes the (static) head, no residual.
+  avHd-ps : avHd ps ≡ S vtrue
+  avHd-ps = refl
+
+  -- avTl exposes the dynamic tail.
+  avTl-ps : avTl ps ≡ D cVar
+  avTl-ps = refl
+
+  -- avCons of static+dynamic builds a partial-static cons (no premature folding).
+  avCons-sd : avCons (S vtrue) (D cVar) ≡ ps
+  avCons-sd = refl
+
+  -- avPairp of a partial-static cons is statically TRUE (it is definitely a cons).
+  avPairp-ps : avPairp ps ≡ S vtrue
+  avPairp-ps = refl
+
+  -- avEq on two statics is a statically-known bool.
+  avEq-ss : avEq (S vtrue) (S vfalse) ≡ S vfalse
+  avEq-ss = refl
+
+  -- avEq with a dynamic operand residualises (no over-static degeneration).
+  avEq-sd : avEq (S vtrue) (D cVar) ≡ D (cEq (cVal vtrue) cVar)
+  avEq-sd = refl
+
+  -- lift lowers an AV to residual code preserving meaning (γ-sound on ps).
+  lift-ps : ∀ ρ → ⟦ lift ps ⟧c ρ ≡ (vtrue · ρ)
+  lift-ps ρ = refl
