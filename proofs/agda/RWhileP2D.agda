@@ -64,3 +64,24 @@ d2p∘p2d (cPairp c)  = cong cPairp (d2p∘p2d c)
 p2d-injective : ∀ {x y} → program2data x ≡ program2data y → x ≡ y
 p2d-injective {x} {y} eq =
   trans (sym (d2p∘p2d x)) (trans (cong data2program eq) (d2p∘p2d y))
+
+------------------------------------------------------------------------
+-- Worked examples: concrete encodings (tag · payload) and round trips,
+-- checked by refl.  Documentation + regression for program2data / data2program.
+
+module Examples where
+  -- the variable code encodes to the H0 tag (⟨⟩ · ⟨⟩).
+  p2d-var : program2data cVar ≡ (⟨⟩ · ⟨⟩)
+  p2d-var = refl
+
+  -- a literal-value code (value ⟨⟩ here): the H1 tag · the value.
+  p2d-val : program2data (cVal ⟨⟩) ≡ ((⟨⟩ · ⟨⟩) · ⟨⟩)
+  p2d-val = refl
+
+  -- a representative nested residual: cons (hd var) (val ⟨⟩).  It round-trips:
+  -- decoding its program-as-data recovers the code (d2p ∘ p2d = id).
+  c0 : Code
+  c0 = cCons (cHd cVar) (cVal ⟨⟩)
+
+  c0-round : data2program (program2data c0) ≡ c0
+  c0-round = refl
