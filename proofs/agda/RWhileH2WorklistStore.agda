@@ -196,3 +196,42 @@ module Witness where
   -- and it is sound: γ of it on (vtrue · σ) equals the concrete value.
   sound : ∀ σ → γ (avEval ex0) (vtrue · σ) ≡ ⟦ ex0 ⟧ (vtrue · σ)
   sound σ = avEval-sound (vtrue · σ) (consistent σ) ex0
+
+------------------------------------------------------------------------
+-- Witness2: the SAME partial-static store exercised through the REST of the AV
+-- algebra (hd / tl / pairp / eq), showing static slots FOLD to static AVs while
+-- dynamic slots RESIDUALISE to code -- all sound on the matching runtime stores.
+-- Slot 0 static = S (vtrue · vtrue) (a known cons); slot 1 dynamic = D (cSlot 1).
+
+module Witness2 where
+  storeWit : List AV
+  storeWit = S (vtrue · vtrue) ∷ D (cSlot 1) ∷ []
+
+  open Core storeWit
+
+  -- consistent with any runtime store whose slot 0 is the known cons (vtrue · vtrue).
+  consistent : ∀ σ → Consistent storeWit ((vtrue · vtrue) · σ)
+  consistent σ zero          = refl
+  consistent σ (suc zero)    = cSlot-sound 1 ((vtrue · vtrue) · σ)
+  consistent σ (suc (suc n)) = cSlot-sound (suc (suc n)) ((vtrue · vtrue) · σ)
+
+  -- STATIC slot: hd and pairp fold to static AVs (no residual code emitted).
+  hd-static    : avEval (exHd    (varN 0)) ≡ S vtrue
+  hd-static    = refl
+  pairp-static : avEval (exPairp (varN 0)) ≡ S vtrue
+  pairp-static = refl
+
+  -- DYNAMIC slot: hd and tl residualise to code reading the runtime slot.
+  hd-dynamic : avEval (exHd (varN 1)) ≡ D (cHd (cSlot 1))
+  hd-dynamic = refl
+  tl-dynamic : avEval (exTl (varN 1)) ≡ D (cTl (cSlot 1))
+  tl-dynamic = refl
+
+  -- soundness of the assembled residuals on the matching runtime stores,
+  -- across the static fold (pairp), the residual (hd), and the mixed eq.
+  sound-pairp : ∀ σ → γ (avEval (exPairp (varN 0))) ((vtrue · vtrue) · σ) ≡ ⟦ exPairp (varN 0) ⟧ ((vtrue · vtrue) · σ)
+  sound-pairp σ = avEval-sound ((vtrue · vtrue) · σ) (consistent σ) (exPairp (varN 0))
+  sound-hd    : ∀ σ → γ (avEval (exHd (varN 1))) ((vtrue · vtrue) · σ) ≡ ⟦ exHd (varN 1) ⟧ ((vtrue · vtrue) · σ)
+  sound-hd    σ = avEval-sound ((vtrue · vtrue) · σ) (consistent σ) (exHd (varN 1))
+  sound-eq    : ∀ σ → γ (avEval (exEq (varN 0) (varN 1))) ((vtrue · vtrue) · σ) ≡ ⟦ exEq (varN 0) (varN 1) ⟧ ((vtrue · vtrue) · σ)
+  sound-eq    σ = avEval-sound ((vtrue · vtrue) · σ) (consistent σ) (exEq (varN 0) (varN 1))
