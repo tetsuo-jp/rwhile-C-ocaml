@@ -32,7 +32,7 @@ open import Data.Maybe using (Maybe; just; nothing)
 open import Data.Product using (Σ; _,_; _×_)
 open import Relation.Binary.PropositionalEquality using (_≡_; refl; cong; cong₂; trans)
 open import RWhileAVSound using
-  ( Val; ⟨⟩; _·_; vtrue; hd; tl; pairp; veq; Code; cVar; ⟦_⟧c
+  ( Val; ⟨⟩; _·_; vtrue; hd; tl; pairp; veq; Code; cVar; cHd; cTl; ⟦_⟧c
   ; AV; S; D; C; γ; avCons; avHd; avTl; avEq; avPairp
   ; avCons-sound; avHd-sound; avTl-sound; avEq-sound; avPairp-sound)
 
@@ -275,3 +275,27 @@ module Witness where
   -- and it is sound for every store ρ: γ of the residual equals the concrete value.
   sound : ∀ ρ → γ (avEval ex0) ρ ≡ (vtrue · hd ρ)
   sound ρ = refl
+
+------------------------------------------------------------------------
+-- Witness2: the LOOKUP store-walk at DEEPER slots, and operations layered on a
+-- store read.  Each `varN n` residualises to `D (cHd (cTl^n cVar))` (spec_av's
+-- AUX walk), `hd`/`tl` over a slot nest further, and γ-soundness holds for all.
+
+module Witness2 where
+  -- deeper store slots residualise to the cHd/cTl spine reading runtime slot n.
+  slot1 : avEval (varN 1) ≡ D (cHd (cTl cVar))
+  slot1 = refl
+  slot2 : avEval (varN 2) ≡ D (cHd (cTl (cTl cVar)))
+  slot2 = refl
+
+  -- hd of a store slot nests another cHd onto the residual.
+  hd-slot0 : avEval (exHd (varN 0)) ≡ D (cHd (cHd cVar))
+  hd-slot0 = refl
+
+  -- soundness of the deeper reads and of an eq between two store slots.
+  sound-slot1 : ∀ ρ → γ (avEval (varN 1)) ρ ≡ ⟦ varN 1 ⟧ ρ
+  sound-slot1 ρ = avEval-sound (varN 1) ρ
+  sound-hd0   : ∀ ρ → γ (avEval (exHd (varN 0))) ρ ≡ ⟦ exHd (varN 0) ⟧ ρ
+  sound-hd0   ρ = avEval-sound (exHd (varN 0)) ρ
+  sound-eq    : ∀ ρ → γ (avEval (exEq (varN 0) (varN 1))) ρ ≡ ⟦ exEq (varN 0) (varN 1) ⟧ ρ
+  sound-eq    ρ = avEval-sound (exEq (varN 0) (varN 1)) ρ
