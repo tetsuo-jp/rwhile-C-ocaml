@@ -68,3 +68,34 @@ module Det (S : Set) where
 
   inv-cancels : ∀ {c s t t'} → Det⟨ inv c ⟩ → c ⊢ s ⇒ t → inv c ⊢ t ⇒ t' → t' ≡ s
   inv-cancels dInvC fwd back = det dInvC back (inv-sound fwd)
+
+------------------------------------------------------------------------
+-- Worked examples (S = Bool): a deterministic atom, determinism evidence for
+-- a small program, and uniqueness of its result.  Documentation + regression.
+
+module Examples where
+  open import Data.Bool using (Bool; true; false; not)
+  open import Data.Product using (_,_)
+  open RWhileRevFull.Core Bool
+  open Det Bool
+
+  -- the graph of boolean negation, and its determinism.
+  Neg : Rel
+  Neg s t = t ≡ not s
+
+  neg-det : ∀ {s t t'} → Neg s t → Neg s t' → t ≡ t'
+  neg-det p q = trans p (sym q)
+
+  -- a small program and its per-atom determinism evidence.
+  prog : Cmd
+  prog = atom Neg ⨾ atom Neg
+
+  prog-det : Det⟨ prog ⟩
+  prog-det = neg-det , neg-det
+
+  -- the only result of prog on true is true (uniqueness via det).
+  d-true : prog ⊢ true ⇒ true
+  d-true = e-seq (e-atom refl) (e-atom refl)
+
+  ex-unique : ∀ {t} → prog ⊢ true ⇒ t → t ≡ true
+  ex-unique d = det prog-det d d-true
