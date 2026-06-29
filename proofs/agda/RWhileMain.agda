@@ -55,6 +55,12 @@ open import RWhileH2Hier  public using ()
 open import RWhileH2Hier2 public using (⇓-det)
   renaming (fp1-fwd to gen-fp1-fwd; fp1-bwd to gen-fp1-bwd; fp2 to gen-fp2; fp3 to gen-fp3)
 
+-- an OPTIMISING (non-trivial, constant-folding) specialiser in the single-U
+-- total-run setting: fp1 holds and the residual is projection-free (H1 half of
+-- a non-trivial fp2/fp3 instance; H2/specP is the next increment).
+open import RWhileH2HierOpt public using ()
+  renaming (spec-correct to opt-spec-correct; fp1 to opt-fp1)
+
 -- a genuinely RECURSIVE (cata-defined) program that is its own inverse, proven
 -- reversible at the relation level — recursion ∧ reversibility in one theorem.
 open import RWhileH2HierRec public
