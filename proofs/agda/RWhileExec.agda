@@ -108,3 +108,31 @@ module Exec (S : Set) where
 
   frun-reversible : ∀ p {s t} → frun p s ≡ just t → inv (compile p) ⊢ t ⇒ s
   frun-reversible p h = inv-sound (frun-sound p h)
+
+------------------------------------------------------------------------
+-- Worked examples (S = Bool): a concrete reversible toggle, run by frun,
+-- justified by the relational semantics and reversed via frun-reversible.
+-- Documentation + regression, checked by refl.
+
+module Examples where
+  open import Data.Bool using (Bool; true; false; not)
+  open RWhileRevFull.Core Bool   -- relational _⊢_⇒_, inv
+  open Exec Bool                  -- FCmd, frun, compile, frun-sound, frun-reversible
+
+  -- a reversible toggle atom: negate the boolean state.
+  toggle : FCmd
+  toggle = fatom (λ b → just (not b))
+
+  -- frun computes the negation, and running it twice is the identity.
+  ex-toggle       : frun toggle true ≡ just false
+  ex-toggle       = refl
+  ex-toggle-twice : frun (fseq toggle toggle) true ≡ just true
+  ex-toggle-twice = refl
+
+  -- the executable result is justified by the relational semantics …
+  ex-⇒ : compile toggle ⊢ true ⇒ false
+  ex-⇒ = frun-sound toggle ex-toggle
+
+  -- … and the inverse program returns to the start (concrete reversibility).
+  ex-rev : inv (compile toggle) ⊢ false ⇒ true
+  ex-rev = frun-reversible toggle ex-toggle
