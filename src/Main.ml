@@ -16,6 +16,7 @@ let () =
   let f_p2d = ref false in
   let f_exp = ref false in
   let f_stats = ref false in
+  let f_steps = ref false in
   let f_core = ref false in
   let f_simp = ref false in
   Arg.parse
@@ -34,13 +35,15 @@ let () =
       "emit structured, machine-/LLM-friendly error messages");
      ("-stats",   Arg.Set f_stats,
       "after evaluation, print result size (node count / bytes) to stderr");
+     ("-steps",   Arg.Set f_steps,
+      "after evaluation, print the executed-command step count to stderr (unit-cost time)");
      ("-core",    Arg.Set f_core,
       "evaluate via the Core IR abstraction layer (Core.ml; mirrors the Agda-verified core)");
      ("-simp",    Arg.Set f_simp,
       "simplify the (residual) program: constant-fold and remove dead reversible branches")]
     (fun s -> files := !files @ [s])
     ("R-WHILE Interpreter (C) Tetsuo Yokoyama\n" ^
-       Printf.sprintf "usage: %s [-inverse] [-p2d] [-exp] [-local] [-autofi] [-array] [-hygienic-macros] [-llm-errors] [-stats] [-core] program [data]"
+       Printf.sprintf "usage: %s [-inverse] [-p2d] [-exp] [-local] [-autofi] [-array] [-hygienic-macros] [-llm-errors] [-stats] [-steps] [-core] program [data]"
          Sys.argv.(0));
   match !files with
   | [prog_filename] ->
@@ -61,13 +64,16 @@ let () =
      let data = parseValT channel in 
      let _ = close_in channel in
      (try
+        EvalRwhile.reset_steps ();
         let result =
           if !f_core then Core.eval_program_core prog data
           else EvalRwhile.evalProgram prog data in
         print_endline (showValT result);
         if !f_stats then
           Printf.eprintf "[RWHILE-STATS] nodes=%d bytes=%d\n%!"
-            (EvalRwhile.count_nodes result) (String.length (showValT result))
+            (EvalRwhile.count_nodes result) (String.length (showValT result));
+        if !f_steps then
+          Printf.eprintf "[RWHILE-STEPS] steps=%d\n%!" (EvalRwhile.get_steps ())
       with
       | Failure str ->
          (* eval_error already produced the structured block in LLM mode. *)

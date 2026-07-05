@@ -41,14 +41,43 @@ while-C-ocaml/proofs/agda 側で自己完結に行い、rwhile は実行系・�
    `UniversalInterp` 流の最小自己完結言語で、`ri.rwhile` は差分テストの oracle という位置づけ。
    ゆえに rwhile 側の Agda（33+ モジュール、`funext` のみ仮定）に R-track の証明義務は発生しない。
 
-## 最初のタスク（このリポジトリ、サイズ S）
+## 最初のタスク（このリポジトリ、サイズ S）— **DONE (2026-07-05)**
 
-`a-rev` 実測スクリプト（例: `examples/measure_ri_overhead.sh`）:
-p ∈ {swap, reverse, …（`examples/` の小物）} × 数入力で
-`steps(ri ⌜p⌝·x)` と `steps(p, x)` を出力し比を表にする。
-注意: ri の入力エンコード（⌜p⌝·x の形）と step の数え方（コマンド単位）を正本の
-コストモデル（batch model (A)、unit-cost）と揃えて記録すること — 数え方が違うと
-古典 73 と比較できない。
+`examples/measure_ri_overhead.sh`（`./ri -steps` を新設。`src/Main.ml` に
+実行コマンド数を stderr へ出す `-steps` フラグを追加＝古典側 `while --time` の対応物）。
+各 p × 入力 x で `a-rev(p,x) = steps(ri, ⌜p⌝·x) / steps(p, x)` を出す。
+ri は program-preserving なので出力 = `(⌜p⌝ . [p](x))`。スクリプトは `[p](x)` が
+直接実行と一致することを検証してから比を取る（＝正しい自己解釈の上の比）。
+
+### 実測結果（第1回, 2026-07-05, R-WHILE コマンド step モデル）
+
+| program | steps_p | steps_ri | a-rev |
+|---|---:|---:|---:|
+| reverse | 16 | 5,829 | 364 |
+| minus | 22 | 5,011 | 228 |
+| compare | 55 | 18,027 | 328 |
+| piorder | 79 | 36,818 | 466 |
+| perm_to_code | 4,097 | 1,788,782 | 437 |
+| (id4, rle: steps_p=1 なので固定費支配、489/817 は非代表) | | | |
+
+**非自明な被解釈体（steps_p ≥ 10）で a-rev ≈ 364×（平均、範囲 228–466）。**
+
+読み取り:
+1. **a-rev はプログラムサイズにほぼ非依存**（perm_to_code は 4097 step でも ~437）。
+   ＝古典の `a` と同様「1 step あたりの定数」であることの経験的裏づけ。R1（時間最適性）の
+   Layer A はこの定数が入れば発火する（R0a 済）ので、a-rev が定数っぽいのは good news。
+2. **数百×**。古典 a=73 の数倍だが、**コストモデルが違うので直接比較は不可**（古典は
+   node-summed `evalT`、rwhile は evalCom コマンド単位）。厳密な 73-vs-a-rev には両モデルの
+   突き合わせが必要（future work）。
+3. **ばらつきの出所** = ri.rwhile の `LOOKUP`/`UPDATE`（変数アクセスごとに ~75-nil の
+   変数リスト Vl を線形走査）。被解釈体が変数アクセスを多く含むほど a-rev が上がる
+   （piorder 466 > minus 228）。→ **R3（a-rev を定理化）では「1 コマンドの解釈コストは
+   Vl 走査で上から押さえられる」を核にすればよい**という設計指針が得られた。
+
+注意（正本コストモデルとの整合）: ここでの step はコマンド単位。正本の batch model (A)
+・unit-cost（node-summed）とは数え方が違うため、古典 73 と横並びにはできない。R3 で REXP の
+step 意味論を定義する際、どちらの数え方を可逆側の正準にするか（おそらく node-summed に寄せる）
+を決める必要がある。
 
 ## 参照
 
