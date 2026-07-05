@@ -87,3 +87,9 @@ step 意味論を定義する際、どちらの数え方を可逆側の正準に
   （Agda↔Rocq 対応、a=73 が両系で定理）
 - こちら側の関連: `RWhileRevProjGen`/`RWhileGarbageBound`（ガーベジ bracket）、
   `analysis_store_bti.md`（両リポジトリが同じ壁を相互検証した前例）
+
+## R3 の引き継ぎ（2026-07-06）
+
+可逆 Levin の最後の brick **R3（可逆自己解釈器 → a-rev を定理化）を本リポジトリへ引き継いだ**。
+R3c–R3e はここで `ri.rwhile` + `RWhileRev*`/`RWhileExec*` を使って進める。詳細・brick 対応・証明戦略は
+**`plan_reversible_levin_R3.md`** を参照。
