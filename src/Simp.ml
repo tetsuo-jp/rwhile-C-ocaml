@@ -40,14 +40,14 @@ let rec simpExp (e : exp) : exp =
     | EVar _ | EVal _ -> e
   in
   if closed_exp e' then
-    (try EVal (EvalRwhile.evalExp [] e') with _ -> e')
+    (try EVal (EvalRwhile.evalExp EvalRwhile.RIdentMap.empty e') with _ -> e')
   else e'
 
 (* truth of a folded expression, if it is a closed constant *)
 let const_truth (e : exp) : bool option =
   match e with
   | EVal _ when closed_exp e ->
-     (try Some (EvalRwhile.is_true (EvalRwhile.evalExp [] e)) with _ -> None)
+     (try Some (EvalRwhile.is_true (EvalRwhile.evalExp EvalRwhile.RIdentMap.empty e)) with _ -> None)
   | _ -> None
 
 let rec simpCom (c : com) : com =

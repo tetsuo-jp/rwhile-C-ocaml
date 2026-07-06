@@ -2,7 +2,14 @@ open AbsRwhile
 open PrintRwhile
 open List
 
-type store = (rIdent * valT) list
+(* The store maps each program variable to its value.  It is a MAP (a fixed key
+ * set = the program's variables, only the values change), so we back it by a
+ * balanced tree for O(log n) access instead of an O(n) association-list walk --
+ * decisive for var-heavy programs (e.g. the self-applied specialiser, ~250 slots).
+ * Semantics are unchanged (order-irrelevant map); only iteration order differs
+ * (sorted by variable), which affects the debug printer only. *)
+module RIdentMap = Map.Make (struct type t = rIdent let compare = Stdlib.compare end)
+type store = valT RIdentMap.t
 
 let vtrue = VCons (VNil, VNil)
 let vfalse = VNil
@@ -130,12 +137,13 @@ let rec arr_rupdate arr idx vx =
            ~hint:"array indices are unary cons-chains: 0=nil, 1=(nil.nil), 2=(nil.(nil.nil)), ..."
            ("Invalid array index: " ^ printTree prtValT idx)
 
-let prtStore (i : int) (e : (rIdent * valT) list) : doc = 
+let prtStore (i : int) (e : store) : doc =
+  ignore i;
   let rec f = function
     | [] -> concatD []
     | [(x,v)] -> concatD [prtRIdent 0 x; render ":="; prtValT 0 v]
     | (x,v) :: ss -> concatD [prtRIdent 0 x; render ":="; prtValT 0 v; render "," ; f ss]
-  in concatD [render "{"; f e; render "}"]
+  in concatD [render "{"; f (RIdentMap.bindings e); render "}"]
 
 (* リストに要素を追加する。ただし、すでにその要素がリストにある場合は追加しない。 *)
 let rec insert x = function 
@@ -145,41 +153,46 @@ let rec insert x = function
 let merge xs ys = fold_right insert xs ys
 
 (* Reversible update *)
-let rec rupdate (x, vx) = function
-  | [] -> eval_error ~category:"unbound-variable"
+let rupdate (x, vx) (s : store) : store =
+  RIdentMap.update x
+    (function
+      | None ->
+          eval_error ~category:"unbound-variable"
             ~context:("variable=" ^ printTree prtRIdent x)
             ~hint:"the variable is not declared/used in the program, so it has no store slot"
             ("Variable " ^ printTree prtRIdent x ^ " is not found (1)")
-  | (y, vy) :: ys -> if x = y
-		     then (if vy = VNil
-			   then (y, vx)
-			   else if vx = vy
-			   then (y, VNil)
-			   else if vx = VNil
-			   then (y, vy)
-			   else (if !llm_errors
-                                 then eval_error ~category:"reversible-update"
-                                        ~context:("variable=" ^ printTree prtRIdent x)
-                                        ~expected:("current value (" ^ printTree prtValT vy ^ ") or nil")
-                                        ~actual:("assign " ^ printTree prtValT vx)
-                                        ~hint:"x ^= e is reversible XOR: it only clears (assign the current value) \
-                                               or sets (assign to a nil variable); assigning a different non-nil \
-                                               value is irreversible and forbidden"
-                                        "error in update"
-                                 else (Printf.eprintf "error in update: var=%s cur=%s new=%s\n%!" (printTree prtRIdent x) (printTree prtValT vy) (printTree prtValT vx); failwith "error in update"))) :: ys
-		     else (y, vy) :: rupdate (x, vx) ys
+      | Some vy ->
+          Some (if vy = VNil
+                then vx
+                else if vx = vy
+                then VNil
+                else if vx = VNil
+                then vy
+                else (if !llm_errors
+                      then eval_error ~category:"reversible-update"
+                             ~context:("variable=" ^ printTree prtRIdent x)
+                             ~expected:("current value (" ^ printTree prtValT vy ^ ") or nil")
+                             ~actual:("assign " ^ printTree prtValT vx)
+                             ~hint:"x ^= e is reversible XOR: it only clears (assign the current value) \
+                                    or sets (assign to a nil variable); assigning a different non-nil \
+                                    value is irreversible and forbidden"
+                             "error in update"
+                      else (Printf.eprintf "error in update: var=%s cur=%s new=%s\n%!" (printTree prtRIdent x) (printTree prtValT vy) (printTree prtValT vx); failwith "error in update"))))
+    s
 
 (* Irreversible update *)
-let rec update (x, vx) = function
-  | [] -> eval_error ~category:"unbound-variable"
+let update (x, vx) (s : store) : store =
+  RIdentMap.update x
+    (function
+      | None ->
+          eval_error ~category:"unbound-variable"
             ~context:("variable=" ^ printTree prtRIdent x)
             ~hint:"the variable is not declared/used in the program, so it has no store slot"
             ("Variable " ^ printTree prtRIdent x ^ " is not found (2)")
-  | (y, vy) :: ys -> if x = y
-		     then ((y, vx) :: ys)
-		     else (y, vy) :: update (x, vx) ys
+      | Some _ -> Some vx)
+    s
 
-let all_cleared (s : store) = for_all (fun (_, v) -> v = VNil) s
+let all_cleared (s : store) = RIdentMap.for_all (fun _ v -> v = VNil) s
 
 (* Size of a value tree: total number of nodes (VNil/VAtom leaves and VCons
  * internal nodes).  Used by the -stats flag and tests to measure residual /
@@ -308,7 +321,7 @@ let warn_linearity p =
 
 (* Evaluation *)
 let evalVariable s (Var x) =
-  try assoc x s
+  try RIdentMap.find x s
   with Not_found ->
     eval_error ~category:"unbound-variable"
       ~context:("variable=" ^ printTree prtRIdent x)
@@ -436,7 +449,7 @@ and evalCom (s : store) (c : com) : store =
          ~hint:"pass the -local flag to enable scoped local variables"
          "local/end requires the -local flag"
      else
-       let v = assoc x s in
+       let v = RIdentMap.find x s in
        if v <> VNil then
          eval_error ~category:"local-not-nil"
            ~context:("variable=" ^ printTree prtRIdent x)
@@ -447,7 +460,7 @@ and evalCom (s : store) (c : com) : store =
                    " must be nil at block entry, but is " ^ printTree prtValT v)
        else
          let s1 = evalCom s c in
-         let v1 = assoc x s1 in
+         let v1 = RIdentMap.find x s1 in
          if v1 <> VNil then
            eval_error ~category:"local-not-nil"
              ~context:("variable=" ^ printTree prtRIdent x)
@@ -489,7 +502,7 @@ and evalCom (s : store) (c : com) : store =
          ~hint:"pass the -array flag to enable array operations"
          "A[I] ^= E requires the -array flag"
      else
-       let arr = assoc x s in
+       let arr = RIdentMap.find x s in
        let idx = evalExp s idx_exp in
        let v   = evalExp s val_exp in
        update (x, arr_rupdate arr idx v) s
@@ -524,7 +537,7 @@ and evalProgram (p : program) (v : valT): valT =
   let Prog (ms, x, c, y) as p' = MacroRwhile.expMacProgram p in
   ignore ms;
   warn_linearity p';
-  let s = map (fun x -> (x, VNil)) (varProgram p') in
+  let s = List.fold_left (fun m x -> RIdentMap.add x VNil m) RIdentMap.empty (varProgram p') in
   (* Desugar the input value: list-notation literals like ['a,'b,'c] must become
    * cons-chains, exactly like ['a,'b,'c] written inside the program would. *)
   let s1 = rupdate (x, desugar_val v) s in
@@ -535,7 +548,7 @@ and evalProgram (p : program) (v : valT): valT =
   else
     (* Report the actual offending (post-cleanup) store s3, and list only the
      * variables that are still non-nil. *)
-    let dirty = filter (fun (_, vv) -> vv <> VNil) s3 in
+    let dirty = RIdentMap.filter (fun _ vv -> vv <> VNil) s3 in
     eval_error ~category:"store-not-cleared"
       ~context:("non-nil variables: " ^ printTree prtStore dirty)
       ~expected:"all variables nil at program end (reversibility condition)"

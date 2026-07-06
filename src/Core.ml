@@ -88,7 +88,7 @@ let vtrue  = VCons (VNil, VNil)
 let is_true (v : valT) = v <> VNil
 
 let eval_var (s : EvalRwhile.store) (x : rIdent) : valT =
-  try List.assoc x s with Not_found -> failwith "Core: unbound variable"
+  try EvalRwhile.RIdentMap.find x s with Not_found -> failwith "Core: unbound variable"
 
 let rec eval_cexp (s : EvalRwhile.store) : cexp -> valT = function
   | XVar x      -> eval_var s x
@@ -158,7 +158,8 @@ let rec inv_core : core -> core = function
 let eval_program_core (p : program) (v : valT) : valT =
   let p' = MacroRwhile.expMacProgram p in
   let Prog (_, x, c, y) = p' in
-  let s  = List.map (fun z -> (z, VNil)) (EvalRwhile.varProgram p') in
+  let s  = List.fold_left (fun m z -> EvalRwhile.RIdentMap.add z VNil m)
+             EvalRwhile.RIdentMap.empty (EvalRwhile.varProgram p') in
   let s1 = EvalRwhile.rupdate (x, EvalRwhile.desugar_val v) s in
   let s2 = eval_core s1 (elaborate c) in
   EvalRwhile.evalVariable s2 (Var y)

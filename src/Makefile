@@ -1,5 +1,8 @@
-OCAMLC=ocamlfind ocamlc -g -package extlib -linkpkg
-#OCAMLC=ocamlfind ocamlopt -warn-error A -package extlib -linkpkg
+# NATIVE by default (~2x faster than bytecode; decisive with the Map-backed store
+# for self-applying the specialiser).  Needs `eval $(opam env)` so ocamlfind finds
+# the native extlib/alcotest.  Swap the two lines for a bytecode build.
+OCAMLC=ocamlfind ocamlopt -g -package extlib -linkpkg
+#OCAMLC=ocamlfind ocamlc -g -package extlib -linkpkg
 
 all: ri
 

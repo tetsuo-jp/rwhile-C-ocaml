@@ -67,6 +67,12 @@ let program_testable =
 
 (* ===== Store operations tests ===== *)
 
+(* Build a store (a Map) from an association list -- the store is now a
+ * balanced-tree map (EvalRwhile.RIdentMap), not a list. *)
+let store_of_list l =
+  List.fold_left (fun m (x, v) -> EvalRwhile.RIdentMap.add x v m)
+    EvalRwhile.RIdentMap.empty l
+
 let test_insert_empty () =
   let id = RIdent "X" in
   Alcotest.(check (list (pair (of_pp (fun fmt (RIdent s) -> Format.pp_print_string fmt s)) valT_testable)))
@@ -76,32 +82,32 @@ let test_insert_empty () =
 
 let test_insert_existing () =
   let x = RIdent "X" in
-  let store = [(x, VNil); (RIdent "Y", VNil)] in
+  let store = [(x, VNil); (RIdent "Y", VNil)] in     (* insert is a list op *)
   let result = EvalRwhile.insert (x, VNil) store in
   Alcotest.(check int) "same length" 2 (List.length result)
 
 let test_rupdate_nil_to_val () =
   let x = RIdent "X" in
-  let store = [(x, VNil)] in
+  let store = store_of_list [(x, VNil)] in
   let result = EvalRwhile.rupdate (x, vtrue) store in
-  Alcotest.(check valT_testable) "rupdate nil->val" vtrue (List.assoc x result)
+  Alcotest.(check valT_testable) "rupdate nil->val" vtrue (EvalRwhile.RIdentMap.find x result)
 
 let test_rupdate_val_to_same () =
   let x = RIdent "X" in
-  let store = [(x, vtrue)] in
+  let store = store_of_list [(x, vtrue)] in
   let result = EvalRwhile.rupdate (x, vtrue) store in
-  Alcotest.(check valT_testable) "rupdate val->nil" VNil (List.assoc x result)
+  Alcotest.(check valT_testable) "rupdate val->nil" VNil (EvalRwhile.RIdentMap.find x result)
 
 let test_rupdate_val_to_nil () =
   let x = RIdent "X" in
   let v = VCons (VNil, VCons (VNil, VNil)) in
-  let store = [(x, v)] in
+  let store = store_of_list [(x, v)] in
   let result = EvalRwhile.rupdate (x, VNil) store in
-  Alcotest.(check valT_testable) "rupdate keeps val" v (List.assoc x result)
+  Alcotest.(check valT_testable) "rupdate keeps val" v (EvalRwhile.RIdentMap.find x result)
 
 let test_rupdate_different_fails () =
   let x = RIdent "X" in
-  let store = [(x, VCons (VNil, VNil))] in
+  let store = store_of_list [(x, VCons (VNil, VNil))] in
   Alcotest.check_raises "rupdate different values fails"
     (Failure "error in update")
     (fun () -> ignore (EvalRwhile.rupdate (x, VCons (VNil, VCons (VNil, VNil))) store))
@@ -110,86 +116,86 @@ let test_rupdate_not_found () =
   let x = RIdent "X" in
   Alcotest.check_raises "rupdate not found"
     (Failure ("Variable X is not found (1)"))
-    (fun () -> ignore (EvalRwhile.rupdate (x, VNil) []))
+    (fun () -> ignore (EvalRwhile.rupdate (x, VNil) (store_of_list [])))
 
 let test_update_replace () =
   let x = RIdent "X" in
-  let store = [(x, VNil)] in
+  let store = store_of_list [(x, VNil)] in
   let result = EvalRwhile.update (x, vtrue) store in
-  Alcotest.(check valT_testable) "update replaces" vtrue (List.assoc x result)
+  Alcotest.(check valT_testable) "update replaces" vtrue (EvalRwhile.RIdentMap.find x result)
 
 let test_all_cleared_true () =
-  let store = [(RIdent "X", VNil); (RIdent "Y", VNil)] in
+  let store = store_of_list [(RIdent "X", VNil); (RIdent "Y", VNil)] in
   Alcotest.(check bool) "all cleared" true (EvalRwhile.all_cleared store)
 
 let test_all_cleared_false () =
-  let store = [(RIdent "X", VNil); (RIdent "Y", vtrue)] in
+  let store = store_of_list [(RIdent "X", VNil); (RIdent "Y", vtrue)] in
   Alcotest.(check bool) "not all cleared" false (EvalRwhile.all_cleared store)
 
 (* ===== Expression evaluation tests ===== *)
 
 let test_eval_val () =
-  let store = [] in
+  let store = store_of_list [] in
   let result = EvalRwhile.evalExp store (EVal VNil) in
   Alcotest.(check valT_testable) "eval nil literal" VNil result
 
 let test_eval_var () =
   let x = RIdent "X" in
-  let store = [(x, vtrue)] in
+  let store = store_of_list [(x, vtrue)] in
   let result = EvalRwhile.evalExp store (EVar (Var x)) in
   Alcotest.(check valT_testable) "eval var" vtrue result
 
 let test_eval_cons () =
-  let store = [] in
+  let store = store_of_list [] in
   let result = EvalRwhile.evalExp store (ECons (EVal VNil, EVal (VAtom (Atom "'a")))) in
   Alcotest.(check valT_testable) "eval cons" (VCons (VNil, VAtom (Atom "'a"))) result
 
 let test_eval_hd () =
   let x = RIdent "X" in
   let v = VCons (VAtom (Atom "'a"), VNil) in
-  let store = [(x, v)] in
+  let store = store_of_list [(x, v)] in
   let result = EvalRwhile.evalExp store (EHd (EVar (Var x))) in
   Alcotest.(check valT_testable) "eval hd" (VAtom (Atom "'a")) result
 
 let test_eval_tl () =
   let x = RIdent "X" in
   let v = VCons (VAtom (Atom "'a"), VAtom (Atom "'b")) in
-  let store = [(x, v)] in
+  let store = store_of_list [(x, v)] in
   let result = EvalRwhile.evalExp store (ETl (EVar (Var x))) in
   Alcotest.(check valT_testable) "eval tl" (VAtom (Atom "'b")) result
 
 let test_eval_hd_nil_fails () =
-  let store = [] in
+  let store = store_of_list [] in
   Alcotest.check_raises "hd nil fails"
     (Failure "No head. Expression hd nil has value nil")
     (fun () -> ignore (EvalRwhile.evalExp store (EHd (EVal VNil))))
 
 let test_eval_tl_nil_fails () =
-  let store = [] in
+  let store = store_of_list [] in
   Alcotest.check_raises "tl nil fails"
     (Failure "No tail. Expression tl nil has value nil")
     (fun () -> ignore (EvalRwhile.evalExp store (ETl (EVal VNil))))
 
 let test_eval_eq_true () =
-  let store = [] in
+  let store = store_of_list [] in
   let result = EvalRwhile.evalExp store (EEq (EVal VNil, EVal VNil)) in
   Alcotest.(check valT_testable) "=? nil nil = true" vtrue result
 
 let test_eval_eq_false () =
-  let store = [] in
+  let store = store_of_list [] in
   let result = EvalRwhile.evalExp store (EEq (EVal VNil, EVal (VAtom (Atom "'a")))) in
   Alcotest.(check valT_testable) "=? nil 'a = false" vfalse result
 
 let test_eval_pair_cons () =
-  let result = EvalRwhile.evalExp [] (EPair (EVal (VCons (VNil, VNil)))) in
+  let result = EvalRwhile.evalExp (store_of_list []) (EPair (EVal (VCons (VNil, VNil)))) in
   Alcotest.(check valT_testable) "pair? (nil.nil) = true" vtrue result
 
 let test_eval_pair_atom () =
-  let result = EvalRwhile.evalExp [] (EPair (EVal (VAtom (Atom "'a")))) in
+  let result = EvalRwhile.evalExp (store_of_list []) (EPair (EVal (VAtom (Atom "'a")))) in
   Alcotest.(check valT_testable) "pair? 'a = false" vfalse result
 
 let test_eval_pair_nil () =
-  let result = EvalRwhile.evalExp [] (EPair (EVal VNil)) in
+  let result = EvalRwhile.evalExp (store_of_list []) (EPair (EVal VNil)) in
   Alcotest.(check valT_testable) "pair? nil = false" vfalse result
 
 (* parse + full-program round trip: confirms `pair?` lexes/parses and the p2d
@@ -490,7 +496,7 @@ let test_eval_eq_check () =
 let test_eval_eq_check_false () =
   (* Test =? with unequal values: =? 'a nil = nil (false) *)
   (* Use evalExp directly instead of full program to avoid cleanup constraints *)
-  let store = [(RIdent "X", VAtom (Atom "'a"))] in
+  let store = store_of_list [(RIdent "X", VAtom (Atom "'a"))] in
   let result = EvalRwhile.evalExp store (EEq (EVar (Var (RIdent "X")), EVal VNil)) in
   Alcotest.(check valT_testable) "=? 'a nil" vfalse result
 
@@ -2228,11 +2234,12 @@ let test_core_reversible_swap () =
   let p  = parse_program core_swap_prog in
   let cr = core_body core_swap_prog in
   let s0 = EvalRwhile.rupdate (AbsRwhile.RIdent "X", parse_val "('a . 'b)")
-             (List.map (fun z -> (z, AbsRwhile.VNil))
-                       (EvalRwhile.varProgram (MacroRwhile.expMacProgram p))) in
+             (store_of_list (List.map (fun z -> (z, AbsRwhile.VNil))
+                       (EvalRwhile.varProgram (MacroRwhile.expMacProgram p)))) in
   let t  = Core.eval_core s0 cr in
   let s' = Core.eval_core t (Core.inv_core cr) in
-  Alcotest.(check bool) "core inv_core reverses the store" true (s' = s0)
+  Alcotest.(check bool) "core inv_core reverses the store" true
+    (EvalRwhile.RIdentMap.equal (=) s' s0)
 
 (* N1 (AGDA_CORRESPONDENCE.md, gap G2): the Agda model proves Core's elaboration
  * and normalization semantics-preserving (RWhileCoreExp / RWhileElabCom).  This
