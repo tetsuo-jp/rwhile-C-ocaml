@@ -208,3 +208,22 @@
   （Mogensen Janus PE 2011、Glück–Normann 2024、可逆フローチャート PE 2024）は **fp1＋反転射影どまりで
   自己適用 fp2/fp3 は無い**＝本研究（自己適用可能な可逆 PE による fp2/fp3・可逆 cogen）が中核的新規性。
   詳細な位置づけ・出典・公表前の確認事項は **`RELATED_WORK.md`** を参照。
+
+## 8. 【達成】spec_av_rev の自己適用 fp2/fp3 が GREEN（2026-07-06, commit `2ce7cc6`）
+
+上記「中核的新規性・未達」だった**可逆 PE の自己適用**を達成。`reversible-spec` 群に
+`test_fp2_rev_second_projection`／`test_fp3_rev_cogen` を追加し、全 [OK]：
+- **fp2-rev**：`comp_rev = [spec_av_rev]((spec_av_rev.('S.ri_min)))`＝**可逆コンパイラ**、
+  `[comp_rev](('S.op)) == B_rev`（fp1-rev 残余）かつ compiled op が正答。
+- **fp3-rev**：`comp3_rev = [spec_av_rev]((spec_av_rev.('S.spec_av_rev)))`＝**可逆 cogen**、
+  `[[comp3_rev]('S.ri_min)](('S.op)) == B_rev`。
+- fp1 可逆性 round-trip も維持（[OK]）。
+
+**原因と修正**：lever2 delocalization の `NewV ^= VRE`（uncompute-by-recompute, `NewV==VRE` 前提）が
+自己適用で不可逆化（静的変数更新の VAVx 分岐が NewV を変化させ、末尾 clear 時に `NewV=('S.nil) ≠
+VRE=(nil.(nil.nil))`）。→ `CLEAR(NewV)`（無条件可逆・GARB push、spec_av_clean と一致）に revert。
+他3 deloc（CBoth/CBothS/CVT）は set→(if 非改変)→clear で同一 source ゆえ自己適用でも可逆＝保持。
+
+**ビルド注意**：test-suite は `eval $(opam env) && make test-suite` が必要（binary は別 opam スイッチ製に
+なりがち＝ミスマッチ）。`.rwhile` はデータで実行時読込なので `make` 不要。実行は
+`./test-suite test reversible-spec`（各 fp2-rev/fp3-rev は自己適用で ~11分/より長い）。
