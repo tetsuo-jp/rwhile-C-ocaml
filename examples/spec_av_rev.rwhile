@@ -937,7 +937,11 @@ macro SPEC-STEP-AV(Cd, Cd', RCode)
           CLEAR(CKNew)
         fi CKNil;
         CLEAR(CKNil);
-        NewV ^= VRE;
+        CLEAR(NewV);               (* was `NewV ^= VRE` (deloc): unsafe under
+                                      self-application -- NewV is not reliably
+                                      == VRE here (the VAVx branch above mutates
+                                      it), so revert to the unconditional GARB
+                                      clear (matches spec_av_clean). *)
         AVx <= cons TAVx VAVx;     (* reassemble ('S . VAVx') *)
         UPDATE(Vl, K, AVx)         (* slot = new AV  (AVx preserved) *)
       else

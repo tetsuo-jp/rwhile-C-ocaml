@@ -1705,6 +1705,46 @@ let test_fp3_cogen () =
   check_op "'swap";
   check_op "'id"
 
+(* fp2 for the REVERSIBLE specializer spec_av_rev (self-application of the reversible
+ * PE -- the core novelty).  comp_rev = [spec_av_rev]((spec_av_rev . ('S.ri_min))) is
+ * a reversible compiler; [comp_rev](('S.op)) must equal the fp1-rev residual
+ * B_rev = [spec_av_rev]((ri_min.('S.op))), and the compiled op must run correctly.
+ * SLOW. *)
+let test_fp2_rev_second_projection () =
+  let rev = parse_file_program (examples_dir ^ "/spec_av_rev.rwhile") in
+  let inner = Program2DataRwhile.program2data rev in
+  let rimin = Program2DataRwhile.program2data
+      (parse_file_program (examples_dir ^ "/ri_min.rwhile")) in
+  let comp = EvalRwhile.evalProgram rev (spec_in inner rimin) in
+  let check_op op =
+    let b = EvalRwhile.evalProgram rev (spec_in rimin (atom op)) in
+    let comp_op = run_comp_direct comp (VCons (atom "'S", atom op)) in
+    Alcotest.(check valT_testable)
+      (Printf.sprintf "fp2-rev: [comp_rev](('S.%s)) == fp1-rev residual B" op) b comp_op;
+    comp_op in
+  let comp_swap = check_op "'swap" in
+  ignore (check_op "'id");
+  Alcotest.(check valT_testable) "fp2-rev end-to-end: [[comp_rev]'swap](('a.'b)) = ('swap.('b.'a))"
+    (parse_val "('swap . ('b . 'a))") (run_comp_direct comp_swap (parse_val "('a . 'b)"))
+
+(* fp3 (cogen) for the reversible specializer: comp3_rev = [spec_av_rev]((spec_av_rev
+ * . ('S.spec_av_rev))); [comp3_rev](('S.ri_min)) is the reversible ri_min compiler,
+ * and [that](('S.op)) == B_rev.  VERY SLOW. *)
+let test_fp3_rev_cogen () =
+  let rev = parse_file_program (examples_dir ^ "/spec_av_rev.rwhile") in
+  let inner = Program2DataRwhile.program2data rev in
+  let rimin = Program2DataRwhile.program2data
+      (parse_file_program (examples_dir ^ "/ri_min.rwhile")) in
+  let comp3  = EvalRwhile.evalProgram rev (spec_in inner inner) in
+  let comp2' = run_comp_direct comp3 (VCons (atom "'S", rimin)) in
+  let check_op op =
+    let b = EvalRwhile.evalProgram rev (spec_in rimin (atom op)) in
+    Alcotest.(check valT_testable)
+      (Printf.sprintf "fp3-rev: [[comp3_rev]('S.ri_min)](('S.%s)) == B_rev" op)
+      b (run_comp_direct comp2' (VCons (atom "'S", atom op))) in
+  check_op "'swap";
+  check_op "'id"
+
 (* Reversible specializer prototype (examples/spec_av_rev.rwhile): CLEAR pushes the
  * discarded value onto a garbage stack GARB instead of X^=X, and main embeds GARB
  * into the residual's DEAD (constant-true) else-branch (EMBED-GARB).  This makes
@@ -2386,6 +2426,8 @@ let () =
     ];
     "reversible-spec", [
       Alcotest.test_case "spec_av_rev: clean-store run, [comp] correct, INV round-trips input" `Slow test_rev_spec_dead_garbage;
+      Alcotest.test_case "fp2-rev: [spec_av_rev]((spec_av_rev.ri_min)) compiles ri_min (comp==B)" `Slow test_fp2_rev_second_projection;
+      Alcotest.test_case "fp3-rev: [spec_av_rev]((spec_av_rev.spec_av_rev)) = reversible cogen" `Slow test_fp3_rev_cogen;
     ];
     "refactor-gate", [
       Alcotest.test_case "spec_av_clean == spec_av (fp1 residuals identical)" `Quick test_clean_equiv_spec_av;
