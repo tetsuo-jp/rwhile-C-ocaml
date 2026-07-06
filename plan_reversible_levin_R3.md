@@ -90,3 +90,31 @@ encodable にした）。次は:
 - 実測: 本リポジトリ `examples/measure_ri_overhead.sh`, `plan_reversible_levin.md`
 - 古典テンプレート: `while-C-ocaml` の `StepCount`/`StepCountMono`/`CostRelation`/`SintCost`/
   `IntEfficient`/`LevinGrounded`
+
+## 進捗更新 + 残り R3d/R3e の分解（2026-07-06）
+
+引き継ぎ後、while-C-ocaml 側の並行セッションで大きく前進（全て green・公理ゼロ・コミット済み）:
+- **R3c step 1 完了**: `RevSelfInterp.agda` — 意味論的自己解釈器 `usint`（fuel 付き tag dispatch）
+  + `usint-correct` + 無償の `usint-reversible`。
+- **R1a'-guard 完了**: `RevLoop.agda` — データ依存可逆ループ + `inv-sound`。
+- **R3c step 2 の brick 1–2 完了**: `RCmdL.agda`（ループ付き encodable 一階可逆言語）+
+  `RCmdLEnc.agda`（encoding round-trip）。
+- **R3d fuel レベル完了**: `RevSintCost.agda` — **`int-efficient-rev : size c ≤ n →
+  usintC n ⌜c⌝ s ≤ a-rev · ocost c s`（a-rev = 4）**。driver レベルの線形オーバヘッドは定理に。
+
+**残りの分解（3トラック・各 brick は緑コミット単位）**: 正本
+`while-C-ocaml/docs/REV-LEVIN-R3D-BRICKS.md` 参照。要旨:
+- **Track 1（今すぐ・S+S）**: R3e driver レベル — `RevLevinGrounded`（`LevinGrounded` の
+  双子、a-rev=4 を Layer A に食わせる）+ トレードオフ束ね（× no-clean × Bennett 上界）
+  → **可逆 Levin 定理が driver レベルで主張可能に**。
+- **Track 2（364× モデル）**: 抽象ストア（lookup/update コスト = 長さ L の walk、S1）+
+  **汎用線形オーバヘッド補題**（per-op 課金 κ≤K ⇒ icost ≤ suc K·ocost、一度だけ証明して
+  3 回使う、S2）+ 多変数言語 S3 + ストア持ち回り解釈器 S4（per-op ≤ k+2L = Vl-walk 指針の
+  補題化）→ **a-rev(L) はストアサイズに affine**（L≈75 で実測 364× の形、S5）。
+- **Track 3（プログラムレベル rsint）**: **可逆 defunctionalization** — fuel の再帰を
+  agenda ループ（todo/done スタック + store）に。todo→done の移動が単射性を保ち、
+  **done スタックこそ Bennett ガーベジ**（R0b の具体化 = ri.rwhile が (⌜p⌝ . result) を
+  出す理由そのもの）。P1 costL → P2 メタ agenda ≡ usint → P3 RCmdL 本体 → P4 反復数
+  bound ⇒ プログラムレベル a-revL → P5 コストモデル正準化。
+
+順序推奨: E1→E2（定理主張）→ S2（共有補題）→ Track 2/3 は並行可。
