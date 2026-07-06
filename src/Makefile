@@ -30,7 +30,7 @@ d2p: BNFC_Util.ml AbsRwhile.ml PrintRwhile.ml ParRwhile.mli ParRwhile.ml LexRwhi
 	$(OCAMLC) -o $@ $^
 
 # measure_proj: baseline the Futamura-projection residual sizes (idea 1).
-measure_proj: BNFC_Util.ml AbsRwhile.ml PrintRwhile.ml ParRwhile.mli ParRwhile.ml LexRwhile.ml Desugar.ml InvRwhile.ml Subst.ml MacroRwhile.ml EvalRwhile.ml Program2DataRwhile.ml Core.ml measure_proj.ml
+measure_proj: BNFC_Util.ml AbsRwhile.ml PrintRwhile.ml ParRwhile.mli ParRwhile.ml LexRwhile.ml Desugar.ml InvRwhile.ml Subst.ml MacroRwhile.ml EvalRwhile.ml Program2DataRwhile.ml Core.ml Simp.ml measure_proj.ml
 	$(OCAMLC) -o $@ $^
 
 # specsize: size spec_av's AV store (FpN) to a subject program's variable count.
