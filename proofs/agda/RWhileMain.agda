@@ -212,3 +212,17 @@ open import RWhileOfflineBTA4 public
 open import RWhileOfflineBTA5 public
   using ( gen; gen-sound; fp3-eq
         ; gen-keeps-int-symbolic; genbug-wrong-on-int )
+
+-- stage 6 -- the production-faithful fix locus: the observed `('val.'swap)` embed is
+-- AV-LIFT of a static leaf (prodThen-car-const); the BT-driven fix is fp1-identical
+-- under 'S (fix-agrees-on-fp1) and residualises under 'D (fixThen-car-tracks).
+open import RWhileOfflineBTA6 public
+  using ( prodThen; prodThen-car-const; prodThen-car-unsound
+        ; fixThen; fix-agrees-on-fp1; fixThen-car-tracks; fixThen-car-nonstatic )
+
+-- stage 7 -- DISPATCH preservation: with an opcode dispatch (`if x2 = 'swap …`), the
+-- correct compiler dispatches (comp-swap ≠ comp-id, each correct by spec1-sound),
+-- while freezing the opcode collapses the dispatch and is wrong (compbug-wrong) --
+-- exactly the comp2 symptom, closed.
+open import RWhileOfflineBTA7 public
+  using ( dispatchExpr; comp-swap; comp-id; compbug-ignores-opcode; compbug-wrong )
