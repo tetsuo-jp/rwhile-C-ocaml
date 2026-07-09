@@ -120,7 +120,19 @@ Agda ブリック（RevSintCost の a-rev 定数、full-run 反転、program-lev
   保つ＝非自明）、`spec1bug-wrong-on-source`（stage1 で s2 凍結は unsound）、`gain`（stage1 静的部分は
   完全畳込）。
 
+- **stage5 `RWhileOfflineBTA5.agda`**（commit acdcc23）：三段 cogen（fp3）。インタプリタ s1 も
+  cogen 構築時は記号的＝三入力（s1/s2/d）を三穴残余 `Code3`（j1/j2/jd）＋stage0 `AV3` で表現
+  （stage4 の `evalE2`/`Exp2` を再利用）。`gen-sound`（cogen は全体として正しい）、`generate`
+  （j1=int 具体化）／`compile`（j2=s2）／**`fp3-eq`（GENERATE→COMPILE→run＝直接評価＝Futamura
+  fp3 等式）**、`gen-keeps-int-symbolic`（正しい cogen は int を記号的に保つ＝真の生成器）、
+  `genbug-wrong-on-int`（int 凍結は unsound）、`gain`（定数/構造部分は stage0 で畳込）。
+
+**⇒ offline BTA 設計図が stage1-5 で完成**（fp1 バグ診断→正しい挙動/利得→fp2 二段等式→fp3
+三段等式、全 --safe 公理ゼロ、`check.sh` PASS=57）。over-static fp2/fp3 バグ＝束縛時刻 congruence
+違反であり、修正＝各段のソース/インタプリタ位置を凍結せず**穴として残余化（BT 駆動）**すること、を
+機械検証で確立。
+
 **次の一手（未着手）**：(a) この設計図を本番 `spec_av_bti.rwhile` の :1051 修正へ落とす
-（selective+loop-BTA と統合、`measure_proj gate`/`comp2-loops` で fp1 緑＋comp2 非自明を確認）、
-または (b) Agda で fp3（cogen＝三段目、`spec1` を自身に適用）へ拡張、または `RWhileMain` へ
-再エクスポートし論文 mechanization に接続。
+（selective+loop-BTA と統合、`measure_proj gate`/`comp2-loops` で fp1 緑＋comp2 非自明を確認）＝
+本論文①の必達成果に直結、または (b) `RWhileMain` へ `fp2-eq`/`fp3-eq` 等を再エクスポートし論文
+mechanization ドキュメントへ接続。
