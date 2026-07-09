@@ -94,7 +94,25 @@ Agda ブリック（RevSintCost の a-rev 定数、full-run 反転、program-lev
 （＝後戻りしにくい大規模変更）は**先に Agda で設計図（健全性＋no-over-commit）を固めてから**
 本番 `spec_av` 実装に落とす。
 
-**現在の着手**：①-(2) の Agda 設計図の第1ブリック `proofs/agda/RWhileOfflineBTA.agda`
-— 二段階 BT の offline AV 構成子 `mkAV` と「静的 AV は ρ 非依存（static-stability）」を核に、
-**over-static バグ＝束縛時刻 congruence 違反**であることを定理化し、congruence 駆動の offline
-spec は原理的にこれを起こせない（`mkAV dyn` は決して静的 AV を返さない）ことを証明する。
+**着手済み（Agda 設計図・全 --safe 公理ゼロ、`check.sh` PASS=55）**：①-(2) の offline BTA を
+3ブリックで機械検証。本番 `spec_av` 実装の設計図が揃った。
+- **stage1 `RWhileOfflineBTA.agda`**（commit 6b8bf7e）：`static-stability`（静的 AV は ρ 非依存）
+  → `over-commit-unsound`/`no-static-identity`（動的スロットは静的 AV で表現不能＝'S 凍結 unsound）、
+  BT 駆動 offline 構成子 `mkAV`＋`mkAV-dyn-nonstatic`（`dyn` は決して静的 AV を返さない＝:1051 の
+  正しい修正形）、誠実 offline `spec2` の `spec2-sound`＋`spec2-static`（congruence 構成的）。
+- **stage2 `RWhileOfflineBTA2.agda`**（commit de66afc）：静的ソース Val→AV 一般化で自己適用段
+  （記号的ソース）をモデル化。`spec2g`（ソース位置を束縛時刻 pass-through）の任意ソース健全性
+  `spec2g-sound`、fp1＝静的インスタンス `spec2≡spec2g`。バグモデル `spec2bug`（:1051 の 'S 凍結）の
+  `spec2bug-ok-on-static`（fp1 では不可視）／`spec2bug-wrong-on-symbolic`（fp2 で unsound）。
+- **stage3 `RWhileOfflineBTA3.agda`**（commit 42c372a）：本論文①目標（comp2<|spec|）に対応。
+  `spec2-noD-isS`/`gain`（完全静的部分式は単一静的リーフに畳込＝最大利得）、`dispatch-resolved`
+  （静的ディスパッチ解決）、`dyn-survives`（動的部分は D ホールで残余化＝非凍結）。
+
+**結論**：over-static fp2 バグ＝束縛時刻 congruence 違反。修正＝ソース位置を **AV pass-through
+／`mkAV` 駆動**（BT が動的なら S でなく D）。この設計図に沿って本番 `spec_av.rwhile:1051`
+（`FpPart <= cons 'C (cons (cons 'S Src) …)` の無条件 'S）を BT 駆動に置換するのが次の実装ステップ。
+
+**次の一手（未着手）**：(a) この設計図を本番 `spec_av_bti.rwhile` の :1051 修正へ落とす
+（selective+loop-BTA と統合、`measure_proj gate`/`comp2-loops` で fp1 緑＋comp2 非自明を確認）、
+または (b) Agda 側をさらに進め、二段合成 `spec2g∘spec2g` で comp2 相当の非自明残余を構成し
+サイズ減を定理化。
