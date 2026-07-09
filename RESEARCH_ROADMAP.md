@@ -151,7 +151,15 @@ Agda ブリック（RevSintCost の a-rev 定数、full-run 反転、program-lev
   （BT 駆動 mkAV）は **BT='S で本番と byte 同一＝fp1 無退行**（`fix-agrees-on-fp1`）かつ BT='D で
   D ホール＝runtime 追従（`fixThen-car-tracks`）。CAVEAT：どのスロットが誤って静的かの特定は
   live trace 要（修正の『形と fp1 安全性』を証明）。
-- **`RWhileMain` 再エクスポート**（commit 262949b）：stage1-5 の主要定理を capstone へ公開
+- **stage7 `RWhileOfflineBTA7.agda`**（commit 87a8304）：ディスパッチ保存で stage6 の CAVEAT を
+  閉じた。opcode ディスパッチ（`if x2='swap then…else…`）を二段モデルに追加し、式言語に eEq/eIf、
+  AV 特殊化器に avEq2/avIf2（本番 AV-EQ:224 と 'cond ハンドラ対応：静的テスト→分岐解決／動的
+  テスト→残余化 kIf）を搭載・健全性証明。`spec1-sound` が dispatch 込みで成立＝正しいコンパイラ
+  （source 記号的）は全 opcode で正しく **実際にディスパッチ**（`comp-swap`=(d.d) ≠ `comp-id`=d）。
+  `spec1bug`（opcode 凍結）は `compbug-ignores-opcode`（常に else 枝＝opcode 無視）＋`compbug-wrong`
+  （swap で誤り）＝**:1111 型 over-static がディスパッチを潰す**ことを証明（実機 `('val.'swap)`
+  埋め込み＝ディスパッチ喪失の因果を裏付け）。
+- **`RWhileMain` 再エクスポート**（commit 262949b/87a8304）：stage1-7 の主要定理を capstone へ公開
   （機械検証を『主張する貢献』へ昇格）。
 
 **次の一手（未着手）**：(a-cont) 専任セッションで comp2 の誤静的スロットを live trace 特定
