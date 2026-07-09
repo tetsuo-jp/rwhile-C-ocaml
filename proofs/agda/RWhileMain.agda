@@ -226,3 +226,14 @@ open import RWhileOfflineBTA6 public
 -- exactly the comp2 symptom, closed.
 open import RWhileOfflineBTA7 public
   using ( dispatchExpr; comp-swap; comp-id; compbug-ignores-opcode; compbug-wrong )
+
+-- stage 8 -- the AGENDA (control-worklist) design rule, from the live-trace root cause
+-- (comp2 drops the then-branch, not a frozen value).  Unconditional structure may be
+-- flattened onto the agenda (seq-flatten-ok); a DYNAMIC conditional must stay a residual
+-- node with BOTH branches specialised (specOff-sound / specOff-keeps-branches), never a
+-- branch pushed onto the shared agenda -- doing so drops a branch and is unsound
+-- (specBug-riM collapses ri_min to echo-only; specBug-wrong).  Blueprint for the
+-- production agenda offline-isation.
+open import RWhileOfflineBTA8 public
+  using ( seq-flatten-ok; specOff; specOff-sound; specOff-keeps-branches
+        ; specBug; specBug-riM; specBug-wrong )
