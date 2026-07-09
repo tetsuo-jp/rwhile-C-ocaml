@@ -162,7 +162,18 @@ Agda ブリック（RevSintCost の a-rev 定数、full-run 反転、program-lev
 - **`RWhileMain` 再エクスポート**（commit 262949b/87a8304）：stage1-7 の主要定理を capstone へ公開
   （機械検証を『主張する貢献』へ昇格）。
 
-**次の一手（未着手）**：(a-cont) 専任セッションで comp2 の誤静的スロットを live trace 特定
-（トレースハーネス作成→どの SPEC-CMD-AV ステップで opcode が `S` 化するか）→ stage6 の `fixThen`
-パターンを該当箇所へ適用、`gate`/`dyncond`/`comp2-loops` で検証。または論文 mechanization
-ドキュメントへ stage1-6 を反映。
+**★2026-07-10 live-trace 根本原因を特定（`TRACE_comp2_root_cause.md`）**：多層シンボリック解析で
+`[comp2]('S.swap)==B:false` の根本原因を確定。誤出力（39n）は ri_min の **echo（`In<=cons Op X`）
+のみ**で、`if =? Op 'swap` の **then 枝（swap ボディ）が欠落**。原因＝OUTER が spec_av の
+**online worklist（agenda `Cd`）機構を自己適用下で residualize できない**：'cond の動的 `AnnT` 下で
+`Cd <= cons C Cd`（制御 agenda への push, :963）＋その後の worklist ループを忠実に residualize する
+必要があるが、「次に走らせるコードを条件付きで変える」を online スペシャライザは表現できない。
+⇒ **局所パッチ不能**（`cons 'S` 凍結面の個別 BT 化では agenda 機構が直らない）。誤出力の `('val.'swap)`
+は echo の Op（静的正しい）由来＝症状であってバグ源でない（真のバグは**欠落**）。正しい修正＝Agda
+`RWhileH2Worklist*`（四要素・機械検証済）の**実機化**＝spec_av の agenda を offline 化（複数専任
+セッション級）。BT-MKAV/selective/loop-BTA は**値**の束縛時刻を直したが**制御 agenda** は未対応＝
+「必要だが不十分」の正体。
+
+**次の一手（未着手）**：(a-cont) agenda の offline 化＝spec_av の worklist を、動的 `AnnT` 下でも
+agenda 上の静的プログラム片を記号的に保つ設計へ改造（RWhileH2Worklist を青写真に）。または論文
+mechanization ドキュメントへ stage1-7＋root-cause を反映。
