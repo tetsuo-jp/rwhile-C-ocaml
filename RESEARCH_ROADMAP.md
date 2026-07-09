@@ -144,7 +144,17 @@ Agda ブリック（RevSintCost の a-rev 定数、full-run 反転、program-lev
 違反であり、修正＝各段のソース/インタプリタ位置を凍結せず**穴として残余化（BT 駆動）**すること、を
 機械検証で確立。
 
-**次の一手（未着手）**：(a) この設計図を本番 `spec_av_bti.rwhile` の :1051 修正へ落とす
-（selective+loop-BTA と統合、`measure_proj gate`/`comp2-loops` で fp1 緑＋comp2 非自明を確認）＝
-本論文①の必達成果に直結、または (b) `RWhileMain` へ `fp2-eq`/`fp3-eq` 等を再エクスポートし論文
-mechanization ドキュメントへ接続。
+- **stage6 `RWhileOfflineBTA6.agda`**（commit 262949b）：実機症状↔修正パターンの接続。本番
+  AV-LIFT（:149 `lift(S v)=cVal v`）＋MKAV then 枝（:1111 `C(S src)(D cVar)`）を忠実モデル化し、
+  静的 car は `cVal src` に lift＝定数＝観測された `('val.'swap)`（`prodThen-car-lift/const`）、
+  静的 AV は runtime 依存 source を追えない（`prodThen-car-unsound`）。修正パターン `fixThen`
+  （BT 駆動 mkAV）は **BT='S で本番と byte 同一＝fp1 無退行**（`fix-agrees-on-fp1`）かつ BT='D で
+  D ホール＝runtime 追従（`fixThen-car-tracks`）。CAVEAT：どのスロットが誤って静的かの特定は
+  live trace 要（修正の『形と fp1 安全性』を証明）。
+- **`RWhileMain` 再エクスポート**（commit 262949b）：stage1-5 の主要定理を capstone へ公開
+  （機械検証を『主張する貢献』へ昇格）。
+
+**次の一手（未着手）**：(a-cont) 専任セッションで comp2 の誤静的スロットを live trace 特定
+（トレースハーネス作成→どの SPEC-CMD-AV ステップで opcode が `S` 化するか）→ stage6 の `fixThen`
+パターンを該当箇所へ適用、`gate`/`dyncond`/`comp2-loops` で検証。または論文 mechanization
+ドキュメントへ stage1-6 を反映。
