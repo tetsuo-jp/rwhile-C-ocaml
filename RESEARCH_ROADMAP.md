@@ -112,7 +112,15 @@ Agda ブリック（RevSintCost の a-rev 定数、full-run 反転、program-lev
 ／`mkAV` 駆動**（BT が動的なら S でなく D）。この設計図に沿って本番 `spec_av.rwhile:1051`
 （`FpPart <= cons 'C (cons (cons 'S Src) …)` の無条件 'S）を BT 駆動に置換するのが次の実装ステップ。
 
+- **stage4 `RWhileOfflineBTA4.agda`**（commit 0667847）：実際の二段 comp2（fp2 コンパイラ）。
+  三束縛時刻（s1=stage1 静的 / s2=stage2 ソース=stage1 では記号的 / d=実行時）を二穴残余
+  `Code2`（kS=ソース穴, kD=実行時穴）＋stage1 `AV2` で表現。`spec1-sound`（comp は全体として
+  正しいコンパイラ）、`compile`＋`compile-sound`＋**`fp2-eq`（COMPILE→RUN＝直接評価＝Futamura
+  fp2 等式、target は s2 非依存）**、`spec1-keeps-source-symbolic`（正しい comp は s2 を記号的に
+  保つ＝非自明）、`spec1bug-wrong-on-source`（stage1 で s2 凍結は unsound）、`gain`（stage1 静的部分は
+  完全畳込）。
+
 **次の一手（未着手）**：(a) この設計図を本番 `spec_av_bti.rwhile` の :1051 修正へ落とす
 （selective+loop-BTA と統合、`measure_proj gate`/`comp2-loops` で fp1 緑＋comp2 非自明を確認）、
-または (b) Agda 側をさらに進め、二段合成 `spec2g∘spec2g` で comp2 相当の非自明残余を構成し
-サイズ減を定理化。
+または (b) Agda で fp3（cogen＝三段目、`spec1` を自身に適用）へ拡張、または `RWhileMain` へ
+再エクスポートし論文 mechanization に接続。
