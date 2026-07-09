@@ -174,6 +174,15 @@ Agda ブリック（RevSintCost の a-rev 定数、full-run 反転、program-lev
 セッション級）。BT-MKAV/selective/loop-BTA は**値**の束縛時刻を直したが**制御 agenda** は未対応＝
 「必要だが不十分」の正体。
 
-**次の一手（未着手）**：(a-cont) agenda の offline 化＝spec_av の worklist を、動的 `AnnT` 下でも
-agenda 上の静的プログラム片を記号的に保つ設計へ改造（RWhileH2Worklist を青写真に）。または論文
-mechanization ドキュメントへ stage1-7＋root-cause を反映。
+- **stage8 `RWhileOfflineBTA8.agda`**（commit ecf094b）：live-trace 根本原因（agenda 機構）を受けた
+  **agenda offline 化の設計規則**を証明。dispatch 付き最小コマンド言語（SPEC-CMD-AV の agenda 抽象）で、
+  `seq-flatten-ok`（無条件 seq は agenda に flatten 可＝`Cd<=cons C Cd` が seq で正しい理由）、
+  `specOff-sound`/`specOff-keeps-branches`（**動的条件分岐は両枝を specialize した残余ノードに残す**
+  ＝agenda に片枝 push しない＝健全＋両枝保存＝修正）、`specBug-riM`/`specBug-wrong`（片枝のみ残すと
+  riM が echo のみに潰れ unsound＝comp2 の 39n 症状）。⇒ **実機修正の設計規則が確定**：SPEC-CMD-AV の
+  'cond で、動的テスト時は agenda push でなく両枝を sub-residual として specialize し `cond` 残余ノードに。
+
+**次の一手（未着手）**：(a-cont) stage8 の設計規則に沿って本番 SPEC-CMD-AV の 'cond 動的経路
+（:972-993）を「両枝を specialize して残余 cond に」へ改造（agenda に依存しない per-branch spec）→
+`gate`/`dyncond`/`comp2-loops` で検証。または論文 mechanization ドキュメントへ stage1-8＋root-cause
+を反映。
