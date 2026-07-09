@@ -170,3 +170,45 @@ open import RWhileLoopBTA public
 open import RWhileLoopBTARev public
   using (resLoop; resLoop-inv; resLoop-reversible; resLoop-inv-inv
         ; constEntry-no-iter)
+
+-- 案1-(2) (Agda-first): the OFFLINE binding-time analysis blueprint for the
+-- "real fp2" (comp2 < |spec|).  comp2's REMAINING obstruction (after the loop
+-- fix above) is the OVER-STATIC binding-time bug: spec_av.rwhile:1051 tags the
+-- source unconditionally 'S, freezing a slot that is dynamic under self-
+-- application.  These five stages prove the diagnosis and the fix as theorems.
+--
+-- stage 1 -- the bug IS a binding-time congruence violation: a fully-static AV is
+-- ρ-independent (static-stability), so no static AV can soundly abstract a dynamic
+-- slot (over-commit-unsound); the fix `mkAV` never freezes a dynamic BT to `S`
+-- (mkAV-dyn-nonstatic); the honest offline `spec2` is sound and congruent.
+open import RWhileOfflineBTA public
+  using ( static-stable; over-commit-unsound; no-static-identity
+        ; mkAV; mkAV-dyn-nonstatic; spec2; spec2-sound; spec2-static )
+
+-- stage 2 -- the self-application step: generalise the static source to an AV
+-- (which may be symbolic).  Pass-through `spec2g` is sound for ANY source
+-- (spec2g-sound); fp1 is its static instance (spec2≡spec2g); the :1051 freeze is
+-- invisible on static sources (fp1 green) but UNSOUND on symbolic ones (the fp2
+-- failure) -- spec2bug-ok-on-static / spec2bug-wrong-on-symbolic.
+open import RWhileOfflineBTA2 public
+  using ( spec2g; spec2g-sound; spec2≡spec2g
+        ; spec2bug; spec2bug-ok-on-static; spec2bug-wrong-on-symbolic )
+
+-- stage 3 -- the Futamura GAIN: a fully-static subexpression collapses to a
+-- single leaf (gain); static dispatch is resolved, dynamic parts survive as holes.
+open import RWhileOfflineBTA3 public
+  using ( gain; dispatch-resolved; dyn-survives )
+
+-- stage 4 -- the two-stage comp2 (the fp2 compiler) with the Futamura fp2 equation
+-- (compile ∘ generate = eval); the correct compiler keeps its source symbolic, and
+-- freezing it at stage 1 is unsound.
+open import RWhileOfflineBTA4 public
+  using ( spec1; spec1-sound; compile; fp2-eq
+        ; spec1-keeps-source-symbolic; spec1bug-wrong-on-source )
+
+-- stage 5 -- the three-stage cogen (fp3) with the Futamura fp3 equation
+-- (compile ∘ generate ∘ gen = eval); the correct cogen keeps the interpreter
+-- symbolic, and freezing it is unsound.
+open import RWhileOfflineBTA5 public
+  using ( gen; gen-sound; fp3-eq
+        ; gen-keeps-int-symbolic; genbug-wrong-on-int )
