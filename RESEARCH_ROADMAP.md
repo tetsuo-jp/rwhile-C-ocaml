@@ -40,6 +40,18 @@
   - **真の修正**：AV 代数に「静的・存在保証だが記号的」区分を入れる offline 化（大規模研究）。
     MKAV を congruence 駆動（BT=dynamic なら S でなく D/記号 AV を出す）に。
   - **会場**：RC / PEPM / IEICE 続報。
+  - **★2026-07-10 実機ベースライン再確認（(a) 着手）**：現行 `spec_av_bti.rwhile` は既に BT 対応
+    MKAV（:1107、Agda `mkAV` に対応）＋selective＋loop-BTA を搭載。それでも実測は
+    `[comp2]('S.swap) == B : false`（comp2=10691 nodes/0.005×、CLoop 4）。誤出力 39 nodes は
+    `var2 <= cons 'swap var2`＝`('val.'swap)` の**値埋め込み**（AV-LIFT が over-static な出力スロットを
+    lift）。一方 **fp1 gate PASS**（swap=103/id=63・意味・可逆性）かつ **`dyncond` 健全**
+    （`[comp]('x)='one`/`[comp](nil)='two`）＝**バグは自己適用特有**（spec_av が自分の
+    MKAV/ASSEMBLE/dispatch を特殊化するときだけ発症）。⇒ BT-MKAV は必要条件だが不十分。残る凍結は
+    ASSEMBLE-FP1（:270）の `AV-LIFT(AsAV)`／MKAV then 枝 `('S.Src)` が OUTER 残余化される経路にあり、
+    生の Src に束縛時刻情報が無いため一発編集は困難（fp1 は `('S.Src)` が必須）。**正しい修正＝
+    Agda 設計図（RWhileOfflineBTA1-5）の offline 二段化を本番へ写す大規模作業**（複数専任セッション級）。
+    検証道具は `measure_proj gate <spec>`（fp1 高速）／`dyncond <spec>`（動的cond 高速）／
+    `comp2-loops <spec>`（comp2 正しさ＋CLoop、数分）。
 
 ### ② 完全 spec_av の自己適用を Agda で閉じる〔機械検証の本丸・理論は済〕
 H1（spec 正当性）・H2 核（`RWhileH2HierOpt` で fp1/fp2/fp3 が証明済定理）・fuel/worklist モデル
