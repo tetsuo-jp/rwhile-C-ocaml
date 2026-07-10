@@ -22,6 +22,7 @@
 | `spec_av` の lift イディオム（`ASSEMBLE-FP1`） | `RWhileRevProj2Lift`：`idiom-ok`/`idiom-drift`/`fix-roundtrips`/`selfClear-masks` | **設計仕様を証明**（lift が operand 保存 ⇔ 成立） |
 | 可逆化ゴミ（`spec_av_rev`） | `RWhileRevProjGen`：`garbage-necessary`/`input-preserving-inj` | **抽象は証明**。実装は −57% を実測（`FINDINGS §6`） |
 | 反復ワークリスト（`PAT-READ-ITER`） | `RWhileIL`（flat-IL→R-WHILE 翻訳の意味保存・IL 可逆性） | **方法論は証明**（IL で証明し検証翻訳で移送）。`PAT-READ-ITER` 自体は未モデル |
+| `spec_av` の過剰静的化解消＝オフライン BTA 設計図（`MKAV`／`SPEC-CMD-AV` の 'cond 動的経路／agenda `Cd`） | `RWhileOfflineBTA1`–`9`（9 段、`RWhileMain` 再エクスポート）：`over-commit-unsound`/`mkAV-dyn-nonstatic`/`fp2-eq`/`fp3-eq`/`fix-agrees-on-fp1`/`compbug-wrong`/`seq-flatten-ok`/`specOff-keeps-branches`/`specBug-wrong`/`specOff-injective`/`specBug-not-injective` | **設計図を証明**（修正の形・fp1 安全性・ディスパッチ保存・agenda 設計規則・可逆性=単射性）。実機 comp2 の live-trace 根本原因（`TRACE_comp2_root_cause.md`）に対応。実機改造は未着手 |
 
 ## 2. ギャップ（埋めるべき順）
 
@@ -89,7 +90,8 @@ spec-correct（H1）と AV 代数健全性、`case` 健全性、ゴミ量的下�
 （Turing 完全ループ）の自己適用のみで、fuel-indexed モデルが要る。」
 
 ## 5. 最終状態（案2：G4・統一 fp1・H2核・非クロージャ/一般適用ハイアラーキ／案1：簡約器健全性＋選択肢2）
-- **Agda 形式化は 51 モジュールすべて `--safe` で通過**（postulate 0、唯一の仮定は `RWhileDetConcrete` の `funext`）。
+- **Agda 形式化は 61 モジュールすべて `--safe` で通過**（postulate 0、唯一の仮定は `RWhileDetConcrete` の `funext`；
+  うち `RWhileOfflineBTA1`–`9` はオフライン BTA 設計図＝§6 参照）。
 - **案1-B step(a) residualize の可逆性（`RWhileLoopBTARev.agda`）**：loop-BTA が residualize する loop
   （`from (lift e) do D loop L until (lift f)`）が**可逆な R-WHILE ループ**であることを `RWhileRevFull` から継承して明示。
   テストを Val 状態述語（残余コード実行の truthiness）に、本体を残余命令にして `RWhileRevFull.Core Val` の `loop` に一致
@@ -196,3 +198,28 @@ spec-correct（H1）と AV 代数健全性、`case` 健全性、ゴミ量的下�
   一様に表現する自己適用で、これには **fuel-indexed/部分性モデル（route A）**が必要。理由：全域メタ言語 `--safe` では
   Turing 完全対象言語の全域万能 `runU` が存在しえない（ループ付き spec_av に残る本質障害）。実機 byte 一致 fp2/fp3 が
   その経験的証拠。**＝案2は「構造モデルで H1＋H2核を達成、Turing 完全部のみ future work」**。
+
+## 6. オフライン BTA 設計図（`RWhileOfflineBTA1`–`9`、2026-07-10）＝過剰静的化(2)の解消
+
+案1 の残課題(2)＝過剰静的化の解消（束縛時刻オフライン化）に対し、後戻りしにくい本番改造に先立って
+Agda で**設計図を 9 段**機械検査した（全 `--safe`・公理ゼロ、capstone `RWhileMain` に再エクスポート）。
+実機 comp2 の live-trace 根本原因は `TRACE_comp2_root_cause.md` を参照。
+
+| 段 | モジュール | 主結果 | 対応する実機事象 |
+|---|---|---|---|
+| 1 | `RWhileOfflineBTA` | `static-stable`／`over-commit-unsound`／`no-static-identity`／`mkAV-dyn-nonstatic`／`spec2-sound`／`spec2-static` | 過剰静的化＝束縛時刻 congruence 違反。`MKAV` の無条件 `'S`（`spec_av.rwhile:1051`）は自己適用で unsound、修正は BT 駆動 `mkAV` |
+| 2 | `RWhileOfflineBTA2` | `spec2g-sound`／`spec2≡spec2g`／`spec2bug-ok-on-static`／`spec2bug-wrong-on-symbolic` | 自己適用段（記号的ソース）。凍結は fp1 で不可視・fp2 で unsound |
+| 3 | `RWhileOfflineBTA3` | `gain`／`dispatch-resolved`／`dyn-survives` | 本物の Futamura 利得（静的部分の完全畳込） |
+| 4 | `RWhileOfflineBTA4` | `spec1-sound`／`compile-sound`／**`fp2-eq`**／`spec1-keeps-source-symbolic`／`spec1bug-wrong-on-source` | 二段 comp2（fp2 コンパイラ）と第2射影等式 |
+| 5 | `RWhileOfflineBTA5` | `gen-sound`／**`fp3-eq`**／`gen-keeps-int-symbolic`／`genbug-wrong-on-int` | 三段 cogen（fp3）と第3射影等式 |
+| 6 | `RWhileOfflineBTA6` | `prodThen-car-const`／`prodThen-car-unsound`／`fix-agrees-on-fp1`／`fixThen-car-tracks`／`fixThen-car-nonstatic` | 実機症状 `('val.'swap)`＝静的リーフの `AV-LIFT`↔修正パターン、fp1 無退行 |
+| 7 | `RWhileOfflineBTA7` | `spec1-sound`(dispatch込)／`comp-swap`／`comp-id`／`compbug-ignores-opcode`／`compbug-wrong` | ディスパッチ保存（`AV-EQ`:224／'cond 対応）。凍結はディスパッチを潰す |
+| 8 | `RWhileOfflineBTA8` | `seq-flatten-ok`／`specOff-sound`／`specOff-keeps-branches`／`specBug-riM`／`specBug-wrong` | **根本原因＝agenda 機構**。seq は agenda 可、動的 cond は per-branch 残余（`Cd<=cons C Cd` :963／SPEC-STEP-AV :877） |
+| 9 | `RWhileOfflineBTA9` | `swapV-invol`／`rexec-exec`／`specOff-id`／`specOff-injective`／`specBug-collapses`／`specBug-not-injective` | **可逆性=情報消失なし**。分岐欠落は非単射＝可逆性違反、修正が単射性回復 |
+
+- **強さ**：**設計図（修正の形・fp1 安全性・ディスパッチ保存・agenda 設計規則・可逆性=単射性）を証明**。
+  値の束縛時刻（`mkAV`）だけでなく**制御 agenda の offline 化**（動的 cond で片枝 push せず両枝を残余化）が
+  必要という設計規則まで含む。実機の agenda offline 化（本番 `SPEC-CMD-AV` の 'cond 動的経路 :972-993 の改造）は
+  **未着手**（`gate`/`dyncond`/`comp2-loops` で検証予定）。
+- **論文反映済**：overleaf `formal/mechanization.tex` §`sec:agda-offline`（第1–9段を散文で記述、push 済）。
+- **全 61 モジュール `--safe` PASS**（`proofs/agda/check.sh`、postulate 0、唯一の仮定は `funext`）。
