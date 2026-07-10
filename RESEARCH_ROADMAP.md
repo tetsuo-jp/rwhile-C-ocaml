@@ -182,7 +182,15 @@ Agda ブリック（RevSintCost の a-rev 定数、full-run 反転、program-lev
   riM が echo のみに潰れ unsound＝comp2 の 39n 症状）。⇒ **実機修正の設計規則が確定**：SPEC-CMD-AV の
   'cond で、動的テスト時は agenda push でなく両枝を sub-residual として specialize し `cond` 残余ノードに。
 
-**次の一手（未着手）**：(a-cont) stage8 の設計規則に沿って本番 SPEC-CMD-AV の 'cond 動的経路
-（:972-993）を「両枝を specialize して残余 cond に」へ改造（agenda に依存しない per-branch spec）→
-`gate`/`dyncond`/`comp2-loops` で検証。または論文 mechanization ドキュメントへ stage1-8＋root-cause
-を反映。
+- **stage9 `RWhileOfflineBTA9.agda`**（commit d1fb206）：**可逆性/情報消失チェック**（ユーザー指摘）。
+  stage1-8 は forward soundness のみ証明していたが、R-WHILE は可逆言語で論文の核＝可逆スペシャライザの
+  意味は**単射**（情報消失なし）。(A) 残余の可逆性 `rexec-exec`（前進後に後進で store 復元）＋
+  `swapV-invol`。(B) スペシャライザの単射性：`specOff-id`/`specOff-injective`（正しい offline spec は
+  全枝保存＝制御構造の恒等＝単射＝情報保存）、`specBug-collapses`/`specBug-not-injective`（分岐落とし
+  バグは異なる2ソースを同一残余に潰す＝非単射＝情報破壊）。⇒ **comp2 の then 枝欠落は soundness バグ
+  でなく可逆性違反**（枝プログラムを破壊）。実機 fp1 も `gate` で `reversible=true` 確認済。
+
+**次の一手（未着手）**：(a-cont) stage8 の設計規則＋stage9 の可逆性制約に沿って本番 SPEC-CMD-AV の
+'cond 動的経路（:972-993）を「両枝を specialize して残余 cond に、**情報消失なし＝単射・可逆**」へ
+改造（agenda に依存しない per-branch spec）→ `gate`（reversible 含む）/`dyncond`/`comp2-loops` で検証。
+または論文 mechanization ドキュメントへ stage1-9＋root-cause を反映。
