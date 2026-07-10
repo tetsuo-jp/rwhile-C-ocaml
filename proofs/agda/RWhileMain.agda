@@ -237,3 +237,13 @@ open import RWhileOfflineBTA7 public
 open import RWhileOfflineBTA8 public
   using ( seq-flatten-ok; specOff; specOff-sound; specOff-keeps-branches
         ; specBug; specBug-riM; specBug-wrong )
+
+-- stage 9 -- REVERSIBILITY / information-loss check (R-WHILE is reversible; a reversible
+-- specialiser's meaning must be INJECTIVE).  Residuals are reversible (rexec-exec,
+-- swapV-invol); the correct offline specialiser is information-preserving hence injective
+-- (specOff-id / specOff-injective); the branch-dropping bug DESTROYS information and is
+-- NOT injective (specBug-collapses / specBug-not-injective) -- so comp2's dropped branch
+-- is a REVERSIBILITY violation, not just a soundness bug.
+open import RWhileOfflineBTA9 public
+  using ( swapV-invol; rexec; rexec-exec
+        ; specOff-id; specOff-injective; specBug-collapses; specBug-not-injective )
