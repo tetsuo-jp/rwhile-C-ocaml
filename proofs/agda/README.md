@@ -279,19 +279,30 @@ done by the accumulator induction `rev-rest`.
   specialiser is a `cata` folding a program into residual code; its fp1/2/3
   follow by the H1-then-hierarchy route (continuing work of #5).
 
+- `RWhileOfflineBTA.agda` … `RWhileOfflineBTA9.agda` — the **offline binding-time
+  blueprint** for the "real fp2" (removing spec_av's over-static bug); see the
+  dedicated section below.
+
 - `RWhileMain.agda` — **capstone**: re-exports the headline machine-checked
   results (spec-correct/H1, the p2d round-trips + injectivity, fp1U, self-rep,
-  the two Futamura-hierarchy instances `hier-*`/`gen-*`, simplifier soundness),
+  the two Futamura-hierarchy instances `hier-*`/`gen-*`, simplifier soundness,
+  and the offline-BTA blueprint stages 1–9),
   so importing one module type-checks all the marquee theorems together.
 
 ## Checking
 
 ```
 cd proofs/agda
-for f in RWhileRev RWhileRevFull RWhileValStore RWhileCRep RWhileCRepDet RWhileDet RWhileDetConcrete RWhileExec RWhileExecConcrete RWhileIL RWhileFutamura RWhileFutamura2 RWhileFutamura2Inst RWhileRevFutamura RWhileRevProjPaper RWhileRevProjInst RWhileRevProjGen RWhileCoreExp RWhileFp1Residual RWhileElabCom RWhileMacroSubst RWhileRevProj2Lift RWhileRevProj2BT RWhileRevProj2Self RWhileAVSound RWhileAVSpec RWhileP2D RWhileP2DProg RWhileAVSelfApp RWhileH2 RWhileH2Hier RWhileH2Hier2 RWhileSimpSound RWhileCaseInv RWhileGarbageBound RWhileH2HierRec RWhileMain; do
-  agda --safe $f.agda
+for f in RWhile*.agda; do
+  agda --safe "$f"
 done
+# or, equivalently, the bundled runner which reports PASS/FAIL counts:
+./check.sh          # currently: PASS=61 FAIL=0
 ```
+
+`RWhileMain.agda` transitively imports the marquee results (including the
+offline-BTA blueprint `RWhileOfflineBTA1`–`9`), so `agda --safe RWhileMain.agda`
+type-checks them together.
 
 Requires Agda + agda-stdlib (the `standard-library` library, as used by
 `rev-alg-agda`).  All files are `--safe`: no postulates, holes, `TERMINATING`
@@ -436,3 +447,58 @@ Next: extend the IL with loops; instantiate determinism without `funext` via a
 first-order store; and connect the model to the OCaml (extraction, or an
 equivalence with a formal model of `eval`/`inv`) so the *implementation* — not
 only the model — is certified.
+
+## Offline binding-time blueprint (`RWhileOfflineBTA1`–`9`)
+
+`comp2 = [spec_av]((spec_av . ri_min))` is *incorrect* even after the loop-BTA fix:
+`[comp2]('S.swap)` keeps ri_min's echo but drops the `if =? Op 'swap` then-branch
+(the swap body).  A live trace (`../../TRACE_comp2_root_cause.md`) pins the cause to
+spec_av's **online control agenda**: a conditional is handled by pushing the taken
+branch onto `Cd` (`Cd <= cons C Cd`), which cannot be residualised once the test is
+dynamic under self-application.  These nine `--safe` modules prove the diagnosis and
+the fix as a blueprint for the production agenda offline-isation (all re-exported by
+`RWhileMain`):
+
+- `RWhileOfflineBTA.agda` — **stage 1**: the over-static bug *is* a binding-time
+  congruence violation.  A fully-static AV is ρ-independent (`static-stable`), so no
+  static AV can abstract a dynamic slot (`over-commit-unsound`); the BT-driven `mkAV`
+  never freezes a dynamic slot (`mkAV-dyn-nonstatic`); the honest offline `spec2` is
+  sound (`spec2-sound`) and congruent (`spec2-static`).
+- `RWhileOfflineBTA2.agda` — **stage 2**: the self-application step.  `spec2g`
+  (source as a possibly-symbolic AV) is sound for any source (`spec2g-sound`); the
+  freeze is invisible on static sources (`spec2bug-ok-on-static`) but unsound on
+  symbolic ones (`spec2bug-wrong-on-symbolic`).
+- `RWhileOfflineBTA3.agda` — **stage 3**: the Futamura gain — a fully-static
+  subexpression collapses to one leaf (`gain`); static dispatch resolves
+  (`dispatch-resolved`), dynamic parts survive as holes (`dyn-survives`).
+- `RWhileOfflineBTA4.agda` — **stage 4**: the two-stage `comp2` with the Futamura
+  **fp2 equation** (`fp2-eq`, compile ∘ generate = eval); the correct compiler keeps
+  its source symbolic (`spec1-keeps-source-symbolic`), freezing it is unsound
+  (`spec1bug-wrong-on-source`).
+- `RWhileOfflineBTA5.agda` — **stage 5**: the three-stage cogen with the Futamura
+  **fp3 equation** (`fp3-eq`); the correct cogen keeps the interpreter symbolic
+  (`gen-keeps-int-symbolic`), freezing it is unsound (`genbug-wrong-on-int`).
+- `RWhileOfflineBTA6.agda` — **stage 6**: the production fix locus.  The observed
+  `('val.'swap)` embed is `AV-LIFT` of a static leaf (`prodThen-car-const`); the
+  BT-driven fix is byte-identical under `'S` (`fix-agrees-on-fp1`, no fp1 regression)
+  and residualises under `'D` (`fixThen-car-tracks`).
+- `RWhileOfflineBTA7.agda` — **stage 7**: dispatch preservation.  With an opcode
+  dispatch, the correct compiler dispatches (`comp-swap` ≠ `comp-id`) while freezing
+  the opcode collapses it and is wrong (`compbug-wrong`).
+- `RWhileOfflineBTA8.agda` — **stage 8**: the agenda design rule.  Unconditional
+  structure may be flattened onto the agenda (`seq-flatten-ok`); a dynamic conditional
+  must stay a residual node with **both** branches specialised
+  (`specOff-keeps-branches`), never one branch pushed — doing so drops a branch and is
+  unsound (`specBug-riM`/`specBug-wrong`, matching comp2's 39-node output).
+- `RWhileOfflineBTA9.agda` — **stage 9**: reversibility / no information loss.
+  Residuals are reversible (`rexec-exec`, `swapV-invol`); the correct offline
+  specialiser is information-preserving hence **injective** (`specOff-injective`),
+  while the branch-dropping bug destroys information and is **not** injective
+  (`specBug-not-injective`) — so comp2's dropped branch is a *reversibility* violation
+  (the reversible-specialiser injectivity requirement), not merely a soundness bug.
+
+Status: the **blueprint** (fix shape, fp1-safety, dispatch preservation, agenda rule,
+reversibility=injectivity) is proved; the production agenda offline-isation
+(`spec_av_bti.rwhile`'s `SPEC-CMD-AV` 'cond dynamic path, :972-993) is **not yet
+implemented**.  See `../../RESEARCH_ROADMAP.md` and the paper's
+`mechanization.tex` §`sec:agda-offline`.
