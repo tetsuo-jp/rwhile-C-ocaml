@@ -32,6 +32,40 @@ let enable_local  = ref false
 let enable_autofi = ref false
 let enable_array  = ref false
 
+(* ===== Diagnostic variable trace (opt-in, env-var gated) =====
+ * Live-trace tool for the comp2 over-static investigation (see
+ * TRACE_comp2_root_cause.md).  When RWHILE_TRACE_VAR is set to a comma-
+ * separated list of variable names (e.g. "RCode,Vl"), every CAss/CRep whose
+ * LHS is exactly one of those names prints (eval_steps, name, a size/shape
+ * summary of the new value) to stderr.  Off by default (no env var => zero
+ * overhead beyond one Sys.getenv_opt at module load); does not affect any
+ * existing test or behaviour. *)
+let trace_vars : string list =
+  match Sys.getenv_opt "RWHILE_TRACE_VAR" with
+  | None -> []
+  | Some s -> String.split_on_char ',' s
+
+let rec val_size = function
+  | VNil -> 0
+  | VAtom _ -> 1
+  | VCons (a, b) -> 1 + val_size a + val_size b
+  | VList vs -> List.fold_left (fun acc v -> acc + val_size v) 0 vs
+
+(* short shape summary: depth-limited so huge values (e.g. a 256-slot store)
+ * don't flood the trace *)
+let rec val_shape depth v =
+  if depth <= 0 then "..."
+  else match v with
+    | VNil -> "nil"
+    | VAtom (Atom a) -> a
+    | VCons (a, b) -> "(" ^ val_shape (depth-1) a ^ " . " ^ val_shape (depth-1) b ^ ")"
+    | VList _ -> "<list>"
+
+let trace_write (RIdent name) (v : valT) =
+  if List.mem name trace_vars then
+    Printf.eprintf "[trace step=%d] %s := size=%d shape=%s\n%!"
+      !eval_steps name (val_size v) (val_shape 3 v)
+
 (* ===== Error reporting =====
  * When llm_errors is set (via the -llm-errors flag), evaluation errors are
  * emitted as a structured, machine-parseable block that an LLM (or any tool)
@@ -397,9 +431,15 @@ and evalCom (s : store) (c : com) : store =
   | CMac (_, _) -> eval_error ~category:"internal"
                      ~hint:"macros must be expanded before evaluation; evalProgram runs expMacProgram first"
                      "Impossible happened.  Macro must not appear in runtime."
-  | CAss (y, e) -> let v' = evalExp s e in
-		   rupdate (y, v') s
+  | CAss (x, e) ->
+     let v' = evalExp s e in
+     (if trace_vars <> [] then trace_write x v');
+     rupdate (x, v') s
   | CRep (q, r) -> let (s1, v1) = evalPat s r in
+		   (if trace_vars <> [] then
+		      match q with
+		      | PVar (Var x) -> trace_write x v1
+		      | _ -> ());
 		   inv_evalPat s1 (q, v1)
   | CSeq (c, d) -> let s1 = evalCom s c in
 		   evalCom s1 d
