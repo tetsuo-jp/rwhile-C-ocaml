@@ -1,10 +1,13 @@
 # comp2 over-static — live-trace 根本原因（2026-07-10）
 
 `(a)` の専任 live-trace 作業の成果。`[comp2]('S.swap) == B : false` の根本原因を、実機ベースライン
-＋本番マクロの多層シンボリック解析＋生成コード実物の byte-level 検証で特定した。結論：**局所パッチ
-不能。spec_av の online worklist（agenda）機構が自己適用不能で、offline 再設計（RWhileH2Worklist
-の実機化）が必要。具体的なバグ地点＝`ASSEMBLE-FP1` 到達時に subject 変数 `RCode` の束縛時刻追跡が
-`nil` へ collapse し、蓄積されていた残余コマンド列（swap ボディ）が discard される（後述「追記」節）。**
+＋本番マクロの多層シンボリック解析＋生成コード実物の byte-level 検証＋実行時トレース計装（新規、
+`RWHILE_TRACE_VAR` 環境変数）で特定した。結論：**局所パッチ不能。spec_av の online worklist
+（agenda）機構が自己適用不能で、offline 再設計（RWhileH2Worklist の実機化）が必要。具体的な
+バグ地点＝self-application の内側でシミュレートされる「RCode」相当の変数の束縛時刻追跡が
+静的nilに誤解決し、comp2 の生成コードに自己参照が欠けた不健全な残余（`295<=cons(...)nil`）が
+埋め込まれる（outer の実変数 RCode 自体は正しく単調蓄積することを実行時トレースで確認済み、
+後述「追記」節）。**
 
 ## 症状（実測）
 
@@ -134,6 +137,56 @@ write 5
   片枝のみ agenda に push するのは unsound」という規則は依然正しい。今回の発見は、その規則が
   効いてくる**具体的な症状の1つ**（`RCode` 自体の追跡崩壊）を実データで確認したもの。真の修正
   （agenda の offline 化）は変わらず大規模作業。
+
+## 追記（2026-07-12）：実行時トレースで「outer RCode collapse」仮説を否定、真の局在を確定
+
+上記「追記」節の byte-level 読解に基づき、**実際にどこで束縛時刻追跡が壊れるかを実行時トレース
+で検証**した。`EvalRwhile.ml` に環境変数 `RWHILE_TRACE_VAR`（カンマ区切りの変数名）でオンオフ
+できる非破壊トレースフックを追加（`CAss`/`CRep` の書込み時に `(step, 変数名, サイズ, 形状)` を
+stderr へ出力、デフォルト OFF・既存動作に影響なし。commit 予定）。
+
+`RWHILE_TRACE_VAR=RCode ./measure_proj comp2-loops examples/spec_av_bti.rwhile` で
+**spec_av_bti 自身のネイティブ変数 `RCode`**（comp2 構築中、ただ1回だけ実行される、実際の
+R-WHILE 変数）を追跡した結果：
+
+```
+[trace step=5866]   RCode := size=79    (comp2 構築開始直後)
+[trace step=8823]   RCode := size=184
+[trace step=1169525] RCode := size=252
+...（単調増加、リセットなし）...
+[trace step=2460853] RCode := size=6001
+[trace step=2461138] RCode := size=0    (comp2 構築完了後の通常の終了時クリア = RCode^=RCode)
+(dumped residual to /tmp/comp2_resid.rwhile)
+```
+
+**結論：outer（spec_av_bti 自身のネイティブ実行での）`RCode` は 79→6001 まで単調に増加し、
+`ASSEMBLE-FP1` 到達時に collapse などしていない。前回の byte-level 読解による「outer RCode が
+nil に collapse する」という解釈は誤り（訂正）。**
+
+真の局在：comp2（生成されたプログラム自身）の中に現れる「`295<=cons(...)nil; ...MAKE-SEQ...`」
+という断片（前節参照）は、**outer の `RCode`（6001 まで育つ実変数）とは別物**——これは
+`SPEC-CMD-AV(FpBody)` が **spec_av_bti 自身のソース全体（FpBody = spec_av_bti の macro展開後の
+全コマンド、その中には spec_av_bti 自身の `ASSEMBLE-FP1(FpI,FpJ,Out)` 呼び出しも含まれる）を
+データとして辿る**過程で、**そのデータの中に現れる「RCode」という変数名（= subject レベルで
+シミュレートされる、もう1つの「RCode」）** の束縛時刻を追跡した結果、embed された残余コードで
+ある。この **subject レベルの「RCode」**（Vl の特定スロットに track される、outer の実変数
+とは別のスロット）が、ある時点で静的 `nil` と誤追跡され、その結果 comp2 の生成コードに
+`295<=cons(...)nil`（本来 `295<=cons(...)295` であるべき自己参照が `nil` に固定）という
+不健全な残余が埋め込まれる。
+
+**この2つの独立な検証（① byte-level のコード読解、② 実行時トレース）が収束して同じ結論を
+指す**：outer の会計（RCode の実行時蓄積）は完全に正しく機能しており、バグは **self-application
+の内側でシミュレートされる「RCode」相当の変数の束縛時刻追跡**にある。これは stage-8 の
+agenda 診断（「動的テスト下で片枝のみ agenda に push するのは unsound」）と整合する、より
+具体的な症状確認である。
+
+**この先（未着手・要さらなる計装）**：subject レベルの「RCode」がどこで静的 nil と誤追跡される
+かを特定するには、`UPDATE(Vl,idx,newAV)` 呼び出し（`AUX`/`LOOKUP`/`UPDATE` マクロの内部ループ）
+を、対象スロット番号（subject の "RCode" に対応する Vl 内インデックス）でフィルタして追跡する
+計装が必要——これは現状の「変数名一致」トレースでは捕捉できない（Vl は1つの大きな値であり、
+その内部スロットへの book-keeping は "Vl" という1つの変数への書込みとして観測されるのみで、
+どのスロット番号が更新されたかは別途デコードが必要）。次の一手として、UPDATE マクロの
+展開箇所（AUX ループ）にスロット番号＋新AVをダンプする、より踏み込んだ計装が考えられる。
 
 ## 検証道具（このトレースで使用）
 
