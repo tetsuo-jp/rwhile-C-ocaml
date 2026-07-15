@@ -26,6 +26,10 @@
 --                          RESIDUALISES object programs (fp1 = the proven model-contract, not
 --                          an assumption; self-application via the closure constructor):
 --                          cogen ⇓ compiler ⇓ verified residual ⇓ the source's result
+--   model-contract-dyn     C2-dyn: the contract extended to DYNAMIC conditionals — both
+--                          branches specialised, stores joined pointwise by a residual rIf
+--                          (OfflineBTA8's keep-both-branches rule at the wire level; a
+--                          partial-static-cons test is statically truthy)
 --   gen-fp1/2/3, ⇓-det    the hierarchy with general first-class application (big-step), deterministic
 --   mirrorP-reversible    a recursive (cata) program proven its-own-inverse at the relation level
 --   reify-spec-correct    #5 step2 (constant family): a recursive specialiser emitting a RUNNABLE residual (H1)
@@ -88,6 +92,10 @@ open import RWhileSpecCom public using (specProg; specCom-sim; specEx-sound)
   renaming (spec-contract to model-contract)
 open import RWhileSpecProg public using (comp3; fp3-cogen; fp2-compile; fp1-target)
   renaming (fp3-run to resid-fp3-run)
+
+-- C2-dyn: dynamic conditionals via the pointwise rIf store-join.
+open import RWhileSpecComDyn public using (specProgD; joinσ)
+  renaming (spec-contract-dyn to model-contract-dyn)
 
 -- an OPTIMISING (non-trivial, constant-folding) specialiser instantiating the
 -- single-U total-run hierarchy: the FULL fp1/fp2/fp3 hold for a self-applicable

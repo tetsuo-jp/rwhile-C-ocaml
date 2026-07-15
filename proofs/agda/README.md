@@ -313,6 +313,20 @@ done by the accumulator induction `rev-rest`.
   ⇓ the source's result (spec-contract).  Witness: swap through the whole
   hierarchy by refl.
 
+- `RWhileSpecComDyn.agda` — **C2-dyn: the command-level specialiser with
+  DYNAMIC CONDITIONALS** (the first step past the static-control fragment,
+  OfflineBTA8's keep-both-branches rule at the wire level).  The residual
+  language RC adds `rIf`; a dynamic test specialises BOTH branches and joins
+  the AV stores POINTWISE: slot k = `DD (rIf tc (lift σt[k]) (lift σe[k]))`
+  (per-slot conditional expressions — spec_av's residual conditional COMMAND
+  is the production O3 item).  A partial-static-cons test is statically
+  truthy (resolves to then).  `joinσ-γ-t/f` reduce the joined store to the
+  branch the runtime took; `spec-contract-dyn` is the same contract shape,
+  now over programs whose control depends on the dynamic input.  Witness: a
+  dynamic dispatch residualises to a single `rIf` over the input, both
+  branch instances checked by refl.  Loops still need a static exit (the
+  residual-LOOP emission is production O1, implemented in spec_av_bti).
+
 - `RWhileSimpSound.agda` — **soundness of the residual simplifier `src/Simp.ml`**
   (idea 1, Phase 2a).  Machine-checks the semantic core of its two transforms:
   (1) the constant-folding rewrites on the residual expression language

@@ -161,8 +161,19 @@ OCaml `wire-bridge` テストが同一入力で実装と一致を確認してい
   小さくて誤り＝旧 over-static 症状）を現行 spec_av のコピーに更新、
   正ベースライン comp2=812,515（0.994×）・correctness true・CLoop=125 を確立。
   教訓：**fp1 ゲート＋comp2-loops の correctness 行をセットで運用**。
-- 残：**C4c**（deep-embedding、研究規模）、**O1–O3 の実装**（O2＝index/Cd の
-  partially-static 化が本丸・研究規模。blueprint は Agda で証明済み、
-  ベースラインとプロトコルは整備済み）。
+- **O1 済（2026-07-16）**：spec_av_bti の 'loop ハンドラに **出口テストの BT を先読み**する
+  判定を実装（静的入口＋動的出口 → RAW テストのままループ全体を残余化、
+  `constEntry-no-iter` の罠回避のため定数畳み込み入口は emit しない）。旧挙動は
+  'lcheck で `'error '41`。fp1 ゲート PASS、新テスト `bti-loop`（残余ループ存在の
+  検査込み）green、自己適用 comp2 の正しさ維持（true/true、133 CLoop・0.995×＝
+  ソース肥大分の増加で想定通り。縮小は O2 の領分）。
+- **C2-dyn 済（2026-07-16）**：`RWhileSpecComDyn.agda` — 動的 cond を**両枝特殊化＋
+  pointwise `rIf` ストア join**で扱う拡張（OfflineBTA8 の keep-both-branches 規則の
+  wire レベル版）。`spec-contract-dyn` が動的制御プログラムまで契約を拡張。
+  check.sh PASS=66 FAIL=0。
+- 残：**C4c**（deep-embedding、研究規模）、**O2**（index/Cd の partially-static 化＝
+  本丸・研究規模）、**O3**（agenda offline 化＝残余 cond コマンド emit。モデル側の
+  対応物は C2-dyn で先行検証済み）。blueprint は Agda で証明済み、ベースラインと
+  プロトコルは整備済み。
 
 関連：`AGDA_CORRESPONDENCE.md`（全モジュール↔結果マップ）、`HANDOFF_fp2.md`、`FINDINGS_reversible_projections.md`。
