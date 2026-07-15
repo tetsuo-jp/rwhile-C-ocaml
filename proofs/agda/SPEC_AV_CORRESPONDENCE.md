@@ -171,9 +171,14 @@ OCaml `wire-bridge` テストが同一入力で実装と一致を確認してい
   pointwise `rIf` ストア join**で扱う拡張（OfflineBTA8 の keep-both-branches 規則の
   wire レベル版）。`spec-contract-dyn` が動的制御プログラムまで契約を拡張。
   check.sh PASS=66 FAIL=0。
-- 残：**C4c**（deep-embedding、研究規模）、**O2**（index/Cd の partially-static 化＝
-  本丸・研究規模）、**O3**（agenda offline 化＝残余 cond コマンド emit。モデル側の
-  対応物は C2-dyn で先行検証済み）。blueprint は Agda で証明済み、ベースラインと
-  プロトコルは整備済み。
+- **O2a 実験済（2026-07-16、負の結果）**：残余領域単位の選択的 dynamicize
+  （refs-only）は、一次特殊化では正しいが**自己適用で over-static リークが再発**
+  （cond サイトを ALL に戻すと正しさ回復＝リークは BT/ディスパッチ残余 cond の枝が
+  構築する値内タグを通る two-level リーク）。⇒ **O2 は offline 二段階化
+  （スロット別 BT 環境）一本に確定**。詳細と再現ログは rproj
+  `analysis_store_bti.md`。検証済みの収集・選択マクロは資産として残置。
+- 残：**C4c**（deep-embedding、研究規模）、**O2**（offline 二段階化＝本丸・研究規模、
+  設計案は analysis_store_bti.md 末尾）、**O3**（agenda offline 化＝残余 cond コマンド
+  emit。モデル側の対応物は C2-dyn で先行検証済み）。
 
 関連：`AGDA_CORRESPONDENCE.md`（全モジュール↔結果マップ）、`HANDOFF_fp2.md`、`FINDINGS_reversible_projections.md`。
