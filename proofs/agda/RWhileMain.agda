@@ -13,6 +13,10 @@
 --   self-rep / specByProg-correct  H2's recursive core, non-closure (aeval is a data program)
 --   specByProg-H1         fp1 for the SELF-REPRESENTED specialiser (H2-core ∘ H1, data program)
 --   hier-fp1/2/3          the Futamura hierarchy as proven theorems (non-closure instance)
+--   contract-fp2/fp3/fp3-run  fp2/fp3 from spec_av's BT-tagged contract ALONE (H2
+--                          definitional); fp3-run = the cogen's compiler's target computes
+--                          the interpreter for ALL int/src/d (Closure witness instance;
+--                          the general theorem is RWhileFutamura3.Contract, parametric in specP)
 --   gen-fp1/2/3, ⇓-det    the hierarchy with general first-class application (big-step), deterministic
 --   mirrorP-reversible    a recursive (cata) program proven its-own-inverse at the relation level
 --   reify-spec-correct    #5 step2 (constant family): a recursive specialiser emitting a RUNNABLE residual (H1)
@@ -54,6 +58,16 @@ open import RWhileH2Hier  public using ()
   renaming (fp1 to hier-fp1; fp2 to hier-fp2; fp3 to hier-fp3; fp3-int to hier-fp3-int)
 open import RWhileH2Hier2 public using (⇓-det)
   renaming (fp1-fwd to gen-fp1-fwd; fp1-bwd to gen-fp1-bwd; fp2 to gen-fp2; fp3 to gen-fp3)
+
+-- fp3 for the REAL spec_av contract (BT-tagged, H2-free): from the single
+-- hypothesis [[specP]((p.('S.s)))](d) ≡ [p]((s.d)) — spec_av's basic equation —
+-- the artifact's fp2/fp3 test equations hold for ALL inputs; parametric in
+-- specP (one statement covers spec_av AND spec_av_rev).  Re-exported via the
+-- non-vacuity witness `Closure`; the general theorem is RWhileFutamura3.Contract.
+import RWhileFutamura3 as Fut3
+open Fut3.Closure public using ()
+  renaming ( fp2 to contract-fp2; fp3 to contract-fp3
+           ; fp3-cogen to contract-fp3-cogen; fp3-run to contract-fp3-run )
 
 -- an OPTIMISING (non-trivial, constant-folding) specialiser instantiating the
 -- single-U total-run hierarchy: the FULL fp1/fp2/fp3 hold for a self-applicable

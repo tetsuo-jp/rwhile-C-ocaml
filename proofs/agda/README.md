@@ -259,6 +259,23 @@ done by the accumulator induction `rev-rest`.
   general application.  Remaining: the LOOPING AV specialiser of spec_av in this
   model (route A, future) — its recursive structure is in RWhileH2.
 
+- `RWhileFutamura3.agda` — **fp3 from the real spec_av CONTRACT alone (H2-free,
+  BT-tagged)**.  Artifact-faithful sharpening of `RWhileFutamura2`: `spec p s`
+  is DEFINED as `run specP ⟨ p , tagS s ⟩` (running the specialiser program on
+  the implementation's actual input shape `(Prog . ('S . Src))`), so H2 is
+  definitional and the ONLY hypothesis is spec_av's basic equation
+  `[[specP]((p.('S.s)))](d) ≡ [p]((s.d))` (FINDINGS §1).  From it alone:
+  `fp2` (`[comp2](('S.src))` = fp1 residual), `fp3-cogen`
+  (`[comp3](('S.int))` = comp2, the OCaml `test_fp3_cogen` equation ∀-closed)
+  and the headline `fp3-run` — `[[[comp3]('S.int)]('S.src)](d) ≡ [int]((src.d))`
+  for EVERY interpreter, source and input.  Parametric in `specP`, so one
+  statement covers spec_av and spec_av_rev.  `Closure` discharges the contract
+  by `refl` (tagged papp/mkspec universe) — non-vacuous.  What remains for the
+  artifact is exactly the contract itself (pointwise: the OCaml
+  `second-projection`/`reversible-spec` tests; its AV core: `RWhileAVSpec`,
+  `RWhileH2WorklistAV`, `RWhileSpecAVWire*`) — the hierarchy adds NO further
+  proof obligation beyond it.
+
 - `RWhileSimpSound.agda` — **soundness of the residual simplifier `src/Simp.ml`**
   (idea 1, Phase 2a).  Machine-checks the semantic core of its two transforms:
   (1) the constant-folding rewrites on the residual expression language
