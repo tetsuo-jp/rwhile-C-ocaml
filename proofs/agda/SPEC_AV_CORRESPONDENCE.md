@@ -99,4 +99,44 @@ OCaml `wire-bridge` テストが同一入力で実装と一致を確認してい
   部分入力）と自己適用下の BT＝comp2 を非自明 fp2 にする本番改造（`HANDOFF_fp2.md`／`analysis_store_bti.md`、
   高リスク）。理論的核は本対応で出揃っているため、(a)(b) は「実装との橋」を太くする工学であり、本質的障害は無い。
 
+## 6. 残課題の分解（2026-07-16）
+
+前提：`RWhileFutamura3.agda` により **fp2/fp3 は契約（基本方程式
+`[[spec_av]((p.('S.s)))](d) = [p]((s.d))`）に還元済み**（H2 は定義的に消え、階層は契約を超える
+証明義務を追加しない）。残るは §5 の (a)(b) ＝独立な2系統：
+
+- **C 系（正しさ）**：契約そのものを実物 spec_av について証明する（§5(a) 意味側の橋）。
+- **O 系（品質）**：comp2 ≪ |spec_av| の本番 BTI（§5(b)）。契約とは直交（自明 comp2 でも契約は満たす）。
+
+### C 系：契約の証明 — 各ステップ単独で機械検査可能
+
+| # | 何をするか | 既存資産 | 成果物 | 規模 |
+|---|---|---|---|---|
+| **C1** | wire の `Com`（§4c）に big-step 意味 `⟦_⟧com : Com → Val → Maybe Val` を直接定義（RWhileExec/RWhileRevFull は control-core の別 AST なので、wire AST に与えるのが最短）。OCaml `EvalRwhile.evalCom` と差分テスト（`wire-bridge` 群拡張） | `RWhileExec`、`RWhileElabCom`、`parse-enc-com` | `RWhileWireSem.agda`＋OCaml テスト | 小〜中 |
+| **C2** | コマンド層 AV 特殊化器 `specCom`（SPEC-COM 相当：ass→cond→seq→loop→rep の順に増分）を、検証済みの式ワークリスト＋多スロットストア上に定義し、ケースごとに γ-sound | ass=`ass-exp-sound`、cond dead-branch=`deadbranch-true/false`、loop BT 規則=`RWhileLoopBTA`（unrollable / exit-dynamic-forces-residual）、rep=`RWhileCRep`、燃料流儀=`machineF` | `RWhileSpecCom.agda`（ケース別に順次緑化） | 中（山は loop） |
+| **C3** | プログラム全体 `specProg-sound : ⟦specProg p s⟧ d ≡ ⟦p⟧(s·d)` ＝**契約のモデル定理**。`RWhileFutamura3.Contract` に渡すと fp1/2/3 がモデルで**無条件**成立 | C2 の合成＋`RWhileFutamura3` | `RWhileSpecProg.agda`＋Contract インスタンス | 小 |
+| **C4a** | 転写忠実性の機械化：MAlonzo 抽出（`Extract*` の既存流儀）で specCom/specProg を OCaml に出し、実物 spec_av 実行と**大量ランダム入力で差分テスト**（pointwise 橋の大量化） | `ExtractRevProj` 等の build-extract.sh 流儀、`wire-bridge` | 抽出＋QuickCheck 風テスト群 | 小〜中 |
+| **C4c** | 最終形（任意・研究規模）：spec_av.rwhile 自体を C1 意味論で走らせた結果と specProg の一致定理（42KB の deep-embedding が必要） | C1–C4a 全部 | — | 研究規模 |
+
+**到達点の整理**：C1–C3 で「契約はモデルの定理、fp3 はモデルで無条件」。C4a で「実物との一致は
+大量差分テストで裏付け」。**真に研究規模なのは C4c のみ**で、C1–C4a は工学。
+
+### O 系：本番 BTI — blueprint は全て証明済み、残るは実装
+
+| # | 何をするか | 対応する証明済み blueprint |
+|---|---|---|
+| **O1** | loop BT 修正を `spec_av_bti.rwhile` へ（fp1 ゲート保護下） | `RWhileLoopBTA`／`RWhileLoopBTARev` |
+| **O2** | MKAV／:1051 over-static 修正（mkAV 流儀） | `RWhileOfflineBTA`–`7` |
+| **O3** | agenda の offline 化（dynamic cond は両枝残余化、agenda へ積まない） | `RWhileOfflineBTA8` |
+| **O4** | 計測：comp2 縮小率（目標 <0.5×）＋可逆性維持の確認 | `RWhileOfflineBTA9`（可逆性）、`measure_proj` |
+
+依存：O1→O2→O3 の順が安全（各段 fp1/fp2 回帰ゲートで保護）。
+
+### 推奨着手順（費用対効果順）
+1. **C1**（wire Com 意味論＋差分テスト）— 全ての土台、既存部品の組み立て。
+2. **C2 の ass+cond+seq**（部品は証明済み、合成のみ）→ 続けて loop。
+3. **C3**（契約のモデル定理）— 論文に書ける区切り：「fp3 はモデルで無条件、実物へは契約1本」。
+4. **C4a**（抽出差分テスト）— 実物との橋を「目視＋点」から「大量点」へ。
+5. **O1–O4** — 品質系。論文本体では「今後の課題」の筋。
+
 関連：`AGDA_CORRESPONDENCE.md`（全モジュール↔結果マップ）、`HANDOFF_fp2.md`、`FINDINGS_reversible_projections.md`。
