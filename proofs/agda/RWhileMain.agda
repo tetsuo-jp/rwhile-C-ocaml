@@ -17,6 +17,15 @@
 --                          definitional); fp3-run = the cogen's compiler's target computes
 --                          the interpreter for ALL int/src/d (Closure witness instance;
 --                          the general theorem is RWhileFutamura3.Contract, parametric in specP)
+--   model-contract         C1+C2: that contract PROVEN on the model for the static-control
+--                          fragment — wire-AST big-step semantics (RWhileWireSem, mirrors
+--                          EvalRwhile clause by clause, cross-tested by the OCaml `wire-sem`
+--                          group) × command-level AV specialiser (RWhileSpecCom):
+--                          specProg n p s ≡ just cr → evalProg m p (s·d) ≡ just w → ⟦cr⟧c d ≡ w
+--   resid-fp3-run          C3: the full hierarchy over a universe whose specialiser GENUINELY
+--                          RESIDUALISES object programs (fp1 = the proven model-contract, not
+--                          an assumption; self-application via the closure constructor):
+--                          cogen ⇓ compiler ⇓ verified residual ⇓ the source's result
 --   gen-fp1/2/3, ⇓-det    the hierarchy with general first-class application (big-step), deterministic
 --   mirrorP-reversible    a recursive (cata) program proven its-own-inverse at the relation level
 --   reify-spec-correct    #5 step2 (constant family): a recursive specialiser emitting a RUNNABLE residual (H1)
@@ -68,6 +77,17 @@ import RWhileFutamura3 as Fut3
 open Fut3.Closure public using ()
   renaming ( fp2 to contract-fp2; fp3 to contract-fp3
            ; fp3-cogen to contract-fp3-cogen; fp3-run to contract-fp3-run )
+
+-- C1+C2: the model contract for the static-control fragment — big-step wire
+-- semantics (RWhileWireSem) and the command-level AV specialiser with its
+-- success-simulation (RWhileSpecCom); C3: the residualising hierarchy
+-- (RWhileSpecProg), where fp1 is the PROVEN contract and fp2/fp3 are
+-- definitional over the specialiser-as-program.
+open import RWhileWireSem public using (evalC-mono; evalL-mono; evalProg-mono)
+open import RWhileSpecCom public using (specProg; specCom-sim; specEx-sound)
+  renaming (spec-contract to model-contract)
+open import RWhileSpecProg public using (comp3; fp3-cogen; fp2-compile; fp1-target)
+  renaming (fp3-run to resid-fp3-run)
 
 -- an OPTIMISING (non-trivial, constant-folding) specialiser instantiating the
 -- single-U total-run hierarchy: the FULL fp1/fp2/fp3 hold for a self-applicable

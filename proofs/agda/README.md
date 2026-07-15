@@ -276,6 +276,43 @@ done by the accumulator induction `rev-rest`.
   `RWhileH2WorklistAV`, `RWhileSpecAVWire*`) — the hierarchy adds NO further
   proof obligation beyond it.
 
+- `RWhileWireSem.agda` — **C1: big-step semantics for the wire AST** (Pat/Com/
+  Prog of RWhileSpecAVWireCom), mirroring `src/EvalRwhile.ml` clause by clause:
+  reversible-XOR assignment (rupdate), CRep = clearing read + nil-checked
+  write, the conditional's exit ASSERTION (true after then / false after
+  else), the loop's entry/re-entry assertions, and the whole-program
+  store-cleared check.  Fuel-indexed (`--safe`), fuel-monotone
+  (`evalC-mono`/`evalL-mono`/`evalProg-mono`).  Cross-tested against the
+  production interpreter by the OCaml `wire-sem` differential group
+  (src/TestSuite.ml): the same p2d wire tree run by both must agree whenever
+  the interpreter succeeds, and the failure modes coincide.
+
+- `RWhileSpecCom.agda` — **C2: the command-level AV specialiser, γ-sound**
+  (the semantic half of the spec_av bridge, static-control fragment = the
+  fp1 regime).  A partial-static MULTI-SLOT store (List AV) drives specEx
+  (multi-slot SPEC-EXP-AV, `specEx-sound`), pattern read/write on AVs
+  (dynamic values split by avHd/avTl), reversible-XOR updates decided
+  statically, static conditionals resolved (dead branch dropped), loops
+  unrolled while the exit test is static (RWhileLoopBTA's rule).  The
+  SUCCESS-SIMULATION `specCom-sim` yields the HEADLINE `spec-contract`:
+  `specProg n p s ≡ just cr → evalProg m p (s·d) ≡ just w → ⟦cr⟧c d ≡ w` —
+  RWhileFutamura3's contract PROVEN on the model, for every p, s, d in the
+  fragment.  Witness: swap residualises to `(cons cVar 'vtrue)` by refl.
+  Out of fragment (refused, blueprints exist): dynamic tests → residual
+  conditionals/loops (OfflineBTA8 / LoopBTA), dynamic update conflicts.
+
+- `RWhileSpecProg.agda` — **C3: the hierarchy over a REALLY-RESIDUALISING
+  specialiser** — the partial-run refinement of RWhileFutamura3.Contract
+  with H1 discharged: universe U = values / wire programs / residual Code /
+  closures / `specP`; running `specP` on `(wp p . ('S . val s))` invokes the
+  VERIFIED specProg (real residual, genuine Futamura gain), other shapes
+  (self-application) resolve by the closure constructor (Futamura2Inst's
+  papp — representing specProg itself as a wire program remains the
+  research item, exercised on the real spec_av by the OCaml fp2/fp3 tests).
+  `fp3-run`: cogen ⇓ compiler (refl) ⇓ verified residual (fragment commit)
+  ⇓ the source's result (spec-contract).  Witness: swap through the whole
+  hierarchy by refl.
+
 - `RWhileSimpSound.agda` — **soundness of the residual simplifier `src/Simp.ml`**
   (idea 1, Phase 2a).  Machine-checks the semantic core of its two transforms:
   (1) the constant-folding rewrites on the residual expression language

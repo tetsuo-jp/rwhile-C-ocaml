@@ -139,4 +139,18 @@ OCaml `wire-bridge` テストが同一入力で実装と一致を確認してい
 4. **C4a**（抽出差分テスト）— 実物との橋を「目視＋点」から「大量点」へ。
 5. **O1–O4** — 品質系。論文本体では「今後の課題」の筋。
 
+### 進捗（2026-07-16 実施）
+- **C1 済**：`RWhileWireSem.agda`（wire AST の big-step 意味論、fuel 単調性込み）＋
+  OCaml `wire-sem` 差分テスト群（同一 wire 木を本番 evalProgram とモデル鏡写しで実行、
+  成功時一致＋失敗モード一致、実例コーパス6本）。
+- **C2 済（静的制御フラグメント）**：`RWhileSpecCom.agda` — 多スロット partial-static
+  ストア上の specEx/specPat/specInv/specAss/specCom、成功シミュレーション
+  `specCom-sim`、**契約のモデル定理 `spec-contract`**。動的テスト・動的更新衝突は
+  refuse（＝O系 blueprint の残余化が将来対応）。
+- **C3 済**：`RWhileSpecProg.agda` — 実際に残余化する specialiser を持つ宇宙での
+  fp1/fp2/fp3（`fp3-run`）。fp1 は仮定でなく **証明済み spec-contract**、自己適用は
+  closure コンストラクタ経由（specProg 自身の wire 化＝研究規模のまま、実物側は
+  OCaml fp2/fp3 テストが担保）。
+- 残：**C4a**（MAlonzo 抽出＋大量ランダム差分）、**C4c**、**O1–O4**。
+
 関連：`AGDA_CORRESPONDENCE.md`（全モジュール↔結果マップ）、`HANDOFF_fp2.md`、`FINDINGS_reversible_projections.md`。
