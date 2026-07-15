@@ -151,6 +151,18 @@ OCaml `wire-bridge` テストが同一入力で実装と一致を確認してい
   fp1/fp2/fp3（`fp3-run`）。fp1 は仮定でなく **証明済み spec-contract**、自己適用は
   closure コンストラクタ経由（specProg 自身の wire 化＝研究規模のまま、実物側は
   OCaml fp2/fp3 テストが担保）。
-- 残：**C4a**（MAlonzo 抽出＋大量ランダム差分）、**C4c**、**O1–O4**。
+- **C4a 済**：(a) OCaml `wire-spec` 群 — 検証済みモデル特殊化器の鏡写し（WS）と
+  **実物 spec_av** の残余を、swap／静的分岐／静的ループ展開（op-list）コーパスで
+  **3者一致**（モデル残余・spec_av 残余・直接実行）まで確認。(b) `ExtractSpecProg.agda`
+  — C1–C3 の検証済みコードを MAlonzo/GHC でネイティブ化し、cogen→compiler→residual→run
+  の全鎖を実行（各段が機械検証済み定理に対応）。
+- **O 系 step 0 済**（rproj `analysis_store_bti.md` 再構成・計測ログ参照）：
+  stale だった spec_av_bti 作業コピー（fp1 ゲートは通るのに自己適用 comp2 が
+  小さくて誤り＝旧 over-static 症状）を現行 spec_av のコピーに更新、
+  正ベースライン comp2=812,515（0.994×）・correctness true・CLoop=125 を確立。
+  教訓：**fp1 ゲート＋comp2-loops の correctness 行をセットで運用**。
+- 残：**C4c**（deep-embedding、研究規模）、**O1–O3 の実装**（O2＝index/Cd の
+  partially-static 化が本丸・研究規模。blueprint は Agda で証明済み、
+  ベースラインとプロトコルは整備済み）。
 
 関連：`AGDA_CORRESPONDENCE.md`（全モジュール↔結果マップ）、`HANDOFF_fp2.md`、`FINDINGS_reversible_projections.md`。
