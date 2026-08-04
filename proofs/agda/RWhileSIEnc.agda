@@ -30,7 +30,7 @@ open import RWhileTime
 ------------------------------------------------------------------------
 -- Tag table.  (Object-language tags below 20; runtime markers from 20.)
 
-t-var t-cst t-opd t-cns t-hd t-tl t-eq : ℕ
+t-var t-cst t-opd t-cns t-hd t-tl t-eq t-pr : ℕ
 t-var = 0
 t-cst = 1
 t-opd = 2
@@ -38,6 +38,10 @@ t-cns = 3
 t-hd  = 4
 t-tl  = 5
 t-eq  = 6
+-- `pair?` lives in the EXPRESSION tag space, which is dispatched only by
+-- EDISP, never by STEP's DISPATCH -- so it may reuse a number from the
+-- command tag space, exactly as `t-lpD = 6` reuses `t-eq`'s.
+t-pr  = 7
 
 t-skip t-ass t-seq t-cond t-loop : ℕ
 t-skip = 7
@@ -91,6 +95,7 @@ dummyOpd = atm t-cst ∙ nil
 ⌜ hdE a   ⌝ᵉ = atm t-hd  ∙ (⌜ a ⌝ᵒ ∙ dummyOpd)
 ⌜ tlE a   ⌝ᵉ = atm t-tl  ∙ (⌜ a ⌝ᵒ ∙ dummyOpd)
 ⌜ eqE a b ⌝ᵉ = atm t-eq  ∙ (⌜ a ⌝ᵒ ∙ ⌜ b ⌝ᵒ)
+⌜ prE a   ⌝ᵉ = atm t-pr  ∙ (⌜ a ⌝ᵒ ∙ dummyOpd)
 
 ⌜_⌝ : Cmd → V
 ⌜ skip         ⌝ = atm t-skip ∙ nil
@@ -122,6 +127,7 @@ vmaxᵉ (cns a b) = vmaxᵒ a ⊔ vmaxᵒ b
 vmaxᵉ (hdE a)   = vmaxᵒ a
 vmaxᵉ (tlE a)   = vmaxᵒ a
 vmaxᵉ (eqE a b) = vmaxᵒ a ⊔ vmaxᵒ b
+vmaxᵉ (prE a)   = vmaxᵒ a
 
 vmax : Cmd → ℕ
 vmax skip           = 0

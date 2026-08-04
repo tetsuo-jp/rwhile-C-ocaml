@@ -54,6 +54,9 @@ notIn? x (eqE a b) with notInO? x a | notInO? x b
 ... | yes p | yes q = yes (ni-eq p q)
 ... | no np | _     = no λ { (ni-eq p _) → np p }
 ... | _     | no nq = no λ { (ni-eq _ q) → nq q }
+notIn? x (prE a) with notInO? x a
+... | yes p = yes (ni-pr p)
+... | no np = no λ { (ni-pr p) → np p }
 
 ------------------------------------------------------------------------
 -- `Wf` is decidable, hence provable by evaluation for a concrete program.

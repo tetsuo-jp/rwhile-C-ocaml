@@ -122,6 +122,7 @@ data Exp : Set where
   hdE : Opd → Exp             -- hd A
   tlE : Opd → Exp             -- tl A
   eqE : Opd → Opd → Exp       -- =? A B
+  prE : Opd → Exp             -- pair? A   (cons test, like src/EvalRwhile.ml)
 
 infix 4 _^=_
 infixr 3 _⨾_
@@ -148,12 +149,18 @@ tlM : V → Maybe V
 tlM (_ ∙ v) = just v
 tlM _       = nothing
 
+-- the cons test of `pair? E`: (nil.nil) for a cons cell, nil otherwise
+isCons : V → Bool
+isCons (_ ∙ _) = true
+isCons _       = false
+
 evalE : Store → Exp → Maybe V
 evalE s (opd a)   = just (evalO s a)
 evalE s (cns a b) = just (evalO s a ∙ evalO s b)
 evalE s (hdE a)   = hdM (evalO s a)
 evalE s (tlE a)   = tlM (evalO s a)
 evalE s (eqE a b) = just (boolV (eqV (evalO s a) (evalO s b)))
+evalE s (prE a)   = just (boolV (isCons (evalO s a)))
 
 -- the truth value of a test
 evalT : Store → Exp → Maybe Bool

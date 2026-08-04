@@ -73,6 +73,7 @@ data NotIn (x : ℕ) : Exp → Set where
   ni-hd  : ∀ {a}   → NotInO x a → NotIn x (hdE a)
   ni-tl  : ∀ {a}   → NotInO x a → NotIn x (tlE a)
   ni-eq  : ∀ {a b} → NotInO x a → NotInO x b → NotIn x (eqE a b)
+  ni-pr  : ∀ {a}   → NotInO x a → NotIn x (prE a)
 
 -- FRAME: an assignment to x cannot change the value of an expression that
 -- does not mention x.  (This is why re-running the interpreter's expression
@@ -87,6 +88,7 @@ evalE-frame σ x u (cns a b) (ni-cns na nb)
   rewrite evalO-frame σ x u a na | evalO-frame σ x u b nb = refl
 evalE-frame σ x u (hdE a)   (ni-hd na)  rewrite evalO-frame σ x u a na = refl
 evalE-frame σ x u (tlE a)   (ni-tl na)  rewrite evalO-frame σ x u a na = refl
+evalE-frame σ x u (prE a)   (ni-pr na)  rewrite evalO-frame σ x u a na = refl
 evalE-frame σ x u (eqE a b) (ni-eq na nb)
   rewrite evalO-frame σ x u a na | evalO-frame σ x u b nb = refl
 

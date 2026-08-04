@@ -136,3 +136,17 @@ private
     exec 600 evalC (iste2 ⌜ cns (var 1) (cst (atm 9)) ⌝ᵉ (atm 2 ∙ atm 9))
     ≡ just (iste2 ⌜ cns (var 1) (cst (atm 9)) ⌝ᵉ nil , 235)
   test-eval-invol = refl
+
+  ------------------------------------------------------------------------
+  -- pair? (the cons test): TRUE on a constant cons operand (no store walk),
+  -- FALSE on the atom in X1.  Running it twice clears the register again.
+
+  test-eval-pair-t :
+    exec 600 evalC (iste2 ⌜ prE (cst (nil ∙ nil)) ⌝ᵉ nil)
+    ≡ just (iste2 ⌜ prE (cst (nil ∙ nil)) ⌝ᵉ (nil ∙ nil) , 59)
+  test-eval-pair-t = refl
+
+  test-eval-pair-f :
+    exec 600 evalC (iste2 ⌜ prE (var 1) ⌝ᵉ nil)
+    ≡ just (iste2 ⌜ prE (var 1) ⌝ᵉ nil , 239)
+  test-eval-pair-f = refl

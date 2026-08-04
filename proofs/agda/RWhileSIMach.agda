@@ -78,6 +78,7 @@ evalEV σ (atm 4 ∙ (a ∙ _)) = evalOV σ a >>=M hdM                          
 evalEV σ (atm 5 ∙ (a ∙ _)) = evalOV σ a >>=M tlM                               -- tl
 evalEV σ (atm 6 ∙ (a ∙ b)) = evalOV σ a >>=M λ u → evalOV σ b >>=M λ v →
                              just (boolV (eqV u v))                            -- =?
+evalEV σ (atm 7 ∙ (a ∙ _)) = evalOV σ a >>=M λ u → just (boolV (isCons u))    -- pair?
 evalEV _ _                 = nothing
 
 evalTV : Store → V → Maybe Bool
@@ -94,6 +95,7 @@ evalEV-ok σ (cns a b) rewrite evalOV-ok σ a | evalOV-ok σ b = refl
 evalEV-ok σ (hdE a)   rewrite evalOV-ok σ a = refl
 evalEV-ok σ (tlE a)   rewrite evalOV-ok σ a = refl
 evalEV-ok σ (eqE a b) rewrite evalOV-ok σ a | evalOV-ok σ b = refl
+evalEV-ok σ (prE a)   rewrite evalOV-ok σ a = refl
 
 evalTV-ok : ∀ σ e → evalTV σ ⌜ e ⌝ᵉ ≡ evalT σ e
 evalTV-ok σ e rewrite evalEV-ok σ e with evalE σ e
@@ -442,6 +444,17 @@ private
 
   test-loop-object : exec 20 lp (nil ∷ []) ≡ just (atm 7 ∷ [] , 4)
   test-loop-object = refl
+
+  -- pair? at the object level: X0 ^= pair? X1 sets X0 to TRUE when X1 is a
+  -- cons cell (and the machine's own expression evaluator agrees, by
+  -- `evalEV-ok`)
+  test-pair-object : exec 10 (0 ^= prE (var 1)) (nil ∷ (nil ∙ nil) ∷ [])
+                   ≡ just ((nil ∙ nil) ∷ (nil ∙ nil) ∷ [] , 1)
+  test-pair-object = refl
+
+  test-pair-object-f : exec 10 (0 ^= prE (var 1)) (nil ∷ atm 3 ∷ [])
+                     ≡ just (nil ∷ atm 3 ∷ [] , 1)
+  test-pair-object-f = refl
 
   test-loop-machine :
     (astep ⟨ ⌜ lp ⌝ ∙ nil , nil , nil ∷ [] ⟩

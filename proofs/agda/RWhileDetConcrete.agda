@@ -32,13 +32,31 @@ module _ (funext : ∀ {A : Set} {B : Set} {f g : A → B}
   -- `rupdate` is deterministic.
 
   -- the toggled slot value σ' x is determined by σ (both toggles agree there)
+  -- 3 toggle cases on each side, so 9 clauses.  Case (3) (v ≡ nil, slot
+  -- unchanged) was added on 2026-08-05 to match src/EvalRwhile.ml; see the
+  -- note in RWhileValStore.agda.
   RAss-atx : ∀ {x v σ σ' σ''} → RAss x v σ σ' → RAss x v σ σ'' → σ' x ≡ σ'' x
+  -- (1)/(1), (2)/(2), (3)/(3): both sides land on the same value
   RAss-atx (rass (inj₁ (_ , b1)) _) (rass (inj₁ (_ , b2)) _) = trans b1 (sym b2)
-  RAss-atx (rass (inj₂ (_ , b1)) _) (rass (inj₂ (_ , b2)) _) = trans b1 (sym b2)
-  RAss-atx (rass (inj₁ (a1 , b1)) _) (rass (inj₂ (a2 , b2)) _) =
-    trans b1 (trans (sym (trans (sym a1) a2)) (sym b2))   -- σ'x≡v , v≡nil , nil≡σ''x
-  RAss-atx (rass (inj₂ (a1 , b1)) _) (rass (inj₁ (a2 , b2)) _) =
-    trans b1 (trans (trans (sym a2) a1) (sym b2))         -- σ'x≡nil , nil≡v , v≡σ''x
+  RAss-atx (rass (inj₂ (inj₁ (_ , b1))) _) (rass (inj₂ (inj₁ (_ , b2))) _) =
+    trans b1 (sym b2)
+  RAss-atx (rass (inj₂ (inj₂ (_ , b1))) _) (rass (inj₂ (inj₂ (_ , b2))) _) =
+    trans b1 (sym b2)
+  -- (1)/(2) and (2)/(1): σx≡nil and σx≡v force v≡nil, so both slots are nil
+  RAss-atx (rass (inj₁ (a1 , b1)) _) (rass (inj₂ (inj₁ (a2 , b2))) _) =
+    trans b1 (trans (trans (sym a2) a1) (sym b2))   -- σ'x≡v , v≡nil , nil≡σ''x
+  RAss-atx (rass (inj₂ (inj₁ (a1 , b1))) _) (rass (inj₁ (a2 , b2)) _) =
+    trans b1 (trans (trans (sym a2) a1) (sym b2))   -- σ'x≡nil , nil≡v , v≡σ''x
+  -- (1)/(3) and (3)/(1): v≡nil and σx≡nil, so the slot is nil either way
+  RAss-atx (rass (inj₁ (a1 , b1)) _) (rass (inj₂ (inj₂ (a2 , b2))) _) =
+    trans b1 (trans a2 (trans (sym a1) (sym b2)))
+  RAss-atx (rass (inj₂ (inj₂ (a1 , b1))) _) (rass (inj₁ (a2 , b2)) _) =
+    trans b1 (trans a2 (trans (sym a1) (sym b2)))
+  -- (2)/(3) and (3)/(2): v≡nil and σx≡v, so the slot is nil either way
+  RAss-atx (rass (inj₂ (inj₁ (a1 , b1))) _) (rass (inj₂ (inj₂ (a2 , b2))) _) =
+    trans b1 (trans (sym a2) (trans (sym a1) (sym b2)))
+  RAss-atx (rass (inj₂ (inj₂ (a1 , b1))) _) (rass (inj₂ (inj₁ (a2 , b2))) _) =
+    trans b1 (trans a2 (trans a1 (sym b2)))
 
   RAss-det : ∀ {x v σ σ' σ''} → RAss x v σ σ' → RAss x v σ σ'' → σ' ≡ σ''
   RAss-det {x} r1@(rass _ fr1) r2@(rass _ fr2) = funext pw

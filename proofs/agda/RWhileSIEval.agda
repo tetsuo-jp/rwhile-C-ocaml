@@ -40,7 +40,7 @@ open import Data.Nat.Solver using (module +-*-Solver)
 open +-*-Solver
 
 open import RWhileTime
-open import RWhileSIEnc using (num; encS; t-var; t-cst; t-opd; t-cns; t-hd; t-tl; t-eq
+open import RWhileSIEnc using (num; encS; t-var; t-cst; t-opd; t-cns; t-hd; t-tl; t-eq; t-pr
                              ; ⌜_⌝ᵒ; ⌜_⌝ᵉ; vmaxᵒ; vmaxᵉ; dummyOpd)
 open import RWhileSIMac
 open import RWhileSIWalk
@@ -262,7 +262,9 @@ EDISP =
    (cond (etIs t-cns) (iVv ^= cns (var iA1) (var iA2))
     (cond (etIs t-hd) (iVv ^= hdE (var iA1))
      (cond (etIs t-tl) (iVv ^= tlE (var iA1))
-      (cond (etIs t-eq) (iVv ^= eqE (var iA1) (var iA2)) skip (etIs t-eq))
+      (cond (etIs t-eq) (iVv ^= eqE (var iA1) (var iA2))
+       (cond (etIs t-pr) (iVv ^= prE (var iA1)) skip (etIs t-pr))
+       (etIs t-eq))
       (etIs t-tl))
      (etIs t-hd))
     (etIs t-cns))
@@ -280,7 +282,8 @@ evalC = (iEt ^= hdE (var iT2))
       ⨾ (iEt ^= hdE (var iT2))
 
 -- the cost bound, in the shape the `Run` combinators produce (`stp a b` is
--- one `;` node).  P M = 60·M + 36 is the operand bound, 6 the dispatch.
+-- one `;` node).  P M = 60·M + 36 is the operand bound, 7 the dispatch
+-- (six conditional levels, then one assignment).
 private
   stp : ℕ → ℕ → ℕ
   stp a b = suc (a + b)
@@ -291,11 +294,11 @@ P M = M * 60 + 36
 evalB : ℕ → ℕ
 evalB M =
   stp 1 (stp 1 (stp 1 (stp (P M) (stp 1 (stp 1 (stp (P M) (stp 1
-  (stp 6 (stp 1 (stp (P M) (stp 1 (stp 1 (stp (P M) (stp 1 (stp 1 1)))))))))))))))
+  (stp 7 (stp 1 (stp (P M) (stp 1 (stp 1 (stp (P M) (stp 1 (stp 1 1)))))))))))))))
 
 ------------------------------------------------------------------------
 -- The dispatch, per expression form: each branch is one assignment, so all
--- five weaken to the same bound 6.
+-- six weaken to the same bound 7.
 
 eval-run : ∀ (σ : Store) (e : Exp) → vmaxᵉ e ≤ length σ
   → ∀ (v w u : V) → evalE σ e ≡ just v → rupd w v ≡ just u
@@ -327,7 +330,7 @@ eval-run σ (opd a) lt v w u refl ru cd dn tg ag ww =
   » rAss refl (rupd-self (⌜ a ⌝ᵒ ∙ dummyOpd))
   » rAss refl (rupd-self (atm t-opd))
   where
-    disp : Run EDISP _ _ 6
+    disp : Run EDISP _ _ 7
     disp = rWeak (s≤s (s≤s z≤n)) (rThen refl (rAss refl ru) refl)
 eval-run σ (cns a b) lt v w u refl ru cd dn tg ag ww =
     rAss refl refl
@@ -356,7 +359,7 @@ eval-run σ (cns a b) lt v w u refl ru cd dn tg ag ww =
     lta = ≤-trans (m≤m⊔n (vmaxᵒ a) (vmaxᵒ b)) lt
     ltb : vmaxᵒ b ≤ length σ
     ltb = ≤-trans (m≤n⊔m (vmaxᵒ a) (vmaxᵒ b)) lt
-    disp : Run EDISP _ _ 6
+    disp : Run EDISP _ _ 7
     disp = rWeak (s≤s (s≤s (s≤s z≤n)))
                  (rElse refl (rThen refl (rAss refl ru) refl) refl)
 eval-run σ (hdE a) lt v w u ev ru cd dn tg ag ww =
@@ -382,7 +385,7 @@ eval-run σ (hdE a) lt v w u ev ru cd dn tg ag ww =
   » rAss refl (rupd-self (⌜ a ⌝ᵒ ∙ dummyOpd))
   » rAss refl (rupd-self (atm t-hd))
   where
-    disp : Run EDISP _ _ 6
+    disp : Run EDISP _ _ 7
     disp = rWeak (s≤s (s≤s (s≤s (s≤s z≤n))))
                  (rElse refl (rElse refl (rThen refl (rAss ev ru) refl) refl) refl)
 eval-run σ (tlE a) lt v w u ev ru cd dn tg ag ww =
@@ -408,7 +411,7 @@ eval-run σ (tlE a) lt v w u ev ru cd dn tg ag ww =
   » rAss refl (rupd-self (⌜ a ⌝ᵒ ∙ dummyOpd))
   » rAss refl (rupd-self (atm t-tl))
   where
-    disp : Run EDISP _ _ 6
+    disp : Run EDISP _ _ 7
     disp = rWeak (s≤s (s≤s (s≤s (s≤s (s≤s z≤n)))))
                  (rElse refl (rElse refl (rElse refl (rThen refl (rAss ev ru) refl) refl)
                               refl) refl)
@@ -439,10 +442,38 @@ eval-run σ (eqE a b) lt v w u refl ru cd dn tg ag ww =
     lta = ≤-trans (m≤m⊔n (vmaxᵒ a) (vmaxᵒ b)) lt
     ltb : vmaxᵒ b ≤ length σ
     ltb = ≤-trans (m≤n⊔m (vmaxᵒ a) (vmaxᵒ b)) lt
-    disp : Run EDISP _ _ 6
-    disp = rWeak ≤-refl
+    disp : Run EDISP _ _ 7
+    disp = rWeak (s≤s (s≤s (s≤s (s≤s (s≤s (s≤s z≤n))))))
                  (rElse refl (rElse refl (rElse refl (rElse refl
                    (rThen refl (rAss refl ru) refl) refl) refl) refl) refl)
+
+eval-run σ (prE a) lt v w u refl ru cd dn tg ag ww =
+    rAss refl refl
+  » rAss refl refl
+  » rAss refl refl
+  » opd-run-a1 σ a lt nil (evalO σ a) refl cd dn tg ag ⌜ prE a ⌝ᵉ w ww nil
+               (⌜ a ⌝ᵒ ∙ dummyOpd) (atm t-pr)
+  » rAss refl (rupd-self ⌜ a ⌝ᵒ)
+  » rAss refl refl
+  » opd-run-a2 σ (cst nil) z≤n nil nil refl cd dn tg ag ⌜ prE a ⌝ᵉ w ww (evalO σ a)
+               (⌜ a ⌝ᵒ ∙ dummyOpd) (atm t-pr)
+  » rAss refl (rupd-self dummyOpd)
+  » disp
+  » rAss refl refl
+  » opd-run-a2 σ (cst nil) z≤n nil nil refl cd dn tg ag ⌜ prE a ⌝ᵉ u ww (evalO σ a)
+               (⌜ a ⌝ᵒ ∙ dummyOpd) (atm t-pr)
+  » rAss refl (rupd-self dummyOpd)
+  » rAss refl refl
+  » opd-run-a1 σ a lt (evalO σ a) nil (rupd-self (evalO σ a)) cd dn tg ag ⌜ prE a ⌝ᵉ u ww nil
+               (⌜ a ⌝ᵒ ∙ dummyOpd) (atm t-pr)
+  » rAss refl (rupd-self ⌜ a ⌝ᵒ)
+  » rAss refl (rupd-self (⌜ a ⌝ᵒ ∙ dummyOpd))
+  » rAss refl (rupd-self (atm t-pr))
+  where
+    disp : Run EDISP _ _ 7
+    disp = rWeak ≤-refl
+                 (rElse refl (rElse refl (rElse refl (rElse refl (rElse refl
+                   (rThen refl (rAss refl ru) refl) refl) refl) refl) refl) refl)
 
 ------------------------------------------------------------------------
 -- UPDATE, generic in the variable index: the object program's reversible

@@ -61,12 +61,18 @@ set-neq {x} {y} v σ x≢y with x ≟ y
 ------------------------------------------------------------------------
 -- The reversible XOR-update as an executable partial function (rupdate).
 
+-- The three cases follow src/EvalRwhile.ml's `rupdate` in the same order:
+--   vy = VNil -> vx  |  vx = vy -> VNil  |  vx = VNil -> vy  |  else error
+-- (case 3 added 2026-08-05; see the note in RWhileValStore.agda).
+
 rupdF : ℕ → Val → Store → Maybe Store
 rupdF x v σ with σ x ≟V nil
 ... | yes _ = just (set x v σ)
 ... | no  _ with σ x ≟V v
 ...   | yes _ = just (set x nil σ)
-...   | no  _ = nothing
+...   | no  _ with v ≟V nil
+...     | yes _ = just σ                 -- assigning nil leaves the slot alone
+...     | no  _ = nothing
 
 ------------------------------------------------------------------------
 -- SOUNDNESS: any successful update is a legal reversible step (no funext).
@@ -77,8 +83,12 @@ rupdF-sound {x} {v} {σ} h with σ x ≟V nil | h
 ...   | refl = rass (inj₁ (p , set-eq x v σ)) (λ y x≢y → sym (set-neq v σ x≢y))
 rupdF-sound {x} {v} {σ} h | no _ | h′ with σ x ≟V v | h′
 ...   | yes q | h″ with just-injective h″
-...     | refl = rass (inj₂ (q , set-eq x nil σ)) (λ y x≢y → sym (set-neq nil σ x≢y))
-rupdF-sound {x} {v} {σ} h | no _ | h′ | no _ | ()
+...     | refl = rass (inj₂ (inj₁ (q , set-eq x nil σ)))
+                      (λ y x≢y → sym (set-neq nil σ x≢y))
+rupdF-sound {x} {v} {σ} h | no _ | h′ | no _ | h″ with v ≟V nil | h″
+...   | yes r | h‴ with just-injective h‴
+...     | refl = rass (inj₂ (inj₂ (r , refl))) (λ y x≢y → refl)
+rupdF-sound {x} {v} {σ} h | no _ | h′ | no _ | h″ | no _ | ()
 
 ------------------------------------------------------------------------
 -- COMPLETENESS: every legal reversible step is computed by rupdF (uses funext).
@@ -96,7 +106,7 @@ module _ (funext : ∀ {A : Set} {B : Set} {f g : A → B}
         ... | yes refl = sym q                 -- set→v ; q : σ' x ≡ v
         ... | no  x≢y  = fr y x≢y               -- set→σ y ; fr : σ y ≡ σ' y
   ... | no ¬nil = ⊥-elim (¬nil p)
-  rupdF-complete {x} {v} {σ} {σ'} (rass (inj₂ (p , q)) fr) with σ x ≟V nil
+  rupdF-complete {x} {v} {σ} {σ'} (rass (inj₂ (inj₁ (p , q))) fr) with σ x ≟V nil
   ... | yes nileq = cong just (funext pw)       -- σx≡nil and σx≡v ⇒ v≡nil
       where
         v≡nil : v ≡ nil
@@ -113,6 +123,26 @@ module _ (funext : ∀ {A : Set} {B : Set} {f g : A → B}
           ... | yes refl = sym q                -- set→nil ; q : σ' x ≡ nil
           ... | no  x≢y  = fr y x≢y
   ...   | no ¬v   = ⊥-elim (¬v p)
+  -- case (3): v ≡ nil, the slot keeps its value.  rupdF falls through to
+  -- `just σ` unless the slot was already nil (case 1) or equal to v (case 2),
+  -- and in those two branches the slot is nil either way.
+  rupdF-complete {x} {v} {σ} {σ'} (rass (inj₂ (inj₂ (p , q))) fr) with σ x ≟V nil
+  ... | yes nileq = cong just (funext pw)
+      where
+        pw : ∀ y → set x v σ y ≡ σ' y
+        pw y with x ≟ y
+        ... | yes refl = trans p (sym (trans q nileq))   -- v≡nil≡σ'x
+        ... | no  x≢y  = fr y x≢y
+  ... | no ¬nil with σ x ≟V v
+  ...   | yes σx≡v = ⊥-elim (¬nil (trans σx≡v p))        -- σx≡v≡nil contradicts ¬nil
+  ...   | no  _ with v ≟V nil
+  ...     | yes _   = cong just (funext pw)
+          where
+            pw : ∀ y → σ y ≡ σ' y
+            pw y with x ≟ y
+            ... | yes refl = sym q                       -- q : σ' x ≡ σ x
+            ... | no  x≢y  = fr y x≢y
+  ...     | no ¬nil' = ⊥-elim (¬nil' p)
 
 ------------------------------------------------------------------------
 -- The executable, abstraction-free assignment, and its correctness.
@@ -126,3 +156,22 @@ fassign x v = fatom (rupdF x v)
 -- (so it is reversible and deterministic, by RWhileValStore / RWhileDetConcrete).
 fassign-sound : ∀ {x v s t} → frun (fassign x v) s ≡ just t → RAss x v s t
 fassign-sound h = rupdF-sound h
+
+------------------------------------------------------------------------
+-- REGRESSION for case (3), by computation.  `ri.rwhile` needs exactly this:
+-- its loop dispatch writes `Flag ^= =? Tag 'l4E; Flag ^= =? Tag 'loop`, so the
+-- second assignment is `Flag ^= nil` while Flag already holds true.  Before
+-- 2026-08-05 `rupdF` returned `nothing` here and the interpreter got stuck.
+-- If case (3) is ever removed, these two `refl`s stop typechecking.
+
+private
+  σtrue : Store
+  σtrue _ = cons nil nil
+
+  -- assigning nil to a NON-nil slot leaves the store alone
+  case3-runs : rupdF 0 nil σtrue ≡ just σtrue
+  case3-runs = refl
+
+  -- and it is a legal reversible step (so RAss-sym / RAss-det apply to it)
+  case3-legal : RAss 0 nil σtrue σtrue
+  case3-legal = rupdF-sound case3-runs
