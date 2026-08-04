@@ -5,7 +5,7 @@ Glück–Yokoyama の *A linear-time self-interpreter of a reversible imperative
 stdlib、`--safe`・postulate 0・穴 0）で機械検証する開発。**自己解釈系は抽象機械ではなく、
 対象言語そのもので書かれた 1 本の R-WHILE プログラム**である。
 
-新規モジュール（`proofs/agda/`、全 19 本・約 5,200 行、`./check.sh` は PASS=85 FAIL=0）:
+新規モジュール（`proofs/agda/`、全 21 本・約 5,400 行、`./check.sh` は PASS=87 FAIL=0）:
 
 | モジュール | 内容 |
 |---|---|
@@ -23,6 +23,8 @@ stdlib、`--safe`・postulate 0・穴 0）で機械検証する開発。**自己
 | `RWhileSISim` | 主ループ `SI`、反復連鎖 `PChain`/`PC`、`Rest` への変換、一様定数 `CC`、**合成 `simP`/`simPR` と主定理 `si-linear`** |
 | `RWhileSIProg` | 同じ主張のモジュラ版（`Realises` を仮定。`RWhileSISim` が具体的に discharge） |
 | `RWhileTimeInv` | **プログラム反転 `inv`（`InvRwhile.ml` の Agda 版）とコスト保存の健全性**・`rupd` の部分対合性・`inv-inv`・`Wf`/`InR` の保存 |
+| `RWhileTimeDet` | **意味論の決定性** `⇒-det`／`Rest-det`（結果ストアもステップ数も一意） |
+| `RWhileSIDet` | 上を `si-linear` に載せた **`si-unique`**（`SI` の**どの停止実行も**正しい答え・上界内） |
 | `RWhileSIShow` | **具象構文プリンタ**（`Cmd` → R-WHILE テキスト）。`SI` を実際に走る `.rwhile` として抽出するために使う |
 | `RWhileSIP2D` | **実装 `-p2d` との差分テスト**（実装の符号化を Agda でモデル化し、`./ri -p2d` の出力と文字列一致を型検査器が検証）と一様符号化への翻訳定理 |
 | `RWhileTimeDec` | `Wf`/`InR` の**決定手続き**（`wf?`/`inR?`/`Wf!`/`InR!`）。具体プログラムの静的条件を評価で discharge |
@@ -122,6 +124,19 @@ si-round-trip     : … → j₁ + j₂ ≤ (CC M + 2)*k + (CC M + 2)*k
 - 系として、**同じ 1 本の解釈系 `SI` が両方向を同じ定数で回す**（`si-round-trip`）。
 - 実行テスト: `inv` の構文（列の反転・テストの交換）と、往復（`p₁` 3 ステップ・ループ例 4 ステップが
   逆向きでも同じ歩数で元のストアに戻る）を `exec` で照合。
+
+### (d′) 決定性と一意性（`RWhileTimeDet` / `RWhileSIDet`）— 無仮定
+
+```agda
+⇒-det     : c ⊢ σ ⇒ τ₁ ∣ k₁ → c ⊢ σ ⇒ τ₂ ∣ k₂ → τ₁ ≡ τ₂ × k₁ ≡ k₂
+si-unique : Wf c → InR c σ → c ⊢ σ ⇒ τ ∣ k
+          → ∀ {t j} → SI ⊢ ⟨⌜c⌝∷[], [], σ⟩ ⇒ t ∣ j
+          → t ≡ ⟨[], ⌜c⌝∷[], τ⟩ × j ≤ (CC M + 2) * k
+```
+
+意味論は関係だが**関数的**である（式評価と `rupd` が関数で規則が構文主導）。これにより
+`si-linear` の主張は「そう実行**できる**」から「**どの停止実行もそうなる**」に強まる。
+上界も同様に「ある実行が速い」ではなく「その実行が速い」になる。
 
 ### (e) 解釈系そのものの可逆性（`RWhileSIInv.si-uncompute`）— 無仮定
 
