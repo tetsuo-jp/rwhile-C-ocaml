@@ -5,7 +5,7 @@ Glück–Yokoyama の *A linear-time self-interpreter of a reversible imperative
 stdlib、`--safe`・postulate 0・穴 0）で機械検証する開発。**自己解釈系は抽象機械ではなく、
 対象言語そのもので書かれた 1 本の R-WHILE プログラム**である。
 
-新規モジュール（`proofs/agda/`、全 23 本・約 5,700 行、`./check.sh` は PASS=89 FAIL=0）:
+新規モジュール（`proofs/agda/`、全 24 本・約 5,900 行、`./check.sh` は PASS=90 FAIL=0）:
 
 | モジュール | 内容 |
 |---|---|
@@ -28,6 +28,7 @@ stdlib、`--safe`・postulate 0・穴 0）で機械検証する開発。**自己
 | `RWhileSIDet` | 上を `si-linear` に載せた **`si-unique`**（`SI` の**どの停止実行も**正しい答え・上界内） |
 | `RWhileSIComplete` | 逆向き（`SI` 停止 ⇒ 対象停止）について**証明できた範囲と残る義務**を明示 |
 | `RWhileSIShow` | **具象構文プリンタ**（`Cmd` → R-WHILE テキスト）。`SI` を実際に走る `.rwhile` として抽出するために使う |
+| `RWhileSIParse` | **プリンタの往復定理**（トークン列の構文解析器と `parse (tok e) ≡ just (e , ts)`）と `;` の結合に関する曖昧性の解消 |
 | `RWhileSIP2D` | **実装 `-p2d` との差分テスト**（実装の符号化を Agda でモデル化し、`./ri -p2d` の出力と文字列一致を型検査器が検証）と一様符号化への翻訳定理 |
 | `RWhileTimeDec` | `Wf`/`InR` の**決定手続き**（`wf?`/`inR?`/`Wf!`/`InR!`）。具体プログラムの静的条件を評価で discharge |
 | `RWhileSIInv` | 上を合成した系：**逆プログラムの解釈**（`si-inverse-linear`・`si-round-trip`）と**解釈系自身の逆走**（`si-uncompute`） |
@@ -305,6 +306,34 @@ cd ../../src && ./ri -exp ../proofs/agda/extracted/SI.rwhile      # パース成
   （例: `X0 ^= 'a; X0 ^= 'a` は可逆性どおりストアを元に戻す）。プログラム保存と正当性の実測確認。
 - 実測の `a_p`（対象 1 ステップあたりの解釈系歩数）は 34〜354。手書きの `ri.rwhile`（実測
   a-rev ≈ 364）と**同じ桁**であり、核言語に絞った形式化でも実物並みの効率が出ている。
+
+## 4.8 印字したテキストは読み戻せるか（`RWhileSIParse`）
+
+抽出したテキストが本当に Agda の項を表しているかは、**印字が情報を失わないか**の問題である。
+曖昧性が宿るのはトークン列の水準なので、`Rwhile.cf` に沿った構文解析器を Agda 側に書き、
+
+```agda
+pV-ok : depth v  ≤ n → pV (suc n) (tokV v ts) ≡ just (v , ts)
+pO-ok : depthO a ≤ n → pO (suc n) (tokO a ts) ≡ just (a , ts)
+pE-ok : depthE e ≤ n → pE (suc n) (tokE e ts) ≡ just (e , ts)
+```
+
+を証明した（値・オペランド・式）。トークンは**差分リスト方式**（`tokV v ts` ＝ v のトークンの後に
+ts が続く）で生成するので `_++_` が現れず、結合律の補題が一切要らない。構文解析器は
+`exec` と同じく燃料付きで、構造的に停止する。
+
+**発見した曖昧性と、その解消**: `showC (c ⨾ d) = showC c ; showC d` は木を平坦化するので、
+`(a;b);c` と `a;(b;c)` は同じテキストになる。さらに R-WHILE の文法 `CSeq. Com ::= Com ";" Com1`
+は**左再帰**なので実装の構文解析器は左結合に組み、本開発の `_⨾_` は infixr である。
+つまり抽出テキストが表すのは**結合の付け替えを除いて**同じ命令である。これは無害で、その証明:
+
+```agda
+seq-assocʳ : ((a ⨾ b) ⨾ c) ⊢ σ ⇒ τ ∣ k → (a ⨾ (b ⨾ c)) ⊢ σ ⇒ τ ∣ k
+seq-assocˡ : (a ⨾ (b ⨾ c)) ⊢ σ ⇒ τ ∣ k → ((a ⨾ b) ⨾ c) ⊢ σ ⇒ τ ∣ k
+```
+
+**意味論も歩数も完全に保存される**ので、Agda 項について証明した定理は実装の構文解析器が
+組む項にそのまま移る。命令レベルの往復定理そのもの（`pC`）は次段の作業。
 
 ## 5. 実装上の教訓（形式化して判明したこと）
 

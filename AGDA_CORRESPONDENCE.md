@@ -240,6 +240,7 @@ Glück–Yokoyama「R-WHILE の線形時間自己解釈系」を定理化する�
 | `ri.rwhile` の `STEP` マクロ本体（12 タグ分岐） | `RWhileSIStep`：`STEP` と **12 ケース 17 定理**（`skip`34/`seq`80/`seqE`81/`cond`/`condE`/`loop`54/`lpA`/`lpD`/`lpB`84/`lpZ`57/`lpC`86、各 `astep` 一致つき） | **証明** |
 | `InvRwhile.ml`（`./ri -inverse`）※時間付き構文版。§1 の `RWhileRev` とは別の層 | `RWhileTimeInv`：`inv` と**コスト保存の健全性** `c ⊢ σ ⇒ τ ∣ k → inv c ⊢ τ ⇒ σ ∣ k`（同じ `k`）、`rupd` の部分対合性、`inv-inv`、`Wf`/`InR` の保存 | **証明**（往復の実行テスト付き） |
 | 逆プログラムの解釈 | `RWhileSIInv`：`si-inverse-linear`／`si-round-trip` — **同じ `SI`・同じ定数で両方向が線形時間** | **証明** |
+| プリンタの忠実性 | `RWhileSIParse`：トークン列の構文解析器と往復定理（値・オペランド・式）。`;` は印字が平坦化するため**結合の付け替えを除いて**一致し、`seq-assocʳ/ˡ` で意味論・歩数とも保存されることを証明（命令レベルの `pC` は次段） | **部分的（式まで証明）** |
 | 逆向きの完全性 | `RWhileSIComplete`：**証明済み**＝`si-halts→todo-empty`（停止時 todo は空）・`si-answer`（停止した `SI` は誤答しない）。**未証明**＝`SiComplete`（`SI` 停止 ⇒ 対象停止）。デコード不変量が要る旨を型と docs に明示（postulate ではない） | **部分的** |
 | 燃料付き評価器 | `RWhileTimeExec`：`exec-mono`／`exec-complete`（`exec-sound` と合わせて関係と評価器が完全一致）。停止しない実行は「どの燃料でも `nothing`」として特徴づけ（無限ループと行き詰まりは区別しない） | **証明** |
 | 意味論の決定性 | `RWhileTimeDet`：`⇒-det`／`Rest-det`（ストアもステップ数も一意）。`RWhileSIDet.si-unique` で「`SI` のどの停止実行も正しい答え・上界内」に強化 | **証明** |
@@ -258,7 +259,7 @@ Glück–Yokoyama「R-WHILE の線形時間自己解釈系」を定理化する�
   `CC ^= C` する構造は、この必然性の反映である。
 - **スコープ**: 式は平坦（オペランド＝変数/定数）、`<=` は対象言語に含めない。可逆制御構造 4 種と
   `rupdate` は `EvalRwhile.ml` どおり。解釈系は対象プログラムのループ表明・条件文の出口表明を実際に検査する。
-- **全 89 モジュール `--safe` PASS**（`proofs/agda/check.sh`、postulate 0、穴 0）。
+- **全 90 モジュール `--safe` PASS**（`proofs/agda/check.sh`、postulate 0、穴 0）。
 
 ## `rupdate` の第 3 の場合（2026-08-05 に形式化へ追加）
 
