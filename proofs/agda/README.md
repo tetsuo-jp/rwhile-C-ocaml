@@ -575,7 +575,7 @@ implemented**.  See `../../RESEARCH_ROADMAP.md` and the paper's
 
 ## Linear-time self-interpretation (2026-08-04)
 
-Seventeen modules (~4,900 lines) formalise the headline claim of Glück &
+Nineteen modules (~5,200 lines) formalise the headline claim of Glück &
 Yokoyama, *A linear-time self-interpreter of a reversible imperative
 language*.  The self-interpreter is **not** an abstract machine: it is one
 fixed R-WHILE program `SI`, and the theorem bounds its cost in the very step
@@ -672,6 +672,14 @@ input — it is a self-*interpreter*, not a consumer.
   is a parameter (`record Realises`), giving `j ≤ (4(C+1)+2)·k` for any `STEP`
   that realises one machine step at cost `C`.  `RWhileSISim` discharges it
   concretely; this module records the shape of the argument.
+- `RWhileSIShow.agda` / `RWhileSIP2D.agda` — the two halves of the
+  differential story against the OCaml implementation: `showC` prints a `Cmd`
+  in R-WHILE's concrete syntax (so `./extract-si.sh` can write the verified
+  interpreter out as `extracted/SI.rwhile`, 2124 lines, which `src/ri` parses
+  and runs), and `⌜_⌝ᵖ`/`showV` model `src/Program2DataRwhile.ml` closely
+  enough that the printed encoding matches `./ri -p2d` VERBATIM on eight
+  programs, with `p→u-ok` proving the translation into this development's
+  uniform encoding.
 - `RWhileSITest.agda` — executable tests: the type checker runs `exec` on
   concrete interpreter stores and checks both the result and the step count
   against the proved cost formulas (push/pop 9, walk 58, `lkE` 83/27, `updE`

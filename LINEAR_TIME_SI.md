@@ -5,7 +5,7 @@ Glück–Yokoyama の *A linear-time self-interpreter of a reversible imperative
 stdlib、`--safe`・postulate 0・穴 0）で機械検証する開発。**自己解釈系は抽象機械ではなく、
 対象言語そのもので書かれた 1 本の R-WHILE プログラム**である。
 
-新規モジュール（`proofs/agda/`、全 18 本・約 5,100 行、`./check.sh` は PASS=84 FAIL=0）:
+新規モジュール（`proofs/agda/`、全 19 本・約 5,200 行、`./check.sh` は PASS=85 FAIL=0）:
 
 | モジュール | 内容 |
 |---|---|
@@ -23,6 +23,7 @@ stdlib、`--safe`・postulate 0・穴 0）で機械検証する開発。**自己
 | `RWhileSISim` | 主ループ `SI`、反復連鎖 `PChain`/`PC`、`Rest` への変換、一様定数 `CC`、**合成 `simP`/`simPR` と主定理 `si-linear`** |
 | `RWhileSIProg` | 同じ主張のモジュラ版（`Realises` を仮定。`RWhileSISim` が具体的に discharge） |
 | `RWhileTimeInv` | **プログラム反転 `inv`（`InvRwhile.ml` の Agda 版）とコスト保存の健全性**・`rupd` の部分対合性・`inv-inv`・`Wf`/`InR` の保存 |
+| `RWhileSIShow` | **具象構文プリンタ**（`Cmd` → R-WHILE テキスト）。`SI` を実際に走る `.rwhile` として抽出するために使う |
 | `RWhileSIP2D` | **実装 `-p2d` との差分テスト**（実装の符号化を Agda でモデル化し、`./ri -p2d` の出力と文字列一致を型検査器が検証）と一様符号化への翻訳定理 |
 | `RWhileTimeDec` | `Wf`/`InR` の**決定手続き**（`wf?`/`inR?`/`Wf!`/`InR!`）。具体プログラムの静的条件を評価で discharge |
 | `RWhileSIInv` | 上を合成した系：**逆プログラムの解釈**（`si-inverse-linear`・`si-round-trip`）と**解釈系自身の逆走**（`si-uncompute`） |
@@ -210,6 +211,35 @@ p→u-ok : ∀ c → p→uC ⌜ c ⌝ᵖ ≡ ⌜ deskip c ⌝
 すなわち実装の `-p2d` 出力を機械的に変換すれば、検証済み解釈系 `SI` がそのまま食える。
 `deskip` は `skip` を `X0 ^= nil` に置き換える写像で、実装に `skip` が無いことを明示する
 （X0 = nil のとき同じ振る舞い・同じ 1 歩）。
+
+## 4.7 抽出と実測（`extract-si.sh` / `extracted/SI.rwhile`）
+
+検証済みの `SI` を**実際に走る R-WHILE プログラムとして抽出**し、実装 `src/ri` で走らせた。
+
+```sh
+cd proofs/agda && ./extract-si.sh          # extracted/SI.rwhile（2,124 行・37 KB）
+cd ../../src && ./ri -exp ../proofs/agda/extracted/SI.rwhile      # パース成功
+./ri -steps ../proofs/agda/extracted/SI_run.rwhile <input.val>    # 実測
+```
+
+`SI.rwhile` は `read X0（todo）; SI; write X1（done）`。`SI_run.rwhile` は入力を
+`(todo . store)`、出力を `(done . store)` にする 10 歩のラッパを前後に付けたもの。
+
+**実測（ラッパの 10 歩を引いた値）と証明された上界 `(CC M + 2)·k`**:
+
+| 対象プログラム | M | k | 実測 | 上界 | 比 |
+|---|---:|---:|---:|---:|---:|
+| `skip` | 0 | 1 | 34 | 3198 | 1.1% |
+| `X0 ^= 'a`（定数オペランド） | 1 | 1 | 188 | 5942 | 3.2% |
+| `X1 ^= X0`（変数オペランド） | 2 | 1 | 354 | 8686 | 4.1% |
+| `X0 ^= 'a; X0 ^= 'a` | 1 | 3 | 526 | 17826 | 3.0% |
+
+- **どの実行も上界の内側**（余裕 20〜30 倍）。`CC M` は「1 対象ステップあたりの一様な予算」で、
+  最悪ケース（ループ手順 ＋ 両オペランドが変数で末尾まで歩行）に合わせてあるため。
+- 出力を見ると **done スタックに `⌜c⌝` が組み立て直され、対象ストアが正しく更新されている**
+  （例: `X0 ^= 'a; X0 ^= 'a` は可逆性どおりストアを元に戻す）。プログラム保存と正当性の実測確認。
+- 実測の `a_p`（対象 1 ステップあたりの解釈系歩数）は 34〜354。手書きの `ri.rwhile`（実測
+  a-rev ≈ 364）と**同じ桁**であり、核言語に絞った形式化でも実物並みの効率が出ている。
 
 ## 5. 実装上の教訓（形式化して判明したこと）
 
