@@ -5,7 +5,7 @@ Glück–Yokoyama の *A linear-time self-interpreter of a reversible imperative
 stdlib、`--safe`・postulate 0・穴 0）で機械検証する開発。**自己解釈系は抽象機械ではなく、
 対象言語そのもので書かれた 1 本の R-WHILE プログラム**である。
 
-新規モジュール（`proofs/agda/`、全 21 本・約 5,400 行、`./check.sh` は PASS=87 FAIL=0）:
+新規モジュール（`proofs/agda/`、全 22 本・約 5,600 行、`./check.sh` は PASS=88 FAIL=0）:
 
 | モジュール | 内容 |
 |---|---|
@@ -24,6 +24,7 @@ stdlib、`--safe`・postulate 0・穴 0）で機械検証する開発。**自己
 | `RWhileSIProg` | 同じ主張のモジュラ版（`Realises` を仮定。`RWhileSISim` が具体的に discharge） |
 | `RWhileTimeInv` | **プログラム反転 `inv`（`InvRwhile.ml` の Agda 版）とコスト保存の健全性**・`rupd` の部分対合性・`inv-inv`・`Wf`/`InR` の保存 |
 | `RWhileTimeDet` | **意味論の決定性** `⇒-det`／`Rest-det`（結果ストアもステップ数も一意） |
+| `RWhileTimeExec` | **燃料付き評価器の完全性**（単調性 `exec-mono` ＋ `exec-complete`）と、停止しないプログラムの特徴づけ |
 | `RWhileSIDet` | 上を `si-linear` に載せた **`si-unique`**（`SI` の**どの停止実行も**正しい答え・上界内） |
 | `RWhileSIShow` | **具象構文プリンタ**（`Cmd` → R-WHILE テキスト）。`SI` を実際に走る `.rwhile` として抽出するために使う |
 | `RWhileSIP2D` | **実装 `-p2d` との差分テスト**（実装の符号化を Agda でモデル化し、`./ri -p2d` の出力と文字列一致を型検査器が検証）と一様符号化への翻訳定理 |
@@ -137,6 +138,25 @@ si-unique : Wf c → InR c σ → c ⊢ σ ⇒ τ ∣ k
 意味論は関係だが**関数的**である（式評価と `rupd` が関数で規則が構文主導）。これにより
 `si-linear` の主張は「そう実行**できる**」から「**どの停止実行もそうなる**」に強まる。
 上界も同様に「ある実行が速い」ではなく「その実行が速い」になる。
+
+### (d″) 実行可能な評価器との一致（`RWhileTimeExec`）— 無仮定
+
+```agda
+exec-mono     : exec n c σ ≡ just r → exec (suc n) c σ ≡ just r
+exec-complete : c ⊢ σ ⇒ τ ∣ k → Σ[ n ] exec n c σ ≡ just (τ , k)
+```
+
+`exec-sound`（計算した実行は導出である）と合わせて、**関係と実行可能な評価器は完全に一致**する。
+帰結として「停止する実行が存在しない」ことが検査可能な形になる:
+
+```agda
+no-run→exec-nothing : (どの導出も存在しない) → ∀ n → exec n c σ ≡ nothing
+exec-nothing→no-run : (∀ n → exec n c σ ≡ nothing) → どの導出も存在しない
+```
+
+**この定理が言わないこと**（正直に）: `exec` が常に `nothing` であることは「無限ループ」と
+「行き詰まり（`rupd` の失敗・条件文の出口表明が成立しない）」を**区別しない**。
+時間付き big-step 意味論では両者を区別できず、そのためには小ステップ意味論が要る（本開発の範囲外）。
 
 ### (e) 解釈系そのものの可逆性（`RWhileSIInv.si-uncompute`）— 無仮定
 
