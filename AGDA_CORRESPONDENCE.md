@@ -232,7 +232,7 @@ Glück–Yokoyama「R-WHILE の線形時間自己解釈系」を定理化する�
 | 実装の部品 | Agda 結果 | 強さ |
 |---|---|---|
 | `EvalRwhile.eval_steps`（`./ri -steps` のコスト） | `RWhileTime`：コスト付き big-step ＋ 燃料付き `exec`/`exec-sound` | **証明**（`incr` と 1 対 1。式は平坦に限定） |
-| `Program2DataRwhile.ml`（`-p2d`） | `RWhileSIEnc`：`⌜_⌝`・`encS`・`num`・タグ表（式は `(tag . (o1 . o2))` に一様化） | 定義 |
+| `Program2DataRwhile.ml`（`-p2d`） | `RWhileSIEnc`：`⌜_⌝`・`encS`・`num`・タグ表（式は `(tag . (o1 . o2))` に一様化）／`RWhileSIP2D`：実装の符号化を Agda でモデル化し **`./ri -p2d` の出力と文字列一致を型検査器が照合**（8 例）、一様符号化への翻訳 `p→u-ok` も証明 | **差分テスト＋翻訳定理** |
 | R-WHILE の静的条件（`X ∉ Vars(E)`、変数はストア内） | `RWhileSIWf`：分離則・`NotIn`/`evalE-frame`・`Wf`/`InR`・`⇒-length` | **証明** |
 | `ri.rwhile` の主ループ＋`STEP`（todo/done アジェンダ、プログラム保存） | `RWhileSIMach`：`astep`/`step1`・`sim`・`machine-linear`（対象 1 ステップ ≤ **機械 4 ステップ**） | **証明**（実行テスト付き） |
 | `ri.rwhile` の `AUX`/`LOOKUP`/`UPDATE`（`Vl` 歩行） | `RWhileSIMac`（汎用 push/pop、コスト 9）・`RWhileSIWalk`（28/セル）・`RWhileSILookup`（**`56k+27`**） | **証明**（実行テストで厳密値を照合） |
@@ -255,7 +255,7 @@ Glück–Yokoyama「R-WHILE の線形時間自己解釈系」を定理化する�
   `CC ^= C` する構造は、この必然性の反映である。
 - **スコープ**: 式は平坦（オペランド＝変数/定数）、`<=` は対象言語に含めない。可逆制御構造 4 種と
   `rupdate` は `EvalRwhile.ml` どおり。解釈系は対象プログラムのループ表明・条件文の出口表明を実際に検査する。
-- **全 83 モジュール `--safe` PASS**（`proofs/agda/check.sh`、postulate 0、穴 0）。
+- **全 84 モジュール `--safe` PASS**（`proofs/agda/check.sh`、postulate 0、穴 0）。
 
 ## `rupdate` の第 3 の場合（2026-08-05 に形式化へ追加）
 

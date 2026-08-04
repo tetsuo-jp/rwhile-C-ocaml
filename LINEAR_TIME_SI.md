@@ -5,7 +5,7 @@ Glück–Yokoyama の *A linear-time self-interpreter of a reversible imperative
 stdlib、`--safe`・postulate 0・穴 0）で機械検証する開発。**自己解釈系は抽象機械ではなく、
 対象言語そのもので書かれた 1 本の R-WHILE プログラム**である。
 
-新規モジュール（`proofs/agda/`、全 17 本・約 4,900 行、`./check.sh` は PASS=83 FAIL=0）:
+新規モジュール（`proofs/agda/`、全 18 本・約 5,100 行、`./check.sh` は PASS=84 FAIL=0）:
 
 | モジュール | 内容 |
 |---|---|
@@ -23,6 +23,7 @@ stdlib、`--safe`・postulate 0・穴 0）で機械検証する開発。**自己
 | `RWhileSISim` | 主ループ `SI`、反復連鎖 `PChain`/`PC`、`Rest` への変換、一様定数 `CC`、**合成 `simP`/`simPR` と主定理 `si-linear`** |
 | `RWhileSIProg` | 同じ主張のモジュラ版（`Realises` を仮定。`RWhileSISim` が具体的に discharge） |
 | `RWhileTimeInv` | **プログラム反転 `inv`（`InvRwhile.ml` の Agda 版）とコスト保存の健全性**・`rupd` の部分対合性・`inv-inv`・`Wf`/`InR` の保存 |
+| `RWhileSIP2D` | **実装 `-p2d` との差分テスト**（実装の符号化を Agda でモデル化し、`./ri -p2d` の出力と文字列一致を型検査器が検証）と一様符号化への翻訳定理 |
 | `RWhileTimeDec` | `Wf`/`InR` の**決定手続き**（`wf?`/`inR?`/`Wf!`/`InR!`）。具体プログラムの静的条件を評価で discharge |
 | `RWhileSIInv` | 上を合成した系：**逆プログラムの解釈**（`si-inverse-linear`・`si-round-trip`）と**解釈系自身の逆走**（`si-uncompute`） |
 | `RWhileSITest` | **実行テスト**（型検査器が `exec` を走らせ、結果とステップ数を照合） |
@@ -181,6 +182,35 @@ si-uncompute : Wf c → InR c σ → c ⊢ σ ⇒ τ ∣ k
 - ⇒ **定数削減の本丸は A1（ネスト式）**であり、それ以前の削減余地は約 7%。
   この計測結果にもとづき、ループの優先順を「解釈系自身の可逆性（F2）→ 式形の追加 → 定数削減」に変更した。
 
+## 4.6 実装の `-p2d` との差分テスト（`RWhileSIP2D`）
+
+形式化が「理想化した符号化」ではなく**実物**を語っていることを担保するため、
+`src/Program2DataRwhile.ml` の符号化を Agda でモデル化し（`⌜_⌝ᵖ`）、実装の具象構文で
+印字して（`showV`）、**`./ri -p2d` の出力と文字列一致することを型検査器に検証させる**。
+8 プログラム（代入・`cons`・`hd`・`pair?`・`=?`・逐次・条件・ループ）で一致を確認済み。
+
+両者の相違（意図的なもの）と対応:
+
+| 対象 | 実装 `-p2d` | 本形式化 `⌜_⌝` |
+|---|---|---|
+| 変数 | `('var . num k)`（1 始まり） | 同じ（0 始まり） |
+| 定数 | `('val . v)` | `('cst . v)`（名前だけの違い） |
+| 裸のオペランド | そのまま | `('opd . (o . dummy))` に包む |
+| `hd`/`tl`/`pair?` | `(tag . o)` | `(tag . (o . dummy))` |
+| `cons`/`=?` | `(tag . (o1 . o2))` | 同じ |
+| `if`/`from` | 末尾に `nil` が付く | 付かない |
+| `skip` | **無い**（`doNothing` = `X0 ^= nil`） | `('skip . nil)` |
+
+この対応は**証明されている**: 総翻訳 `p→uC` について
+
+```agda
+p→u-ok : ∀ c → p→uC ⌜ c ⌝ᵖ ≡ ⌜ deskip c ⌝
+```
+
+すなわち実装の `-p2d` 出力を機械的に変換すれば、検証済み解釈系 `SI` がそのまま食える。
+`deskip` は `skip` を `X0 ^= nil` に置き換える写像で、実装に `skip` が無いことを明示する
+（X0 = nil のとき同じ振る舞い・同じ 1 歩）。
+
 ## 5. 実装上の教訓（形式化して判明したこと）
 
 - **`with` 抽象を合成で使ってはいけない**。機械状態の型（19 スロット × 符号化プログラム）が
@@ -193,7 +223,7 @@ si-uncompute : Wf c → InR c σ → c ⊢ σ ⇒ τ ∣ k
 ## 6. 検証方法
 
 ```sh
-cd proofs/agda && ./check.sh          # 82 モジュール、PASS=82 FAIL=0
+cd proofs/agda && ./check.sh          # 84 モジュール、PASS=84 FAIL=0
 ```
 
 実行テスト（型検査器が検証）: `push`/`pop` 各 9、`walk` 2 セル 58、`lkE` 変数 1 で 83（= 56k+27）、
