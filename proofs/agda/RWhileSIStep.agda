@@ -1028,7 +1028,7 @@ step-lpD-f σ f ev lt ec Dc Lc cd dn =
 -- Case 12: `x ^= e` -- the object language's reversible assignment.
 
 assBody : ℕ → ℕ
-assBody M = foldr stp 1 (1 ∷ evalB M ∷ 1 ∷ (M * 60 + 27) ∷ 1 ∷ evalB M ∷ [])
+assBody M = foldr stp 1 (1 ∷ evalB M ∷ 1 ∷ (M * 56 + 27) ∷ 1 ∷ evalB M ∷ [])
 
 assStep : ℕ → ℕ
 assStep M = stp 15 (stp (2 + assBody M) 15)

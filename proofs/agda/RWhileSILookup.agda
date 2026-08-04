@@ -12,7 +12,7 @@
 -- interpreter's OWN reversible update (`Hd ^= Vv`), so the object-level
 -- partial involution is inherited rather than simulated.
 --
--- Cost: `60·k + 27` for object variable k, i.e. AFFINE in the store size M --
+-- Cost: `56·k + 27` for object variable k, i.e. AFFINE in the store size M --
 -- the sole source of the store-dependence of `Realises.C`.
 --
 -- --safe, no postulates, no holes.
@@ -52,7 +52,7 @@ walk-run0 : ∀ (pre post : List V) cd dn tg ag t2 vv el ww a1 a2 t3 etg ot
                 (num (length pre)) (num 0) nil el ww a1 a2 t3 etg ot)
       ⇒ emb (mkI cd dn (encS post) tg ag nil t2 nil vv
                 (num (length pre)) (num (length pre)) (encS (revApp pre [])) el ww a1 a2 t3 etg ot)
-      ∣ suc (1 + length pre * 30)
+      ∣ suc (1 + length pre * 28)
 walk-run0 pre post cd dn tg ag t2 vv el ww a1 a2 t3 etg ot
   rewrite sym (revOnto-encS pre []) =
   walk-run pre post cd dn tg ag t2 vv nil el ww a1 a2 t3 etg ot
@@ -64,7 +64,7 @@ back-run0 : ∀ (pre post : List V) cd dn tg ag t2 vv el ww a1 a2 t3 etg ot
                 (num (length pre)) (num (length pre)) (encS (revApp pre [])) el ww a1 a2 t3 etg ot)
       ⇒ emb (mkI cd dn (encS (pre ++ post)) tg ag nil t2 nil vv
                 (num (length pre)) (num 0) nil el ww a1 a2 t3 etg ot)
-      ∣ suc (1 + length pre * 30)
+      ∣ suc (1 + length pre * 28)
 back-run0 pre post cd dn tg ag t2 vv el ww a1 a2 t3 etg ot
   rewrite sym (revApp-revApp pre [] post) | sym (length-rev0 pre) =
   back-run (revApp pre []) post cd dn tg ag t2 vv el ww a1 a2 t3 etg ot
@@ -81,7 +81,7 @@ lk-run : ∀ (pre post : List V) (v : V) cd dn tg ag t2 el ww a1 a2 t3 etg ot
                 (num (length pre)) (num 0) nil el ww a1 a2 t3 etg ot)
       ⇒ emb (mkI cd dn (encS (pre ++ v ∷ post)) tg ag nil t2 nil v
                 (num (length pre)) (num 0) nil el ww a1 a2 t3 etg ot)
-      ∣ 3 + (length pre * 30 + (24 + length pre * 30))
+      ∣ 3 + (length pre * 28 + (24 + length pre * 28))
 lk-run pre post v cd dn tg ag t2 el ww a1 a2 t3 etg ot =
   e-seq (walk-run0 pre (v ∷ post) cd dn tg ag t2 nil el ww a1 a2 t3 etg ot)
    (e-seq (pop-hd-vl cd dn v (encS post) tg ag t2 nil
@@ -106,7 +106,7 @@ upd-run : ∀ (pre post : List V) (v w u : V) cd dn tg ag t2 el ww a1 a2 t3 etg 
                 (num (length pre)) (num 0) nil el ww a1 a2 t3 etg ot)
       ⇒ emb (mkI cd dn (encS (pre ++ u ∷ post)) tg ag nil t2 nil w
                 (num (length pre)) (num 0) nil el ww a1 a2 t3 etg ot)
-      ∣ 3 + (length pre * 30 + (24 + length pre * 30))
+      ∣ 3 + (length pre * 28 + (24 + length pre * 28))
 upd-run pre post v w u cd dn tg ag t2 el ww a1 a2 t3 etg ot ru =
   e-seq (walk-run0 pre (v ∷ post) cd dn tg ag t2 w el ww a1 a2 t3 etg ot)
    (e-seq (pop-hd-vl cd dn v (encS post) tg ag t2 w
@@ -140,8 +140,8 @@ split (x ∷ σ) (suc k) (s≤s lt) with split σ k lt
       x ∷ pre , v , post , cong (x ∷_) eq , cong suc len
 
 ------------------------------------------------------------------------
--- The cost, in closed form: 60·k + 27.
+-- The cost, in closed form: 56·k + 27.
 
-lk-cost : ∀ k → 3 + (k * 30 + (24 + k * 30)) ≡ k * 60 + 27
-lk-cost = solve 1 (λ k → con 3 :+ (k :* con 30 :+ (con 24 :+ k :* con 30))
-                      := k :* con 60 :+ con 27) refl
+lk-cost : ∀ k → 3 + (k * 28 + (24 + k * 28)) ≡ k * 56 + 27
+lk-cost = solve 1 (λ k → con 3 :+ (k :* con 28 :+ (con 24 :+ k :* con 28))
+                      := k :* con 56 :+ con 27) refl

@@ -9,7 +9,7 @@
 --
 --   * regression tests for the macros (push/pop/walk/lookup/update), and
 --   * a check of the cost formulas proved in RWhileSIWalk / RWhileSILookup
---     (`60k + 27` for a lookup of variable k, 9 for a push, ...).
+--     (`56k + 27` for a lookup of variable k, 9 for a push, ...).
 --
 -- They also exercise `exec`, which is otherwise only used through
 -- `exec-sound`.
@@ -58,21 +58,21 @@ private
   test-pop = refl
 
   ------------------------------------------------------------------------
-  -- the walk: two cells down and back, 30 steps per cell + 2.
+  -- the walk: two cells down and back, 28 steps per cell + 2.
 
   test-walk : exec 200 walk (ist (encS σ₃) nil nil (num 2))
             ≡ just (emb (mkI nil nil (encS (atm 3 ∷ [])) nil nil nil nil nil nil
                              (num 2) (num 2) (encS (atm 2 ∷ atm 1 ∷ [])) nil nil nil nil
                              nil nil nil)
-                   , 62)
+                   , 58)
   test-walk = refl
 
   ------------------------------------------------------------------------
-  -- LOOKUP: reading variable 1 yields 'b and costs 60·1 + 27 = 87,
+  -- LOOKUP: reading variable 1 yields 'b and costs 56·1 + 27 = 83,
   -- with the object store fully restored.
 
   test-lookup : exec 300 lkE (ist (encS σ₃) nil nil (num 1))
-              ≡ just (ist (encS σ₃) nil (atm 2) (num 1) , 87)
+              ≡ just (ist (encS σ₃) nil (atm 2) (num 1) , 83)
   test-lookup = refl
 
   -- reading variable 0 costs 27
@@ -86,11 +86,11 @@ private
   -- involution `rupdate` of src/EvalRwhile.ml, inherited by the interpreter.
 
   test-update : exec 300 updE (ist (encS (nil ∷ nil ∷ nil ∷ [])) nil (atm 2) (num 1))
-              ≡ just (ist (encS (nil ∷ atm 2 ∷ nil ∷ [])) nil (atm 2) (num 1) , 87)
+              ≡ just (ist (encS (nil ∷ atm 2 ∷ nil ∷ [])) nil (atm 2) (num 1) , 83)
   test-update = refl
 
   test-update-clears : exec 300 updE (ist (encS (nil ∷ atm 2 ∷ nil ∷ [])) nil (atm 2) (num 1))
-                     ≡ just (ist (encS (nil ∷ nil ∷ nil ∷ [])) nil (atm 2) (num 1) , 87)
+                     ≡ just (ist (encS (nil ∷ nil ∷ nil ∷ [])) nil (atm 2) (num 1) , 83)
   test-update-clears = refl
 
   ------------------------------------------------------------------------
@@ -103,7 +103,7 @@ private
              nil nil nil)
 
   test-opd-var : exec 300 (opdC iA1) (iste (atm 0 ∙ num 1) nil)
-               ≡ just (iste (atm 0 ∙ num 1) (atm 2) , 96)
+               ≡ just (iste (atm 0 ∙ num 1) (atm 2) , 92)
   test-opd-var = refl
 
   test-opd-cst : exec 300 (opdC iA1) (iste (atm 1 ∙ atm 7) nil)
@@ -112,7 +112,7 @@ private
 
   -- running it twice clears the register again (the uncompute idiom)
   test-opd-invol : exec 300 (opdC iA1) (iste (atm 0 ∙ num 1) (atm 2))
-                 ≡ just (iste (atm 0 ∙ num 1) nil , 96)
+                 ≡ just (iste (atm 0 ∙ num 1) nil , 92)
   test-opd-invol = refl
 
   ------------------------------------------------------------------------
@@ -127,14 +127,14 @@ private
 
   test-eval-cns :
     exec 600 evalC (iste2 ⌜ cns (var 1) (cst (atm 9)) ⌝ᵉ nil)
-    ≡ just (iste2 ⌜ cns (var 1) (cst (atm 9)) ⌝ᵉ (atm 2 ∙ atm 9) , 235)
+    ≡ just (iste2 ⌜ cns (var 1) (cst (atm 9)) ⌝ᵉ (atm 2 ∙ atm 9) , 227)
   test-eval-cns = refl
 
   -- running it again clears the value register (the involution the `ass`
   -- case relies on)
   test-eval-invol :
     exec 600 evalC (iste2 ⌜ cns (var 1) (cst (atm 9)) ⌝ᵉ (atm 2 ∙ atm 9))
-    ≡ just (iste2 ⌜ cns (var 1) (cst (atm 9)) ⌝ᵉ nil , 235)
+    ≡ just (iste2 ⌜ cns (var 1) (cst (atm 9)) ⌝ᵉ nil , 227)
   test-eval-invol = refl
 
   ------------------------------------------------------------------------
@@ -148,5 +148,5 @@ private
 
   test-eval-pair-f :
     exec 600 evalC (iste2 ⌜ prE (var 1) ⌝ᵉ nil)
-    ≡ just (iste2 ⌜ prE (var 1) ⌝ᵉ nil , 239)
+    ≡ just (iste2 ⌜ prE (var 1) ⌝ᵉ nil , 231)
   test-eval-pair-f = refl

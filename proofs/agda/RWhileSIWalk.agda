@@ -23,8 +23,8 @@
 --
 -- THEOREM `walk-run`: starting with `Vl` holding `pre ++ post`, the counter at
 -- 0 and the target index `Kk = |pre|`, the loop ends with `Vl = post`, the
--- prefix reversed onto `Rv`, and it costs exactly `30·|pre| + 2` steps --
--- linear in the index walked, i.e. ≤ 30·M + 1 for a store of M variables.
+-- prefix reversed onto `Rv`, and it costs exactly `28·|pre| + 2` steps --
+-- linear in the index walked, i.e. ≤ 28·M + 1 for a store of M variables.
 --
 -- --safe, no postulates, no holes.
 ------------------------------------------------------------------------
@@ -79,17 +79,18 @@ push-hd-rv cd dn vl tg ag t2 v vv kk cn rv el ww a1 a2 t3 etg ot =
      (e-seq (e-ass refl refl)
             (e-ass refl (rupd-self (v ∙ rv))))))
 
--- incrementing the counter IS a push of the (nil) head register
+-- incrementing the counter: the dedicated 4-assignment sequence (7 steps).
+-- Using `push` here would cost 9: its `x ^= hd t` step clears a head
+-- register that is already nil.
 inc-cn : ∀ cd dn vl tg ag t2 vv kk cn rv el ww a1 a2 t3 etg ot
-  → push iT1 iHd iCn
+  → incC iT1 iCn
       ⊢ emb (mkI cd dn vl tg ag nil t2 nil vv kk cn         rv el ww a1 a2 t3 etg ot)
-      ⇒ emb (mkI cd dn vl tg ag nil t2 nil vv kk (nil ∙ cn) rv el ww a1 a2 t3 etg ot) ∣ 9
+      ⇒ emb (mkI cd dn vl tg ag nil t2 nil vv kk (nil ∙ cn) rv el ww a1 a2 t3 etg ot) ∣ 7
 inc-cn cd dn vl tg ag t2 vv kk cn rv el ww a1 a2 t3 etg ot =
   e-seq (e-ass refl refl)
    (e-seq (e-ass refl (rupd-self cn))
     (e-seq (e-ass refl refl)
-     (e-seq (e-ass refl refl)
-            (e-ass refl (rupd-self (nil ∙ cn))))))
+           (e-ass refl (rupd-self (nil ∙ cn)))))
 
 ------------------------------------------------------------------------
 -- Numerals: the loop's exit test compares the counter with the target index.
@@ -105,7 +106,7 @@ num-neq (suc j) n = num-neq j n
 -- The walk.
 
 wbody : Cmd
-wbody = pop iT1 iHd iVl ⨾ push iT1 iHd iRv ⨾ push iT1 iHd iCn
+wbody = pop iT1 iHd iVl ⨾ push iT1 iHd iRv ⨾ incC iT1 iCn
 
 walk : Cmd
 walk = loop (eqE (var iCn) (cst nil)) skip wbody (eqE (var iCn) (var iKk))
@@ -119,7 +120,7 @@ wbody-run : ∀ cd dn v vs tg ag t2 vv kk j rv el ww a1 a2 t3 etg ot
   → wbody
       ⊢ emb (mkI cd dn (v ∙ vs) tg ag nil t2 nil vv kk (num j)       rv       el ww a1 a2 t3 etg ot)
       ⇒ emb (mkI cd dn vs       tg ag nil t2 nil vv kk (num (suc j)) (v ∙ rv) el ww a1 a2 t3 etg ot)
-      ∣ 29
+      ∣ 27
 wbody-run cd dn v vs tg ag t2 vv kk j rv el ww a1 a2 t3 etg ot =
   e-seq (pop-hd-vl  cd dn v vs tg ag t2 vv kk (num j) rv el ww a1 a2 t3 etg ot)
    (e-seq (push-hd-rv cd dn vs tg ag t2 v vv kk (num j) rv el ww a1 a2 t3 etg ot)
@@ -135,7 +136,7 @@ walk-rest : ∀ (pre post : List V) (j : ℕ) cd dn tg ag t2 vv rv el ww a1 a2 t
                 (num (j + length pre)) (num j) rv el ww a1 a2 t3 etg ot))
       (emb (mkI cd dn (encS post) tg ag nil t2 nil vv
                 (num (j + length pre)) (num (j + length pre)) (revOnto pre rv) el ww a1 a2 t3 etg ot))
-      (length pre * 30)
+      (length pre * 28)
 walk-rest [] post j cd dn tg ag t2 vv rv el ww a1 a2 t3 etg ot
   rewrite +-identityʳ j = r-exit exit
   where
@@ -169,7 +170,7 @@ walk-run : ∀ (pre post : List V) cd dn tg ag t2 vv rv el ww a1 a2 t3 etg ot
                 (num (length pre)) (num 0) rv el ww a1 a2 t3 etg ot)
       ⇒ emb (mkI cd dn (encS post) tg ag nil t2 nil vv
                 (num (length pre)) (num (length pre)) (revOnto pre rv) el ww a1 a2 t3 etg ot)
-      ∣ suc (1 + length pre * 30)
+      ∣ suc (1 + length pre * 28)
 walk-run pre post cd dn tg ag t2 vv rv el ww a1 a2 t3 etg ot =
   e-loop refl e-skip (walk-rest pre post 0 cd dn tg ag t2 vv rv el ww a1 a2 t3 etg ot)
 
@@ -179,22 +180,21 @@ walk-run pre post cd dn tg ag t2 vv rv el ww a1 a2 t3 etg ot =
 -- body inverted), i.e. `ri.rwhile`'s `INV-AUX`.
 
 bbody : Cmd
-bbody = pop iT1 iHd iCn ⨾ pop iT1 iHd iRv ⨾ push iT1 iHd iVl
+bbody = decC iT1 iCn ⨾ pop iT1 iHd iRv ⨾ push iT1 iHd iVl
 
 back : Cmd
 back = loop (eqE (var iCn) (var iKk)) skip bbody (eqE (var iCn) (cst nil))
 
 -- decrementing the counter IS a pop into the (nil) head register
 dec-cn : ∀ cd dn vl tg ag t2 vv kk cn rv el ww a1 a2 t3 etg ot
-  → pop iT1 iHd iCn
+  → decC iT1 iCn
       ⊢ emb (mkI cd dn vl tg ag nil t2 nil vv kk (nil ∙ cn) rv el ww a1 a2 t3 etg ot)
-      ⇒ emb (mkI cd dn vl tg ag nil t2 nil vv kk cn         rv el ww a1 a2 t3 etg ot) ∣ 9
+      ⇒ emb (mkI cd dn vl tg ag nil t2 nil vv kk cn         rv el ww a1 a2 t3 etg ot) ∣ 7
 dec-cn cd dn vl tg ag t2 vv kk cn rv el ww a1 a2 t3 etg ot =
   e-seq (e-ass refl refl)
    (e-seq (e-ass refl (rupd-self (nil ∙ cn)))
     (e-seq (e-ass refl refl)
-     (e-seq (e-ass refl refl)
-            (e-ass refl (rupd-self (nil ∙ cn))))))
+           (e-ass refl (rupd-self (nil ∙ cn)))))
 
 pop-hd-rv : ∀ cd dn vl tg ag t2 v vv kk cn rv el ww a1 a2 t3 etg ot
   → pop iT1 iHd iRv
@@ -211,7 +211,7 @@ bbody-run : ∀ cd dn v vs tg ag t2 vv kk n rv el ww a1 a2 t3 etg ot
   → bbody
       ⊢ emb (mkI cd dn vs       tg ag nil t2 nil vv kk (num (suc n)) (v ∙ rv) el ww a1 a2 t3 etg ot)
       ⇒ emb (mkI cd dn (v ∙ vs) tg ag nil t2 nil vv kk (num n)       rv       el ww a1 a2 t3 etg ot)
-      ∣ 29
+      ∣ 27
 bbody-run cd dn v vs tg ag t2 vv kk n rv el ww a1 a2 t3 etg ot =
   e-seq (dec-cn     cd dn vs tg ag t2 vv kk (num n) (v ∙ rv) el ww a1 a2 t3 etg ot)
    (e-seq (pop-hd-rv  cd dn vs tg ag t2 v vv kk (num n) rv el ww a1 a2 t3 etg ot)
@@ -239,7 +239,7 @@ back-rest : ∀ (rs post : List V) (K d : ℕ) → K ≡ length rs + d
                 (num K) (num (length rs)) (encS rs) el ww a1 a2 t3 etg ot))
       (emb (mkI cd dn (encS (revApp rs post)) tg ag nil t2 nil vv
                 (num K) (num 0) nil el ww a1 a2 t3 etg ot))
-      (length rs * 30)
+      (length rs * 28)
 back-rest [] post K d eq cd dn tg ag t2 vv el ww a1 a2 t3 etg ot = r-exit refl
 back-rest (v ∷ rs) post K d eq cd dn tg ag t2 vv el ww a1 a2 t3 etg ot =
   r-iter refl
@@ -261,7 +261,7 @@ back-run : ∀ (rs post : List V) cd dn tg ag t2 vv el ww a1 a2 t3 etg ot
                 (num (length rs)) (num (length rs)) (encS rs) el ww a1 a2 t3 etg ot)
       ⇒ emb (mkI cd dn (encS (revApp rs post)) tg ag nil t2 nil vv
                 (num (length rs)) (num 0) nil el ww a1 a2 t3 etg ot)
-      ∣ suc (1 + length rs * 30)
+      ∣ suc (1 + length rs * 28)
 back-run rs post cd dn tg ag t2 vv el ww a1 a2 t3 etg ot =
   e-loop entry e-skip
     (back-rest rs post (length rs) 0 (sym (+-identityʳ (length rs)))

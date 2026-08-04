@@ -69,7 +69,7 @@ lkTo : ℕ → Cmd
 lkTo r = walk ⨾ pop iT1 iHd iVl ⨾ cpy iHd r ⨾ push iT1 iHd iVl ⨾ back
 
 lkB : ℕ → ℕ
-lkB k = k * 60 + 27
+lkB k = k * 56 + 27
 
 lk-run-a1 : ∀ (pre post : List V) (v w u : V) → rupd w v ≡ just u
   → ∀ cd dn tg ag t2 vv el ww a2 t3 etg ot
@@ -121,7 +121,7 @@ opdC r = (iOt ^= hdE (var iEl))
 -- The bound is kept in the shape the combinators produce (cost arithmetic on
 -- stuck terms does not compute); `lkB` is the only closed form we need.
 opdB : ℕ → ℕ
-opdB k = suc (1 + suc (suc (suc (1 + suc (lkB k + 1))) + 1))   -- = 60k + 36
+opdB k = suc (1 + suc (suc (suc (1 + suc (lkB k + 1))) + 1))   -- = 56k + 36
 
 -- a VARIABLE operand: walk the store and copy the cell
 opd-var-a1 : ∀ (pre post : List V) (v w u : V) → rupd w v ≡ just u
@@ -159,12 +159,12 @@ opd-cst-a1 σ v w u ru cd dn tg ag t2 vv ww a2 t3 etg =
 ------------------------------------------------------------------------
 -- The operand bound in closed form, and its monotonicity.
 
-opdB-closed : ∀ k → opdB k ≡ k * 60 + 36
-opdB-closed = solve 1 (λ k → con 7 :+ ((k :* con 60 :+ con 27 :+ con 1) :+ con 1)
-                          := k :* con 60 :+ con 36) refl
+opdB-closed : ∀ k → opdB k ≡ k * 56 + 36
+opdB-closed = solve 1 (λ k → con 7 :+ ((k :* con 56 :+ con 27 :+ con 1) :+ con 1)
+                          := k :* con 56 :+ con 36) refl
 
-opdB-mono : ∀ {j k} → j ≤ k → j * 60 + 36 ≤ k * 60 + 36
-opdB-mono le = +-monoˡ-≤ 36 (*-monoˡ-≤ 60 le)
+opdB-mono : ∀ {j k} → j ≤ k → j * 56 + 36 ≤ k * 56 + 36
+opdB-mono le = +-monoˡ-≤ 36 (*-monoˡ-≤ 56 le)
 
 length-≤-app : ∀ (pre : List V) (v : V) (post : List V) → length pre ≤ length (pre ++ v ∷ post)
 length-≤-app []        v post = z≤n
@@ -180,9 +180,9 @@ opd-run-a1 : ∀ (σ : Store) (a : Opd) → vmaxᵒ a ≤ length σ
   → Run (opdC iA1)
         (emb (mkI cd dn (encS σ) tg ag nil t2 nil vv nil nil nil ⌜ a ⌝ᵒ ww w a2 t3 etg nil))
         (emb (mkI cd dn (encS σ) tg ag nil t2 nil vv nil nil nil ⌜ a ⌝ᵒ ww u a2 t3 etg nil))
-        (length σ * 60 + 36)
+        (length σ * 56 + 36)
 opd-run-a1 σ (cst v) _ w u ru cd dn tg ag t2 vv ww a2 t3 etg =
-  rWeak (≤-trans (s≤s (s≤s (s≤s (s≤s (s≤s (s≤s z≤n)))))) (m≤n+m 36 (length σ * 60)))
+  rWeak (≤-trans (s≤s (s≤s (s≤s (s≤s (s≤s (s≤s z≤n)))))) (m≤n+m 36 (length σ * 56)))
         (opd-cst-a1 σ v w u ru cd dn tg ag t2 vv ww a2 t3 etg)
 opd-run-a1 σ (var x) lt w u ru cd dn tg ag t2 vv ww a2 t3 etg
   with split σ x lt
@@ -232,9 +232,9 @@ opd-run-a2 : ∀ (σ : Store) (a : Opd) → vmaxᵒ a ≤ length σ
   → Run (opdC iA2)
         (emb (mkI cd dn (encS σ) tg ag nil t2 nil vv nil nil nil ⌜ a ⌝ᵒ ww a1 w t3 etg nil))
         (emb (mkI cd dn (encS σ) tg ag nil t2 nil vv nil nil nil ⌜ a ⌝ᵒ ww a1 u t3 etg nil))
-        (length σ * 60 + 36)
+        (length σ * 56 + 36)
 opd-run-a2 σ (cst v) _ w u ru cd dn tg ag t2 vv ww a1 t3 etg =
-  rWeak (≤-trans (s≤s (s≤s (s≤s (s≤s (s≤s (s≤s z≤n)))))) (m≤n+m 36 (length σ * 60)))
+  rWeak (≤-trans (s≤s (s≤s (s≤s (s≤s (s≤s (s≤s z≤n)))))) (m≤n+m 36 (length σ * 56)))
         (opd-cst-a2 σ v w u ru cd dn tg ag t2 vv ww a1 t3 etg)
 opd-run-a2 σ (var x) lt w u ru cd dn tg ag t2 vv ww a1 t3 etg
   with split σ x lt
@@ -282,14 +282,14 @@ evalC = (iEt ^= hdE (var iT2))
       ⨾ (iEt ^= hdE (var iT2))
 
 -- the cost bound, in the shape the `Run` combinators produce (`stp a b` is
--- one `;` node).  P M = 60·M + 36 is the operand bound, 7 the dispatch
+-- one `;` node).  P M = 56·M + 36 is the operand bound, 7 the dispatch
 -- (six conditional levels, then one assignment).
 private
   stp : ℕ → ℕ → ℕ
   stp a b = suc (a + b)
 
 P : ℕ → ℕ
-P M = M * 60 + 36
+P M = M * 56 + 36
 
 evalB : ℕ → ℕ
 evalB M =
@@ -479,8 +479,8 @@ eval-run σ (prE a) lt v w u refl ru cd dn tg ag ww =
 -- UPDATE, generic in the variable index: the object program's reversible
 -- assignment, performed by the interpreter's own `^=` on the walked cell.
 
-lkB-mono : ∀ {j k} → j ≤ k → j * 60 + 27 ≤ k * 60 + 27
-lkB-mono le = +-monoˡ-≤ 27 (*-monoˡ-≤ 60 le)
+lkB-mono : ∀ {j k} → j ≤ k → j * 56 + 27 ≤ k * 56 + 27
+lkB-mono le = +-monoˡ-≤ 27 (*-monoˡ-≤ 56 le)
 
 upd-run-gen : ∀ (σ : Store) (x : ℕ) (w u : V) → suc x ≤ length σ
   → rupd (get σ x) w ≡ just u
@@ -490,7 +490,7 @@ upd-run-gen : ∀ (σ : Store) (x : ℕ) (w u : V) → suc x ≤ length σ
                   (num x) (num 0) nil el ww a1 a2 t3 etg ot))
         (emb (mkI cd dn (encS (set σ x u)) tg ag nil t2 nil w
                   (num x) (num 0) nil el ww a1 a2 t3 etg ot))
-        (length σ * 60 + 27)
+        (length σ * 56 + 27)
 upd-run-gen σ x w u lt ru cd dn tg ag t2 el ww a1 a2 t3 etg ot
   with split σ x lt
 ... | pre , v , post , refl , refl

@@ -235,8 +235,8 @@ Glück–Yokoyama「R-WHILE の線形時間自己解釈系」を定理化する�
 | `Program2DataRwhile.ml`（`-p2d`） | `RWhileSIEnc`：`⌜_⌝`・`encS`・`num`・タグ表（式は `(tag . (o1 . o2))` に一様化） | 定義 |
 | R-WHILE の静的条件（`X ∉ Vars(E)`、変数はストア内） | `RWhileSIWf`：分離則・`NotIn`/`evalE-frame`・`Wf`/`InR`・`⇒-length` | **証明** |
 | `ri.rwhile` の主ループ＋`STEP`（todo/done アジェンダ、プログラム保存） | `RWhileSIMach`：`astep`/`step1`・`sim`・`machine-linear`（対象 1 ステップ ≤ **機械 4 ステップ**） | **証明**（実行テスト付き） |
-| `ri.rwhile` の `AUX`/`LOOKUP`/`UPDATE`（`Vl` 歩行） | `RWhileSIMac`（汎用 push/pop、コスト 9）・`RWhileSIWalk`（30/セル）・`RWhileSILookup`（**`60k+27`**） | **証明**（実行テストで厳密値を照合） |
-| `ri.rwhile` の `EVAL-EXP`/`INV-EVAL-EXP` | `RWhileSIEval`：`opdC`（`60M+36`）・`evalC`（式 5 形、`evalB M = 240M+178`）。compute–use–uncompute で**部分対合**＝同じコードの再実行が逆計算 | **証明** |
+| `ri.rwhile` の `AUX`/`LOOKUP`/`UPDATE`（`Vl` 歩行） | `RWhileSIMac`（汎用 push/pop、コスト 9）・`RWhileSIWalk`（28/セル）・`RWhileSILookup`（**`56k+27`**） | **証明**（実行テストで厳密値を照合） |
+| `ri.rwhile` の `EVAL-EXP`/`INV-EVAL-EXP` | `RWhileSIEval`：`opdC`（`56M+36`）・`evalC`（式 5 形、`evalB M = 240M+178`）。compute–use–uncompute で**部分対合**＝同じコードの再実行が逆計算 | **証明** |
 | `ri.rwhile` の `STEP` マクロ本体（12 タグ分岐） | `RWhileSIStep`：`STEP` と **12 ケース 17 定理**（`skip`34/`seq`80/`seqE`81/`cond`/`condE`/`loop`54/`lpA`/`lpD`/`lpB`84/`lpZ`57/`lpC`86、各 `astep` 一致つき） | **証明** |
 | `InvRwhile.ml`（`./ri -inverse`）※時間付き構文版。§1 の `RWhileRev` とは別の層 | `RWhileTimeInv`：`inv` と**コスト保存の健全性** `c ⊢ σ ⇒ τ ∣ k → inv c ⊢ τ ⇒ σ ∣ k`（同じ `k`）、`rupd` の部分対合性、`inv-inv`、`Wf`/`InR` の保存 | **証明**（往復の実行テスト付き） |
 | 逆プログラムの解釈 | `RWhileSIInv`：`si-inverse-linear`／`si-round-trip` — **同じ `SI`・同じ定数で両方向が線形時間** | **証明** |

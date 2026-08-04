@@ -622,11 +622,11 @@ input — it is a self-*interpreter*, not a consumer.
 - `RWhileSIMac.agda` — the interpreter's 19-slot register file, `emb`, and
   generic `push`/`pop` (implemented with `^=` only; cost 9 each).
 - `RWhileSIWalk.agda` — walking the encoded object store `Vl` down and back
-  (30 steps per cell, both directions), the reversible core of variable access.
+  (28 steps per cell, both directions), the reversible core of variable access.
 - `RWhileSILookup.agda` — `LOOKUP` / `UPDATE` for object variables, cost
-  exactly `60k + 27` for variable `k`, plus the store split/rebuild lemmas.
-- `RWhileSIEval.agda` — operand evaluation `opdC` (`60M + 36`) and expression
-  evaluation `evalC` for all five flat forms, bound `evalB M = 240M + 178`.
+  exactly `56k + 27` for variable `k`, plus the store split/rebuild lemmas.
+- `RWhileSIEval.agda` — operand evaluation `opdC` (`56M + 36`) and expression
+  evaluation `evalC` for all five flat forms, bound `evalB M = 224M + 179`.
   These are **partial involutions** (compute–use–uncompute), so re-running the
   same code uncomputes — the Agda counterpart of `ri.rwhile`'s `INV-` macros.
 - `RWhileSIStep.agda` — the dispatch body `STEP` as real R-WHILE code (a
@@ -674,8 +674,8 @@ input — it is a self-*interpreter*, not a consumer.
   concretely; this module records the shape of the argument.
 - `RWhileSITest.agda` — executable tests: the type checker runs `exec` on
   concrete interpreter stores and checks both the result and the step count
-  against the proved cost formulas (push/pop 9, walk 62, `lkE` 87/27, `updE`
-  87 and its involution, `opdC` 96/6, `evalC` 235 and its involution).
+  against the proved cost formulas (push/pop 9, walk 58, `lkE` 83/27, `updE`
+  87 and its involution, `opdC` 92/6, `evalC` 227 and its involution).
 
 Scope: expressions are flat and `<=` is not in the object language, so the
 constant is larger than the real `ri.rwhile` (measured a-rev ≈ 364); the

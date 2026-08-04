@@ -85,6 +85,22 @@ push t x s = (t ^= cns (var x) (var s))
            ⨾ (s ^= opd (var t))
            ⨾ (t ^= opd (var s))
 
+-- incrementing a unary counter: `s := (nil . s)`.  This is what `push`
+-- does when the head register is already nil, but without push's wasted
+-- `x ^= hd t` step -- 4 assignments (7 steps) instead of 5 (9).
+incC : ℕ → ℕ → Cmd
+incC t s = (t ^= cns (cst nil) (var s))
+         ⨾ (s ^= tlE (var t))
+         ⨾ (s ^= opd (var t))
+         ⨾ (t ^= opd (var s))
+
+-- ... and its inverse, decrementing (7 steps, where `pop` would cost 9)
+decC : ℕ → ℕ → Cmd
+decC t s = (t ^= opd (var s))
+         ⨾ (s ^= opd (var t))
+         ⨾ (s ^= tlE (var t))
+         ⨾ (t ^= cns (cst nil) (var s))
+
 pop : ℕ → ℕ → ℕ → Cmd
 pop t x s = (t ^= opd (var s))
           ⨾ (s ^= opd (var t))
