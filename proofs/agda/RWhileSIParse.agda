@@ -24,7 +24,9 @@ open import Data.Nat using (ℕ; zero; suc; _+_; _⊔_; _≤_; z≤n; s≤s)
 open import Data.Nat.Properties using (≤-trans; m≤m⊔n; m≤n⊔m)
 open import Data.List using (List; []; _∷_)
 open import Data.Maybe using (Maybe; just; nothing)
-open import Data.Product using (_×_; _,_)
+open import Data.Unit using (⊤; tt)
+open import Data.Empty using (⊥)
+open import Data.Product using (_×_; _,_; proj₁; proj₂)
 open import Relation.Binary.PropositionalEquality using (_≡_; refl; sym; subst)
 
 open import RWhileTime
@@ -195,3 +197,179 @@ seq-assocʳ {a} {b} {c} {σ} {τ} (e-seq {k = ka} {l = kc} (e-seq {k = ka′} {l
 seq-assocˡ : ∀ {a b c σ τ k} → (a ⨾ (b ⨾ c)) ⊢ σ ⇒ τ ∣ k → ((a ⨾ b) ⨾ c) ⊢ σ ⇒ τ ∣ k
 seq-assocˡ {a} {b} {c} {σ} {τ} (e-seq {k = ka} da (e-seq {k = kb} {l = kc} db dc)) =
   subst (λ i → ((a ⨾ b) ⨾ c) ⊢ σ ⇒ τ ∣ i) (sym (eqR ka kb kc)) (e-seq (e-seq da db) dc)
+
+------------------------------------------------------------------------
+-- COMMANDS.
+--
+-- Printing follows `RWhileSIShow`: a branch that is `skip` prints as
+-- nothing (R-WHILE's grammar has empty branches), and `;` is flattened.
+
+tokC : Cmd → List Tok → List Tok
+tokBr : Tok → Cmd → List Tok → List Tok
+
+tokC skip           ts = tVar 0 ∷ tAss ∷ tNil ∷ ts     -- only if it stands alone
+tokC (x ^= e)       ts = tVar x ∷ tAss ∷ tokE e ts
+tokC (c ⨾ d)        ts = tokC c (tSemi ∷ tokC d ts)
+tokC (cond e c d f) ts =
+  tIf ∷ tokE e (tokBr tThen c (tokBr tElse d (tFi ∷ tokE f ts)))
+tokC (loop e D L f) ts =
+  tFrom ∷ tokE e (tokBr tDo D (tokBr tLoop L (tUntil ∷ tokE f ts)))
+
+tokBr kw skip ts = ts
+tokBr kw c    ts = kw ∷ tokC c ts
+
+------------------------------------------------------------------------
+-- The parser: `pC1` is one command, `pC` a `;`-sequence (right-nested),
+-- `pThen`/`pElse`/`pDo`/`pLoop` are the optional branches.
+
+open import RWhileTime using (_>>=M_)
+
+private
+  eFi : List Tok → Maybe (List Tok)
+  eFi (tFi ∷ ts) = just ts
+  eFi _          = nothing
+
+  eUntil : List Tok → Maybe (List Tok)
+  eUntil (tUntil ∷ ts) = just ts
+  eUntil _             = nothing
+
+pC1    : ℕ → List Tok → Maybe (Cmd × List Tok)
+pC     : ℕ → List Tok → Maybe (Cmd × List Tok)
+pThen pElse pDo pLoop : ℕ → List Tok → Maybe (Cmd × List Tok)
+
+pC1 zero _ = nothing
+pC1 (suc n) (tVar x ∷ tAss ∷ ts) =
+  pE n ts >>=M λ ea → just ((x ^= proj₁ ea) , proj₂ ea)
+pC1 (suc n) (tIf ∷ ts) =
+  pE n ts       >>=M λ ea →
+  pThen n (proj₂ ea) >>=M λ cb →
+  pElse n (proj₂ cb) >>=M λ dc →
+  eFi (proj₂ dc)     >>=M λ ts₃ →
+  pE n ts₃      >>=M λ fd →
+  just (cond (proj₁ ea) (proj₁ cb) (proj₁ dc) (proj₁ fd) , proj₂ fd)
+pC1 (suc n) (tFrom ∷ ts) =
+  pE n ts       >>=M λ ea →
+  pDo n (proj₂ ea)   >>=M λ Db →
+  pLoop n (proj₂ Db) >>=M λ Lc →
+  eUntil (proj₂ Lc)  >>=M λ ts₃ →
+  pE n ts₃      >>=M λ fd →
+  just (loop (proj₁ ea) (proj₁ Db) (proj₁ Lc) (proj₁ fd) , proj₂ fd)
+pC1 (suc n) _ = nothing
+
+pC zero    _  = nothing
+pC (suc n) ts =
+  pC1 n ts >>=M λ ca → cont (proj₁ ca) (proj₂ ca)
+  where
+    cont : Cmd → List Tok → Maybe (Cmd × List Tok)
+    cont c (tSemi ∷ ts₁) = pC n ts₁ >>=M λ db → just ((c ⨾ proj₁ db) , proj₂ db)
+    cont c ts₁           = just (c , ts₁)
+
+pThen n (tThen ∷ ts) = pC n ts
+pThen n ts           = just (skip , ts)
+pElse n (tElse ∷ ts) = pC n ts
+pElse n ts           = just (skip , ts)
+pDo   n (tDo ∷ ts)   = pC n ts
+pDo   n ts           = just (skip , ts)
+pLoop n (tLoop ∷ ts) = pC n ts
+pLoop n ts           = just (skip , ts)
+
+------------------------------------------------------------------------
+-- Round-trip for commands.
+--
+-- Two side conditions, both automatic for the printer's own output:
+--   * the command must be RIGHT-NESTED in `;` (the flattening means the
+--     text cannot distinguish the two associations; `seq-assoc` above shows
+--     the difference is semantically and cost-wise invisible), and
+--   * `skip` only occurs in branch positions, where it prints as nothing --
+--     R-WHILE has no `skip` command.
+
+depthC : Cmd → ℕ
+depthC skip           = 0
+depthC (x ^= e)       = depthE e
+depthC (c ⨾ d)        = suc (depthC c ⊔ depthC d)
+depthC (cond e c d f) = suc (depthE e ⊔ depthC c ⊔ depthC d ⊔ depthE f)
+depthC (loop e D L f) = suc (depthE e ⊔ depthC D ⊔ depthC L ⊔ depthE f)
+
+data RN1 : Cmd → Set
+data RN  : Cmd → Set
+data RNb : Cmd → Set
+
+data RN1 where
+  rn-ass  : ∀ {x e} → RN1 (x ^= e)
+  rn-cond : ∀ {e c d f} → RNb c → RNb d → RN1 (cond e c d f)
+  rn-loop : ∀ {e D L f} → RNb D → RNb L → RN1 (loop e D L f)
+
+data RN where
+  rn-one : ∀ {c} → RN1 c → RN c
+  rn-seq : ∀ {c d} → RN1 c → RN d → RN (c ⨾ d)
+
+data RNb where
+  rnb-skip : RNb skip
+  rnb-run  : ∀ {c} → RN c → RNb c
+
+NoSemi NoThen NoElse NoDo NoLoop : List Tok → Set
+NoSemi (tSemi ∷ _) = ⊥
+NoSemi _           = ⊤
+NoThen (tThen ∷ _) = ⊥
+NoThen _           = ⊤
+NoElse (tElse ∷ _) = ⊥
+NoElse _           = ⊤
+NoDo   (tDo ∷ _)   = ⊥
+NoDo   _           = ⊤
+NoLoop (tLoop ∷ _) = ⊥
+NoLoop _           = ⊤
+
+-- The general command-level round-trip is the next brick.  It needs
+-- `tokBr` reformulated as `if isSkip c then ts else kw ∷ tokC c ts` so that
+-- it reduces without knowing `c`'s constructor (a catch-all clause does
+-- not), after which the proof splits on `isSkip` for each branch.  What is
+-- established here is the parser itself (structurally terminating, one
+-- clause per leading token, following `Rwhile.cf`) together with the
+-- expression-level round-trip above and the concrete round-trips below.
+
+------------------------------------------------------------------------
+-- Concrete round-trips, checked by the type checker.
+
+private
+  -- X1 ^= cons X0 '7
+  c₁ : Cmd
+  c₁ = 1 ^= cns (var 0) (cst (atm 7))
+
+  r₁ : pC 9 (tokC c₁ []) ≡ just (c₁ , [])
+  r₁ = refl
+
+  -- X1 ^= X0;  X0 ^= '3   (a two-command sequence)
+  c₂ : Cmd
+  c₂ = (1 ^= opd (var 0)) ⨾ (0 ^= opd (cst (atm 3)))
+
+  r₂ : pC 9 (tokC c₂ []) ≡ just (c₂ , [])
+  r₂ = refl
+
+  -- if =? X1 X0 then X1 ^= X0 fi =? X1 X0     (an EMPTY else branch: skip)
+  c₃ : Cmd
+  c₃ = cond (eqE (var 1) (var 0)) (1 ^= opd (var 0)) skip (eqE (var 1) (var 0))
+
+  r₃ : pC 9 (tokC c₃ []) ≡ just (c₃ , [])
+  r₃ = refl
+
+  -- from =? X0 nil loop X0 ^= '7 until =? X0 '7   (an EMPTY do branch)
+  c₄ : Cmd
+  c₄ = loop (eqE (var 0) (cst nil)) skip (0 ^= opd (cst (atm 7))) (eqE (var 0) (cst (atm 7)))
+
+  r₄ : pC 9 (tokC c₄ []) ≡ just (c₄ , [])
+  r₄ = refl
+
+  -- nested: a conditional inside a loop body, with a sequence in a branch
+  c₅ : Cmd
+  c₅ = loop (eqE (var 0) (cst nil)) skip
+            (cond (prE (var 1)) ((0 ^= hdE (var 1)) ⨾ (1 ^= tlE (var 1))) skip
+                  (eqE (var 0) (cst nil)))
+            (eqE (var 0) (cst (atm 7)))
+
+  r₅ : pC 12 (tokC c₅ []) ≡ just (c₅ , [])
+  r₅ = refl
+
+  -- values with cons structure survive too
+  r₆ : pC 12 (tokC (0 ^= opd (cst ((atm 1 ∙ nil) ∙ atm 2))) [])
+     ≡ just ((0 ^= opd (cst ((atm 1 ∙ nil) ∙ atm 2))) , [])
+  r₆ = refl
