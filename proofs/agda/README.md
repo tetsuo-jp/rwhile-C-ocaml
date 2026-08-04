@@ -575,7 +575,7 @@ implemented**.  See `../../RESEARCH_ROADMAP.md` and the paper's
 
 ## Linear-time self-interpretation (2026-08-04)
 
-Sixteen modules (~4,800 lines) formalise the headline claim of Glück &
+Seventeen modules (~4,900 lines) formalise the headline claim of Glück &
 Yokoyama, *A linear-time self-interpreter of a reversible imperative
 language*.  The self-interpreter is **not** an abstract machine: it is one
 fixed R-WHILE program `SI`, and the theorem bounds its cost in the very step
@@ -661,7 +661,13 @@ input — it is a self-*interpreter*, not a consumer.
   program undoes the run, within the same bound (`si-inverse-linear`), and
   forward-then-backward through one and the same interpreter stays linear
   (`si-round-trip`).  Reversible languages get backwards execution at no
-  asymptotic cost — machine-checked.
+  asymptotic cost — machine-checked.  And since `SI` is itself an R-WHILE
+  program, `si-uncompute` applies `inv` to the INTERPRETER: `inv SI` returns
+  the interpreter from its final state to its initial one in **exactly the
+  same number of steps** the interpretation took.
+- `RWhileTimeDec.agda` — `Wf` and `InR` are **decidable** (`wf?`, `inR?`), so a
+  concrete program's static conditions are discharged by evaluation rather
+  than by hand (`Wf!`, `InR!`).  `Wf SI` takes 3.9 s / 405 MB.
 - `RWhileSIProg.agda` — the same statement in modular form: the dispatch body
   is a parameter (`record Realises`), giving `j ≤ (4(C+1)+2)·k` for any `STEP`
   that realises one machine step at cost `C`.  `RWhileSISim` discharges it

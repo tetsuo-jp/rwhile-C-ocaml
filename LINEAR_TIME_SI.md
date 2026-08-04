@@ -5,7 +5,7 @@ Glück–Yokoyama の *A linear-time self-interpreter of a reversible imperative
 stdlib、`--safe`・postulate 0・穴 0）で機械検証する開発。**自己解釈系は抽象機械ではなく、
 対象言語そのもので書かれた 1 本の R-WHILE プログラム**である。
 
-新規モジュール（`proofs/agda/`、全 16 本・約 4,800 行、`./check.sh` は PASS=82 FAIL=0）:
+新規モジュール（`proofs/agda/`、全 17 本・約 4,900 行、`./check.sh` は PASS=83 FAIL=0）:
 
 | モジュール | 内容 |
 |---|---|
@@ -23,7 +23,8 @@ stdlib、`--safe`・postulate 0・穴 0）で機械検証する開発。**自己
 | `RWhileSISim` | 主ループ `SI`、反復連鎖 `PChain`/`PC`、`Rest` への変換、一様定数 `CC`、**合成 `simP`/`simPR` と主定理 `si-linear`** |
 | `RWhileSIProg` | 同じ主張のモジュラ版（`Realises` を仮定。`RWhileSISim` が具体的に discharge） |
 | `RWhileTimeInv` | **プログラム反転 `inv`（`InvRwhile.ml` の Agda 版）とコスト保存の健全性**・`rupd` の部分対合性・`inv-inv`・`Wf`/`InR` の保存 |
-| `RWhileSIInv` | 上の 2 つを合成した系：**逆プログラムの解釈も同じ定数で線形時間**（`si-inverse-linear`・`si-round-trip`） |
+| `RWhileTimeDec` | `Wf`/`InR` の**決定手続き**（`wf?`/`inR?`/`Wf!`/`InR!`）。具体プログラムの静的条件を評価で discharge |
+| `RWhileSIInv` | 上を合成した系：**逆プログラムの解釈**（`si-inverse-linear`・`si-round-trip`）と**解釈系自身の逆走**（`si-uncompute`） |
 | `RWhileSITest` | **実行テスト**（型検査器が `exec` を走らせ、結果とステップ数を照合） |
 
 ## 1. コストモデル（実装と一致）
@@ -117,6 +118,57 @@ si-round-trip     : … → j₁ + j₂ ≤ (CC M + 2)*k + (CC M + 2)*k
 - 系として、**同じ 1 本の解釈系 `SI` が両方向を同じ定数で回す**（`si-round-trip`）。
 - 実行テスト: `inv` の構文（列の反転・テストの交換）と、往復（`p₁` 3 ステップ・ループ例 4 ステップが
   逆向きでも同じ歩数で元のストアに戻る）を `exec` で照合。
+
+### (e) 解釈系そのものの可逆性（`RWhileSIInv.si-uncompute`）— 無仮定
+
+```agda
+si-uncompute : Wf c → InR c σ → c ⊢ σ ⇒ τ ∣ k
+  → Σ[ j ] ( SI     ⊢ ⟨⌜c⌝∷[], [], σ⟩ ⇒ ⟨[], ⌜c⌝∷[], τ⟩ ∣ j
+           × inv SI ⊢ ⟨[], ⌜c⌝∷[], τ⟩ ⇒ ⟨⌜c⌝∷[], [], σ⟩ ∣ j     -- 同じ j
+           × j ≤ (CC M + 2) * k )
+```
+
+`SI` も 1 本の R-WHILE プログラムなので `inv` が適用できる。その静的条件（`Wf SI`・`InR SI`）は
+**型検査器が評価で片付ける**（`RWhileTimeDec` の決定手続き。`Wf SI` は 3.9 秒・405 MB で `yes`）。
+結果として、**1 回の解釈とその逆計算は同じ歩数**であり、どちらも対象プログラムの実行時間に線形。
+
+## 4.5 定数の内訳と削減ログ
+
+`proofs/agda/metrics.sh` が**証明で使っている定数そのもの**を型検査器に計算させて表示する
+（見積りではない）。基準値（2026-08-05）:
+
+| 定数 | M=0 | M=1 | 傾き |
+|---|---:|---:|---:|
+| `CC` | 3184 | 6124 | 2940 |
+| `lpDStep` | 462 | 942 | 480 |
+| `lpAStep` | 442 | 922 | 480 |
+| `assStep` | 427 | 967 | 540 |
+| `condStep` | 443 | 923 | 480 |
+| `condEStep` | 468 | 948 | 480 |
+| `evalB` | 178 | 418 | 240 |
+
+`CC M = lpDStep + 2·lpAStep + assStep + condStep + condEStep + 500`（500 は合成の余裕）。
+
+**傾き 2940 の出どころ**（1 セルあたりに分解）:
+
+```
+2940 = 480(lpD) + 960(lpA×2) + 540(ass) + 480(cond) + 480(condE)
+ 480 = 2 × 240      … compute–use–uncompute で式評価が 2 回
+ 240 = 4 ×  60      … オペランド 2 個 × 2 回 × 歩行 60/セル
+ 540 = 480 + 60     … 代入は UPDATE の歩行が 1 回分多い
+  60 = 30 + 30      … 往路と復路
+  30 = 19 + 9 + 2   … セル移動(pop 9 + push 9 + seq 1) ＋ カウンタ加算(push 9) ＋ ループ 2
+```
+
+**削減の見通し（計測して判明したこと）**:
+
+- カウンタ加算は専用命令列で 9 → 7 にできる（`push` の `x ^= hd t` が Hd = nil で無駄。
+  `T1 ^= cons 'nil Cn ; Cn ^= tl T1 ; Cn ^= T1 ; T1 ^= Cn` の 4 代入＝7 歩）。
+  効果は傾きの **−6.7%** のみ、影響範囲は全コスト式に及ぶ。
+- セル移動 19 歩は**平坦式の核言語では下がらない**。融合版を書いても代入 10 個＝19 歩になる。
+  1 歩で書ける `T1 ^= cons (hd Vl) Rv` が**ネスト式を要求する**ため。
+- ⇒ **定数削減の本丸は A1（ネスト式）**であり、それ以前の削減余地は約 7%。
+  この計測結果にもとづき、ループの優先順を「解釈系自身の可逆性（F2）→ 式形の追加 → 定数削減」に変更した。
 
 ## 5. 実装上の教訓（形式化して判明したこと）
 

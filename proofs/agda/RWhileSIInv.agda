@@ -30,6 +30,7 @@ open import RWhileSIWf
 open import RWhileSIStep using (embM)
 open import RWhileSISim using (SI; CC; si-linear)
 open import RWhileTimeInv using (inv; inv-sound; Wf-inv; inR-inv)
+open import RWhileTimeDec using (Wf!; InR!)
 
 private
   cast≤ : ∀ {a m n} → n ≡ m → a ≤ m → a ≤ n
@@ -69,3 +70,27 @@ si-round-trip {c} {σ} {τ} {k} wf ir d =
   where
     fwd = si-linear wf ir d
     bwd = si-inverse-linear wf ir d
+
+------------------------------------------------------------------------
+-- THE INTERPRETER IS ITSELF REVERSIBLE.
+--
+-- `SI` is an R-WHILE program like any other, so `inv` applies to IT.  Its
+-- static conditions are decided by evaluation (`Wf SI` and `InR SI` are
+-- discharged by the type checker, not by hand), and `inv-sound` then says
+-- that running `inv SI` from the final interpreter state returns it to the
+-- initial one -- IN EXACTLY THE SAME NUMBER OF STEPS `j`.
+--
+-- So one interpretation and its uncomputation cost the same, and both are
+-- linear in the object program's own running time.
+
+si-uncompute : ∀ {c σ τ k} → Wf c → InR c σ → c ⊢ σ ⇒ τ ∣ k
+  → Σ[ j ∈ ℕ ]
+      ( SI     ⊢ embM (⌜ c ⌝ ∙ nil) nil σ ⇒ embM nil (⌜ c ⌝ ∙ nil) τ ∣ j
+      × inv SI ⊢ embM nil (⌜ c ⌝ ∙ nil) τ ⇒ embM (⌜ c ⌝ ∙ nil) nil σ ∣ j
+      × j ≤ (CC (length σ) + 2) * k )
+si-uncompute {c} {σ} {τ} {k} wf ir d =
+  proj₁ h , proj₁ (proj₂ h)
+  , inv-sound (Wf! SI) (InR! SI (embM (⌜ c ⌝ ∙ nil) nil σ)) (proj₁ (proj₂ h))
+  , proj₂ (proj₂ h)
+  where
+    h = si-linear wf ir d

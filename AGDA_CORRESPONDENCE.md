@@ -9,7 +9,7 @@
 | 実装の部品 | Agda 結果 | 強さ |
 |---|---|---|
 | `InvRwhile.invCom`（atom/seq/cond/loop） | `RWhileRev`/`RWhileRevFull`：`inv-sound`/`inv-inv`/`inv-complete` | **証明**（モデルが invCom を厳密に写す） |
-| `EvalRwhile.rupdate`（可逆 XOR 代入） | `RWhileValStore`(`RAss-sym`)・`RWhileExecConcrete`(`rupdF`) | **証明**（部分対合・決定性） |
+| `EvalRwhile.rupdate`（可逆 XOR 代入） | `RWhileValStore`(`RAss-sym`)・`RWhileExecConcrete`(`rupdF`) | **証明**（部分対合・決定性）。**2026-08-05 に第 3 の場合を追加**（末尾「`rupdate` の第 3 の場合」参照） |
 | `EvalRwhile.evalCom`（**アルゴリズム**） | `RWhileExec`：`frun ≡` 関係意味（`frun-sound/complete`）、`frun-reversible` | **証明**（ただし `frun` は手書きで evalCom を模倣） |
 | パターン読み書き `CRep`（`evalPat`/`inv_evalPat`） | `RWhileCRep`/`RWhileCRepDet`：`read-write`/`write-read`/`crep-reversible` | **証明** |
 | `Core.ml` `norm_exp`/`norm_pat`/`eval_cexp` | `RWhileCoreExp`：`norm-correct`/`read-norm-correct` | **証明** ＋ `core-ir` 差分テスト |
@@ -224,7 +224,7 @@ Agda で**設計図を 9 段**機械検査した（全 `--safe`・公理ゼロ�
 - **論文反映済**：overleaf `formal/mechanization.tex` §`sec:agda-offline`（第1–9段を散文で記述、push 済）。
 - **全 61 モジュール `--safe` PASS**（`proofs/agda/check.sh`、postulate 0、唯一の仮定は `funext`）。
 
-## 7. 線形時間自己解釈系（`RWhileTime`/`RWhileSI*` 16 モジュール、2026-08-04）
+## 7. 線形時間自己解釈系（`RWhileTime`/`RWhileSI*` 17 モジュール、2026-08-04／08-05）
 
 Glück–Yokoyama「R-WHILE の線形時間自己解釈系」を定理化する層。詳細は `LINEAR_TIME_SI.md`。
 **自己解釈系は抽象機械ではなく、対象言語で書かれた 1 本の R-WHILE プログラム**。
@@ -240,6 +240,7 @@ Glück–Yokoyama「R-WHILE の線形時間自己解釈系」を定理化する�
 | `ri.rwhile` の `STEP` マクロ本体（12 タグ分岐） | `RWhileSIStep`：`STEP` と **12 ケース 17 定理**（`skip`34/`seq`80/`seqE`81/`cond`/`condE`/`loop`54/`lpA`/`lpD`/`lpB`84/`lpZ`57/`lpC`86、各 `astep` 一致つき） | **証明** |
 | `InvRwhile.ml`（`./ri -inverse`）※時間付き構文版。§1 の `RWhileRev` とは別の層 | `RWhileTimeInv`：`inv` と**コスト保存の健全性** `c ⊢ σ ⇒ τ ∣ k → inv c ⊢ τ ⇒ σ ∣ k`（同じ `k`）、`rupd` の部分対合性、`inv-inv`、`Wf`/`InR` の保存 | **証明**（往復の実行テスト付き） |
 | 逆プログラムの解釈 | `RWhileSIInv`：`si-inverse-linear`／`si-round-trip` — **同じ `SI`・同じ定数で両方向が線形時間** | **証明** |
+| 解釈系そのものの可逆性 | `RWhileSIInv.si-uncompute`：`inv SI` が解釈を**同じ歩数で**巻き戻す。静的条件は `RWhileTimeDec` の決定手続きで評価により discharge | **証明** |
 | `ri.rwhile` をプログラムとして見た実行時間 | `RWhileSISim`：**`si-linear`（無仮定）** `j ≤ (CC M + 2)·k`、`CC M = 2940·M + 3184`。合成 `simP`/`simPR`＋算術 `RWhileSIArith`／モジュラ版は `RWhileSIProg` | **証明** |
 
 - **ギャップ G7 は解消（2026-08-04）**: `RWhileSISim.simP`/`simPR` が完成し、定理は
@@ -254,4 +255,65 @@ Glück–Yokoyama「R-WHILE の線形時間自己解釈系」を定理化する�
   `CC ^= C` する構造は、この必然性の反映である。
 - **スコープ**: 式は平坦（オペランド＝変数/定数）、`<=` は対象言語に含めない。可逆制御構造 4 種と
   `rupdate` は `EvalRwhile.ml` どおり。解釈系は対象プログラムのループ表明・条件文の出口表明を実際に検査する。
-- **全 82 モジュール `--safe` PASS**（`proofs/agda/check.sh`、postulate 0、穴 0）。
+- **全 83 モジュール `--safe` PASS**（`proofs/agda/check.sh`、postulate 0、穴 0）。
+
+## `rupdate` の第 3 の場合（2026-08-05 に形式化へ追加）
+
+### 何が抜けていたか
+
+`src/EvalRwhile.ml` の `rupdate` は **3 つ**の場合を持つ。
+
+```ocaml
+if vy = VNil then vx          (* 1. 空きスロットに置く   *)
+else if vx = vy then VNil     (* 2. 同じ値なら消す       *)
+else if vx = VNil then vy     (* 3. 右辺が nil なら恒等  *)
+else error
+```
+
+ところが `RWhileValStore.RAss` の `toggle` と `RWhileExecConcrete.rupdF` は
+**1 と 2 しか持っていなかった**（`RWhileExecConcrete` の冒頭は
+"mirrors the OCaml `rupdate`" と書いていたが、写せていなかった）。
+
+原因はおそらく、形式化が**実装ではなく論文を写した**こと。論文の ⊙ の定義は
+2 つの場合しか挙げない — Glück & Yokoyama, *A linear-time self-interpreter of a
+reversible imperative language*, Computer Software 33(3), 2016 の Eq.(8)、および
+R-CORE 論文（IEICE E100-D(5), 2017）の Eq.(1) が同じ 2 場合である。
+
+### なぜ重大か
+
+**`examples/ri.rwhile` が第 3 の場合に依存している。** ループ処理の分岐に
+
+```
+Flag ^= =? Tag 'l4E; Flag ^= =? Tag 'loop;
+```
+
+とある。これは `Flag := (Tag='l4E) ∨ (Tag='loop)` の定型句で、`Tag = 'l4E` のとき
+2 つ目が `Flag ^= nil`（`Flag` は既に true）になる。つまり
+**この形式化の可逆性定理は、このリポジトリの中心的な成果物である自己解釈器を
+覆っていなかった**。
+
+（`program2data` が空枝を `X₁ ^= nil` と符号化することでも第 3 の場合が要る。
+素の R-WHILE でも `read X; X ^= nil; write X` に `(nil.nil)` を与えると恒等写像として通る。）
+
+### 追加しても壊れないこと
+
+`toggle` に `(v ≡ nil × σ' x ≡ σ x)` を足した。この選択肢は σ と σ' について
+**対称**なので、`RAss-sym`（部分対合）の証明は元と同じ形で通る。
+`RWhileDetConcrete.RAss-atx`（決定性）は 3×3 の 9 節に増えるが、
+どの組合せも「両辺とも nil に落ちる」ことを等式の連鎖で示すだけである。
+`rupdF` も OCaml と同じ順で 3 分岐にし、`rupdF-sound`/`rupdF-complete` を
+それぞれ 1 節ずつ増やした。
+
+拡張が可逆性を保つことは独立にも確かめてある（`jones-agenda` 側）:
+全数検査で定義される対が 45 → 67 に増え、単射性・対合性・ストア上の可逆性は
+どちらの版でも成立、**定義域が d と e について対称なのは 3 場合の版だけ**。
+
+### 直した範囲
+
+| ファイル | 変更 |
+|---|---|
+| `RWhileValStore.agda` | `RAss.toggle` を 3 択に。`RAss-sym` を 3 節に |
+| `RWhileDetConcrete.agda` | `RAss-atx` を 9 節に |
+| `RWhileExecConcrete.agda` | `rupdF` を 3 分岐に。`rupdF-sound`・`rupdF-complete` に 1 節ずつ追加 |
+
+`Extract.agda` は `rupdF` を呼ぶだけなので変更なし。`--safe`・postulate 0 は維持。
