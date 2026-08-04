@@ -224,7 +224,7 @@ Agda で**設計図を 9 段**機械検査した（全 `--safe`・公理ゼロ�
 - **論文反映済**：overleaf `formal/mechanization.tex` §`sec:agda-offline`（第1–9段を散文で記述、push 済）。
 - **全 61 モジュール `--safe` PASS**（`proofs/agda/check.sh`、postulate 0、唯一の仮定は `funext`）。
 
-## 7. 線形時間自己解釈系（`RWhileTime`/`RWhileSI*` 14 モジュール、2026-08-04）
+## 7. 線形時間自己解釈系（`RWhileTime`/`RWhileSI*` 16 モジュール、2026-08-04）
 
 Glück–Yokoyama「R-WHILE の線形時間自己解釈系」を定理化する層。詳細は `LINEAR_TIME_SI.md`。
 **自己解釈系は抽象機械ではなく、対象言語で書かれた 1 本の R-WHILE プログラム**。
@@ -238,6 +238,8 @@ Glück–Yokoyama「R-WHILE の線形時間自己解釈系」を定理化する�
 | `ri.rwhile` の `AUX`/`LOOKUP`/`UPDATE`（`Vl` 歩行） | `RWhileSIMac`（汎用 push/pop、コスト 9）・`RWhileSIWalk`（30/セル）・`RWhileSILookup`（**`60k+27`**） | **証明**（実行テストで厳密値を照合） |
 | `ri.rwhile` の `EVAL-EXP`/`INV-EVAL-EXP` | `RWhileSIEval`：`opdC`（`60M+36`）・`evalC`（式 5 形、`evalB M = 240M+178`）。compute–use–uncompute で**部分対合**＝同じコードの再実行が逆計算 | **証明** |
 | `ri.rwhile` の `STEP` マクロ本体（12 タグ分岐） | `RWhileSIStep`：`STEP` と **12 ケース 17 定理**（`skip`34/`seq`80/`seqE`81/`cond`/`condE`/`loop`54/`lpA`/`lpD`/`lpB`84/`lpZ`57/`lpC`86、各 `astep` 一致つき） | **証明** |
+| `InvRwhile.ml`（`./ri -inverse`）※時間付き構文版。§1 の `RWhileRev` とは別の層 | `RWhileTimeInv`：`inv` と**コスト保存の健全性** `c ⊢ σ ⇒ τ ∣ k → inv c ⊢ τ ⇒ σ ∣ k`（同じ `k`）、`rupd` の部分対合性、`inv-inv`、`Wf`/`InR` の保存 | **証明**（往復の実行テスト付き） |
+| 逆プログラムの解釈 | `RWhileSIInv`：`si-inverse-linear`／`si-round-trip` — **同じ `SI`・同じ定数で両方向が線形時間** | **証明** |
 | `ri.rwhile` をプログラムとして見た実行時間 | `RWhileSISim`：**`si-linear`（無仮定）** `j ≤ (CC M + 2)·k`、`CC M = 2940·M + 3184`。合成 `simP`/`simPR`＋算術 `RWhileSIArith`／モジュラ版は `RWhileSIProg` | **証明** |
 
 - **ギャップ G7 は解消（2026-08-04）**: `RWhileSISim.simP`/`simPR` が完成し、定理は
@@ -252,4 +254,4 @@ Glück–Yokoyama「R-WHILE の線形時間自己解釈系」を定理化する�
   `CC ^= C` する構造は、この必然性の反映である。
 - **スコープ**: 式は平坦（オペランド＝変数/定数）、`<=` は対象言語に含めない。可逆制御構造 4 種と
   `rupdate` は `EvalRwhile.ml` どおり。解釈系は対象プログラムのループ表明・条件文の出口表明を実際に検査する。
-- **全 80 モジュール `--safe` PASS**（`proofs/agda/check.sh`、postulate 0、穴 0）。
+- **全 82 モジュール `--safe` PASS**（`proofs/agda/check.sh`、postulate 0、穴 0）。

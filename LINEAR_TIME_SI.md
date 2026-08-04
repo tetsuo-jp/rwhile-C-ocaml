@@ -5,7 +5,7 @@ Glück–Yokoyama の *A linear-time self-interpreter of a reversible imperative
 stdlib、`--safe`・postulate 0・穴 0）で機械検証する開発。**自己解釈系は抽象機械ではなく、
 対象言語そのもので書かれた 1 本の R-WHILE プログラム**である。
 
-新規モジュール（`proofs/agda/`、全 14 本・約 4,400 行、`./check.sh` は PASS=80 FAIL=0）:
+新規モジュール（`proofs/agda/`、全 16 本・約 4,800 行、`./check.sh` は PASS=82 FAIL=0）:
 
 | モジュール | 内容 |
 |---|---|
@@ -22,6 +22,8 @@ stdlib、`--safe`・postulate 0・穴 0）で機械検証する開発。**自己
 | `RWhileSIArith` | 合成の**上界計算**（対象 1 ケース＝補題 1 本、純 ℕ。巨大な機械状態の型を算術から隔離） |
 | `RWhileSISim` | 主ループ `SI`、反復連鎖 `PChain`/`PC`、`Rest` への変換、一様定数 `CC`、**合成 `simP`/`simPR` と主定理 `si-linear`** |
 | `RWhileSIProg` | 同じ主張のモジュラ版（`Realises` を仮定。`RWhileSISim` が具体的に discharge） |
+| `RWhileTimeInv` | **プログラム反転 `inv`（`InvRwhile.ml` の Agda 版）とコスト保存の健全性**・`rupd` の部分対合性・`inv-inv`・`Wf`/`InR` の保存 |
+| `RWhileSIInv` | 上の 2 つを合成した系：**逆プログラムの解釈も同じ定数で線形時間**（`si-inverse-linear`・`si-round-trip`） |
 | `RWhileSITest` | **実行テスト**（型検査器が `exec` を走らせ、結果とステップ数を照合） |
 
 ## 1. コストモデル（実装と一致）
@@ -98,6 +100,24 @@ si-linear : Wf c → InR c σ → c ⊢ σ ⇒ τ ∣ k
 
 モジュラ版 `RWhileSIProg.si-linear`（`Realises` を仮定して `j ≤ (4(C+1)+2)·k`）も残してある。
 
+### (d) 逆方向（`RWhileTimeInv` / `RWhileSIInv`）— 無仮定
+
+```agda
+inv-sound         : Wf c → InR c σ → c ⊢ σ ⇒ τ ∣ k → inv c ⊢ τ ⇒ σ ∣ k     -- k は同じ
+si-inverse-linear : … → SI ⊢ ⟨⌜inv c⌝, τ⟩ ⇒ ⟨⌜inv c⌝, σ⟩ ∣ j × j ≤ (CC M + 2) * k
+si-round-trip     : … → j₁ + j₂ ≤ (CC M + 2)*k + (CC M + 2)*k
+```
+
+- **反転はコストを完全に保存する**（`≤` ではなく同じ `k`）。`^=` は `rupd` が部分対合なので
+  自分自身が逆、条件文はテストと表明の交換、ループは入口テストと出口表明の交換。
+- ループの証明が要点: 逆向きの実行は同じストア列を逆順にたどるが、**反復が 1 つずれる**
+  （逆向きの各反復は、ある反復の `inv L` と**ひとつ前**の反復の `inv D` を組にする）。
+  `inv-rest` は前向きの `Rest` を歩きながら後ろ向きの `Rest` を蓄積し、
+  「現在のストアに入ってきた `D` の逆実行」を持ち回ることでこのずれを吸収する。
+- 系として、**同じ 1 本の解釈系 `SI` が両方向を同じ定数で回す**（`si-round-trip`）。
+- 実行テスト: `inv` の構文（列の反転・テストの交換）と、往復（`p₁` 3 ステップ・ループ例 4 ステップが
+  逆向きでも同じ歩数で元のストアに戻る）を `exec` で照合。
+
 ## 5. 実装上の教訓（形式化して判明したこと）
 
 - **`with` 抽象を合成で使ってはいけない**。機械状態の型（19 スロット × 符号化プログラム）が
@@ -110,7 +130,7 @@ si-linear : Wf c → InR c σ → c ⊢ σ ⇒ τ ∣ k
 ## 6. 検証方法
 
 ```sh
-cd proofs/agda && ./check.sh          # 80 モジュール、PASS=80 FAIL=0
+cd proofs/agda && ./check.sh          # 82 モジュール、PASS=82 FAIL=0
 ```
 
 実行テスト（型検査器が検証）: `push`/`pop` 各 9、`walk` 2 セル 62、`lkE` 変数 1 で 87（= 60k+27）、

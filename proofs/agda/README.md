@@ -575,7 +575,7 @@ implemented**.  See `../../RESEARCH_ROADMAP.md` and the paper's
 
 ## Linear-time self-interpretation (2026-08-04)
 
-Fourteen modules (~4,400 lines) formalise the headline claim of Glück &
+Sixteen modules (~4,800 lines) formalise the headline claim of Glück &
 Yokoyama, *A linear-time self-interpreter of a reversible imperative
 language*.  The self-interpreter is **not** an abstract machine: it is one
 fixed R-WHILE program `SI`, and the theorem bounds its cost in the very step
@@ -642,6 +642,26 @@ input — it is a self-*interpreter*, not a consumer.
   loop's `Rest` derivation, the uniform per-step constant `CC`, the induction
   `simP`/`simPR` that strings the 17 case theorems along an object derivation,
   and the closed theorem **`si-linear`** above.
+- `RWhileTimeInv.agda` — **program inversion for the timed semantics** (the
+  Agda counterpart of `src/InvRwhile.ml`) and its soundness, with the cost
+  preserved *exactly*:
+
+      Wf c → InR c σ → c ⊢ σ ⇒ τ ∣ k  ⟹  inv c ⊢ τ ⇒ σ ∣ k     (the same k)
+
+  Assignments are their own inverse because `rupd` is a partial involution
+  (`rupd-invol`); a conditional swaps test and assertion; a loop swaps entry
+  test and exit assertion.  The loop case is the interesting one: the backward
+  run visits the same stores in reverse, but its iterations are **shifted by
+  one** — each backward iteration pairs `inv L` of one forward iteration with
+  `inv D` of the *previous* one — so `inv-rest` walks the forward `Rest` while
+  accumulating the backward one.  Includes round-trip `exec` tests.
+  (Distinct from `RWhileRev`, which proves the same for the *untimed* main
+  syntax.)
+- `RWhileSIInv.agda` — the corollary: feeding `SI` the encoded **inverse**
+  program undoes the run, within the same bound (`si-inverse-linear`), and
+  forward-then-backward through one and the same interpreter stays linear
+  (`si-round-trip`).  Reversible languages get backwards execution at no
+  asymptotic cost — machine-checked.
 - `RWhileSIProg.agda` — the same statement in modular form: the dispatch body
   is a parameter (`record Realises`), giving `j ≤ (4(C+1)+2)·k` for any `STEP`
   that realises one machine step at cost `C`.  `RWhileSISim` discharges it
