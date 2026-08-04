@@ -21,9 +21,10 @@
 module RWhileSIParse where
 
 open import Data.Nat using (ℕ; zero; suc; _+_; _⊔_; _≤_; z≤n; s≤s)
-open import Data.Nat.Properties using (≤-trans; m≤m⊔n; m≤n⊔m)
+open import Data.Nat.Properties using (≤-trans; m≤m⊔n; m≤n⊔m; ≤-refl)
 open import Data.List using (List; []; _∷_)
 open import Data.Maybe using (Maybe; just; nothing)
+open import Data.Bool using (Bool; true; false; if_then_else_)
 open import Data.Unit using (⊤; tt)
 open import Data.Empty using (⊥)
 open import Data.Product using (_×_; _,_; proj₁; proj₂)
@@ -204,6 +205,13 @@ seq-assocˡ {a} {b} {c} {σ} {τ} (e-seq {k = ka} da (e-seq {k = kb} {l = kc} db
 -- Printing follows `RWhileSIShow`: a branch that is `skip` prints as
 -- nothing (R-WHILE's grammar has empty branches), and `;` is flattened.
 
+isSkip : Cmd → Bool
+isSkip skip = true
+isSkip _    = false
+
+isSkip-true : ∀ {c} → isSkip c ≡ true → c ≡ skip
+isSkip-true {skip} _ = refl
+
 tokC : Cmd → List Tok → List Tok
 tokBr : Tok → Cmd → List Tok → List Tok
 
@@ -215,8 +223,10 @@ tokC (cond e c d f) ts =
 tokC (loop e D L f) ts =
   tFrom ∷ tokE e (tokBr tDo D (tokBr tLoop L (tUntil ∷ tokE f ts)))
 
-tokBr kw skip ts = ts
-tokBr kw c    ts = kw ∷ tokC c ts
+-- a branch prints as nothing when it is `skip` (R-WHILE's empty branch).
+-- Phrased with `if` rather than a catch-all clause, so that it reduces once
+-- `isSkip c` is known -- which is what the round-trip proof splits on.
+tokBr kw c ts = if isSkip c then ts else kw ∷ tokC c ts
 
 ------------------------------------------------------------------------
 -- The parser: `pC1` is one command, `pC` a `;`-sequence (right-nested),
@@ -233,6 +243,23 @@ private
   eUntil (tUntil ∷ ts) = just ts
   eUntil _             = nothing
 
+-- head tests, as Bool, so the parser reduces as soon as the head is known
+isSemi isThen isElse isDo isLoop : List Tok → Bool
+isSemi (tSemi ∷ _) = true
+isSemi _           = false
+isThen (tThen ∷ _) = true
+isThen _           = false
+isElse (tElse ∷ _) = true
+isElse _           = false
+isDo   (tDo ∷ _)   = true
+isDo   _           = false
+isLoop (tLoop ∷ _) = true
+isLoop _           = false
+
+tail′ : List Tok → List Tok
+tail′ []       = []
+tail′ (_ ∷ ts) = ts
+
 pC1    : ℕ → List Tok → Maybe (Cmd × List Tok)
 pC     : ℕ → List Tok → Maybe (Cmd × List Tok)
 pThen pElse pDo pLoop : ℕ → List Tok → Maybe (Cmd × List Tok)
@@ -241,37 +268,32 @@ pC1 zero _ = nothing
 pC1 (suc n) (tVar x ∷ tAss ∷ ts) =
   pE n ts >>=M λ ea → just ((x ^= proj₁ ea) , proj₂ ea)
 pC1 (suc n) (tIf ∷ ts) =
-  pE n ts       >>=M λ ea →
+  pE n ts            >>=M λ ea →
   pThen n (proj₂ ea) >>=M λ cb →
   pElse n (proj₂ cb) >>=M λ dc →
   eFi (proj₂ dc)     >>=M λ ts₃ →
-  pE n ts₃      >>=M λ fd →
+  pE n ts₃           >>=M λ fd →
   just (cond (proj₁ ea) (proj₁ cb) (proj₁ dc) (proj₁ fd) , proj₂ fd)
 pC1 (suc n) (tFrom ∷ ts) =
-  pE n ts       >>=M λ ea →
+  pE n ts            >>=M λ ea →
   pDo n (proj₂ ea)   >>=M λ Db →
   pLoop n (proj₂ Db) >>=M λ Lc →
   eUntil (proj₂ Lc)  >>=M λ ts₃ →
-  pE n ts₃      >>=M λ fd →
+  pE n ts₃           >>=M λ fd →
   just (loop (proj₁ ea) (proj₁ Db) (proj₁ Lc) (proj₁ fd) , proj₂ fd)
 pC1 (suc n) _ = nothing
 
 pC zero    _  = nothing
 pC (suc n) ts =
-  pC1 n ts >>=M λ ca → cont (proj₁ ca) (proj₂ ca)
-  where
-    cont : Cmd → List Tok → Maybe (Cmd × List Tok)
-    cont c (tSemi ∷ ts₁) = pC n ts₁ >>=M λ db → just ((c ⨾ proj₁ db) , proj₂ db)
-    cont c ts₁           = just (c , ts₁)
+  pC1 (suc n) ts >>=M λ ca →
+  if isSemi (proj₂ ca)
+    then (pC n (tail′ (proj₂ ca)) >>=M λ db → just ((proj₁ ca ⨾ proj₁ db) , proj₂ db))
+    else just (proj₁ ca , proj₂ ca)
 
-pThen n (tThen ∷ ts) = pC n ts
-pThen n ts           = just (skip , ts)
-pElse n (tElse ∷ ts) = pC n ts
-pElse n ts           = just (skip , ts)
-pDo   n (tDo ∷ ts)   = pC n ts
-pDo   n ts           = just (skip , ts)
-pLoop n (tLoop ∷ ts) = pC n ts
-pLoop n ts           = just (skip , ts)
+pThen n ts = if isThen ts then pC n (tail′ ts) else just (skip , ts)
+pElse n ts = if isElse ts then pC n (tail′ ts) else just (skip , ts)
+pDo   n ts = if isDo   ts then pC n (tail′ ts) else just (skip , ts)
+pLoop n ts = if isLoop ts then pC n (tail′ ts) else just (skip , ts)
 
 ------------------------------------------------------------------------
 -- Round-trip for commands.
@@ -283,12 +305,14 @@ pLoop n ts           = just (skip , ts)
 --   * `skip` only occurs in branch positions, where it prints as nothing --
 --     R-WHILE has no `skip` command.
 
+-- The fuel bound.  Every layer of the parser spends one unit of fuel, and
+-- `pC` spends one more delegating to `pC1`, so each command counts TWO.
 depthC : Cmd → ℕ
 depthC skip           = 0
-depthC (x ^= e)       = depthE e
-depthC (c ⨾ d)        = suc (depthC c ⊔ depthC d)
-depthC (cond e c d f) = suc (depthE e ⊔ depthC c ⊔ depthC d ⊔ depthE f)
-depthC (loop e D L f) = suc (depthE e ⊔ depthC D ⊔ depthC L ⊔ depthE f)
+depthC (x ^= e)       = suc (suc (depthE e))
+depthC (c ⨾ d)        = suc (suc (depthC c ⊔ depthC d))
+depthC (cond e c d f) = suc (suc (depthE e ⊔ depthC c ⊔ depthC d ⊔ depthE f))
+depthC (loop e D L f) = suc (suc (depthE e ⊔ depthC D ⊔ depthC L ⊔ depthE f))
 
 data RN1 : Cmd → Set
 data RN  : Cmd → Set
@@ -373,3 +397,116 @@ private
   r₆ : pC 12 (tokC (0 ^= opd (cst ((atm 1 ∙ nil) ∙ atm 2))) [])
      ≡ just ((0 ^= opd (cst ((atm 1 ∙ nil) ∙ atm 2))) , [])
   r₆ = refl
+
+------------------------------------------------------------------------
+-- The general command-level round-trip.
+
+rnb-cmd : ∀ {c} → RNb c → isSkip c ≡ false → RN c
+rnb-cmd rnb-skip ()
+rnb-cmd (rnb-run r) _ = r
+
+private
+  -- extracting the four components of a `cond`/`loop` depth bound
+  q1 : ∀ {A B C D n} → A ⊔ B ⊔ C ⊔ D ≤ n → A ≤ n
+  q1 {A} {B} {C} {D} le =
+    ≤-trans (m≤m⊔n A B) (≤-trans (m≤m⊔n (A ⊔ B) C) (≤-trans (m≤m⊔n (A ⊔ B ⊔ C) D) le))
+  q2 : ∀ {A B C D n} → A ⊔ B ⊔ C ⊔ D ≤ n → B ≤ n
+  q2 {A} {B} {C} {D} le =
+    ≤-trans (m≤n⊔m A B) (≤-trans (m≤m⊔n (A ⊔ B) C) (≤-trans (m≤m⊔n (A ⊔ B ⊔ C) D) le))
+  q3 : ∀ {A B C D n} → A ⊔ B ⊔ C ⊔ D ≤ n → C ≤ n
+  q3 {A} {B} {C} {D} le =
+    ≤-trans (m≤n⊔m (A ⊔ B) C) (≤-trans (m≤m⊔n (A ⊔ B ⊔ C) D) le)
+  q4 : ∀ {A B C D n} → A ⊔ B ⊔ C ⊔ D ≤ n → D ≤ n
+  q4 {A} {B} {C} {D} le = ≤-trans (m≤n⊔m (A ⊔ B ⊔ C) D) le
+
+  ≤suc : ∀ {m n} → m ≤ n → m ≤ suc n
+  ≤suc z≤n     = z≤n
+  ≤suc (s≤s p) = s≤s (≤suc p)
+
+pC1-ok : ∀ n c ts → RN1 c → depthC c ≤ suc n
+       → pC1 (suc n) (tokC c ts) ≡ just (c , ts)
+pC-ok  : ∀ n c ts → RN c → depthC c ≤ suc n → isSemi ts ≡ false
+       → pC (suc n) (tokC c ts) ≡ just (c , ts)
+
+pC1-ok (suc n) (x ^= e) ts rn-ass (s≤s (s≤s le))
+  rewrite pE-ok n e ts le = refl
+
+pC1-ok (suc n) (cond e c d f) ts (rn-cond rc rd) (s≤s (s≤s le))
+  with isSkip c in sc | isSkip d in sd
+... | true  | true
+      rewrite isSkip-true sc | isSkip-true sd
+            | pE-ok n e (tFi ∷ tokE f ts) (q1 {depthE e} le)
+            | pE-ok n f ts (q4 {depthE e} {depthC skip} {depthC skip} le) = refl
+... | true  | false
+      rewrite isSkip-true sc
+            | pE-ok n e (tElse ∷ tokC d (tFi ∷ tokE f ts)) (q1 {depthE e} le)
+            | pC-ok n d (tFi ∷ tokE f ts) (rnb-cmd rd sd) (≤suc (q3 {depthE e} le)) refl
+            | pE-ok n f ts (q4 {depthE e} le) = refl
+... | false | true
+      rewrite isSkip-true sd
+            | pE-ok n e (tThen ∷ tokC c (tFi ∷ tokE f ts)) (q1 {depthE e} le)
+            | pC-ok n c (tFi ∷ tokE f ts) (rnb-cmd rc sc) (≤suc (q2 {depthE e} le)) refl
+            | pE-ok n f ts (q4 {depthE e} le) = refl
+... | false | false
+      rewrite pE-ok n e (tThen ∷ tokC c (tElse ∷ tokC d (tFi ∷ tokE f ts))) (q1 {depthE e} le)
+            | pC-ok n c (tElse ∷ tokC d (tFi ∷ tokE f ts)) (rnb-cmd rc sc)
+                    (≤suc (q2 {depthE e} le)) refl
+            | pC-ok n d (tFi ∷ tokE f ts) (rnb-cmd rd sd) (≤suc (q3 {depthE e} le)) refl
+            | pE-ok n f ts (q4 {depthE e} le) = refl
+
+pC1-ok (suc n) (loop e D L f) ts (rn-loop rD rL) (s≤s (s≤s le))
+  with isSkip D in sD | isSkip L in sL
+... | true  | true
+      rewrite isSkip-true sD | isSkip-true sL
+            | pE-ok n e (tUntil ∷ tokE f ts) (q1 {depthE e} le)
+            | pE-ok n f ts (q4 {depthE e} {depthC skip} {depthC skip} le) = refl
+... | true  | false
+      rewrite isSkip-true sD
+            | pE-ok n e (tLoop ∷ tokC L (tUntil ∷ tokE f ts)) (q1 {depthE e} le)
+            | pC-ok n L (tUntil ∷ tokE f ts) (rnb-cmd rL sL) (≤suc (q3 {depthE e} le)) refl
+            | pE-ok n f ts (q4 {depthE e} le) = refl
+... | false | true
+      rewrite isSkip-true sL
+            | pE-ok n e (tDo ∷ tokC D (tUntil ∷ tokE f ts)) (q1 {depthE e} le)
+            | pC-ok n D (tUntil ∷ tokE f ts) (rnb-cmd rD sD) (≤suc (q2 {depthE e} le)) refl
+            | pE-ok n f ts (q4 {depthE e} le) = refl
+... | false | false
+      rewrite pE-ok n e (tDo ∷ tokC D (tLoop ∷ tokC L (tUntil ∷ tokE f ts))) (q1 {depthE e} le)
+            | pC-ok n D (tLoop ∷ tokC L (tUntil ∷ tokE f ts)) (rnb-cmd rD sD)
+                    (≤suc (q2 {depthE e} le)) refl
+            | pC-ok n L (tUntil ∷ tokE f ts) (rnb-cmd rL sL) (≤suc (q3 {depthE e} le)) refl
+            | pE-ok n f ts (q4 {depthE e} le) = refl
+
+pC-ok n c ts (rn-one r1) le nsemi
+  rewrite pC1-ok n c ts r1 le | nsemi = refl
+
+pC-ok (suc n) (c ⨾ d) ts (rn-seq r1 rd) (s≤s (s≤s le)) nsemi
+  rewrite pC1-ok (suc n) c (tSemi ∷ tokC d ts) r1
+                 (≤suc (≤suc (≤-trans (m≤m⊔n (depthC c) (depthC d)) le)))
+        | pC-ok n d ts rd (≤suc (≤-trans (m≤n⊔m (depthC c) (depthC d)) le)) nsemi = refl
+
+------------------------------------------------------------------------
+-- THE ROUND-TRIP, for a whole command.
+--
+--   printing a right-nested command and reading it back with a parser that
+--   follows Rwhile.cf returns the very same term.
+--
+-- Right-nestedness is not a restriction on WHAT can be printed, only on how
+-- the term is bracketed: `seq-assocʳ`/`seq-assocˡ` show the two bracketings
+-- have the same semantics and the same cost, and the printed text is
+-- literally identical (the `;` is flattened).
+
+round-trip : ∀ c → RN c → pC (suc (depthC c)) (tokC c []) ≡ just (c , [])
+round-trip c rn = pC-ok (depthC c) c [] rn (≤suc ≤-refl) refl
+
+private
+  -- the right-nestedness witness for the conditional used above
+  rt₃ : pC (suc (depthC c₃)) (tokC c₃ []) ≡ just (c₃ , [])
+  rt₃ = round-trip c₃ (rn-one (rn-cond (rnb-run (rn-one rn-ass)) rnb-skip))
+
+  -- ... and for the nested loop
+  rt₅ : pC (suc (depthC c₅)) (tokC c₅ []) ≡ just (c₅ , [])
+  rt₅ = round-trip c₅
+          (rn-one (rn-loop rnb-skip
+            (rnb-run (rn-one (rn-cond
+              (rnb-run (rn-seq rn-ass (rn-one rn-ass))) rnb-skip)))))
