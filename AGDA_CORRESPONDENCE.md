@@ -223,3 +223,33 @@ Agda で**設計図を 9 段**機械検査した（全 `--safe`・公理ゼロ�
   **未着手**（`gate`/`dyncond`/`comp2-loops` で検証予定）。
 - **論文反映済**：overleaf `formal/mechanization.tex` §`sec:agda-offline`（第1–9段を散文で記述、push 済）。
 - **全 61 モジュール `--safe` PASS**（`proofs/agda/check.sh`、postulate 0、唯一の仮定は `funext`）。
+
+## 7. 線形時間自己解釈系（`RWhileTime`/`RWhileSI*` 14 モジュール、2026-08-04）
+
+Glück–Yokoyama「R-WHILE の線形時間自己解釈系」を定理化する層。詳細は `LINEAR_TIME_SI.md`。
+**自己解釈系は抽象機械ではなく、対象言語で書かれた 1 本の R-WHILE プログラム**。
+
+| 実装の部品 | Agda 結果 | 強さ |
+|---|---|---|
+| `EvalRwhile.eval_steps`（`./ri -steps` のコスト） | `RWhileTime`：コスト付き big-step ＋ 燃料付き `exec`/`exec-sound` | **証明**（`incr` と 1 対 1。式は平坦に限定） |
+| `Program2DataRwhile.ml`（`-p2d`） | `RWhileSIEnc`：`⌜_⌝`・`encS`・`num`・タグ表（式は `(tag . (o1 . o2))` に一様化） | 定義 |
+| R-WHILE の静的条件（`X ∉ Vars(E)`、変数はストア内） | `RWhileSIWf`：分離則・`NotIn`/`evalE-frame`・`Wf`/`InR`・`⇒-length` | **証明** |
+| `ri.rwhile` の主ループ＋`STEP`（todo/done アジェンダ、プログラム保存） | `RWhileSIMach`：`astep`/`step1`・`sim`・`machine-linear`（対象 1 ステップ ≤ **機械 4 ステップ**） | **証明**（実行テスト付き） |
+| `ri.rwhile` の `AUX`/`LOOKUP`/`UPDATE`（`Vl` 歩行） | `RWhileSIMac`（汎用 push/pop、コスト 9）・`RWhileSIWalk`（30/セル）・`RWhileSILookup`（**`60k+27`**） | **証明**（実行テストで厳密値を照合） |
+| `ri.rwhile` の `EVAL-EXP`/`INV-EVAL-EXP` | `RWhileSIEval`：`opdC`（`60M+36`）・`evalC`（式 5 形、`evalB M = 240M+178`）。compute–use–uncompute で**部分対合**＝同じコードの再実行が逆計算 | **証明** |
+| `ri.rwhile` の `STEP` マクロ本体（12 タグ分岐） | `RWhileSIStep`：`STEP` と **12 ケース 17 定理**（`skip`34/`seq`80/`seqE`81/`cond`/`condE`/`loop`54/`lpA`/`lpD`/`lpB`84/`lpZ`57/`lpC`86、各 `astep` 一致つき） | **証明** |
+| `ri.rwhile` をプログラムとして見た実行時間 | `RWhileSISim`：**`si-linear`（無仮定）** `j ≤ (CC M + 2)·k`、`CC M = 2940·M + 3184`。合成 `simP`/`simPR`＋算術 `RWhileSIArith`／モジュラ版は `RWhileSIProg` | **証明** |
+
+- **ギャップ G7 は解消（2026-08-04）**: `RWhileSISim.simP`/`simPR` が完成し、定理は
+  **無仮定で閉じた**。`SI` は固定された 1 本の R-WHILE プログラムで、終了時に done スタックへ
+  `⌜c⌝` を組み立て直す（プログラム保存）。定数はストアのセル数 M に affine。
+- **形式化の実務的教訓**: 合成で `with` 抽象を使うと機械状態の巨大な型がゴールに複製され、
+  型検査が 44 GB を消費して OOM になった（`where`＋明示射影で 400 MB→最終 9.7 GB・92 秒）。
+  上界の算術は別モジュールに分離し、`C * k` 形の結論をもつ補題は `C`・`k` を明示的に渡す。
+- **設計上の知見**（形式化して初めて判明）: ループの入口テスト `e` は **`D` の実行前**に評価しなければ
+  ならない。さもないと「初回到達か」の 1 ビットが可逆に消去できず、`astep` が非単射になり
+  R-WHILE プログラムとして実装不可能になる。`ri.rwhile` が `'l1E` で `EVAL-EXP(E)` してから
+  `CC ^= C` する構造は、この必然性の反映である。
+- **スコープ**: 式は平坦（オペランド＝変数/定数）、`<=` は対象言語に含めない。可逆制御構造 4 種と
+  `rupdate` は `EvalRwhile.ml` どおり。解釈系は対象プログラムのループ表明・条件文の出口表明を実際に検査する。
+- **全 80 モジュール `--safe` PASS**（`proofs/agda/check.sh`、postulate 0、穴 0）。

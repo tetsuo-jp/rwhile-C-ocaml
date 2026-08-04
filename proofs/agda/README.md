@@ -570,3 +570,87 @@ reversibility=injectivity) is proved; the production agenda offline-isation
 (`spec_av_bti.rwhile`'s `SPEC-CMD-AV` 'cond dynamic path, :972-993) is **not yet
 implemented**.  See `../../RESEARCH_ROADMAP.md` and the paper's
 `mechanization.tex` §`sec:agda-offline`.
+
+------------------------------------------------------------------------
+
+## Linear-time self-interpretation (2026-08-04)
+
+Fourteen modules (~4,400 lines) formalise the headline claim of Glück &
+Yokoyama, *A linear-time self-interpreter of a reversible imperative
+language*.  The self-interpreter is **not** an abstract machine: it is one
+fixed R-WHILE program `SI`, and the theorem bounds its cost in the very step
+count `src/EvalRwhile.ml` increments.  Full write-up: `../../LINEAR_TIME_SI.md`.
+
+**The theorem** (`RWhileSISim.si-linear`, no assumptions, `--safe`):
+
+    Wf c → InR c σ → c ⊢ σ ⇒ τ ∣ k
+      ⟹  SI ⊢ ⟨⌜c⌝ :: todo, [] :: done, σ⟩ ⇒ ⟨[], ⌜c⌝ :: done, τ⟩ ∣ j
+          with  j ≤ (CC M + 2) · k        and   CC M = 2940·M + 3184
+
+for a FIXED program `SI` and `M = length σ`: linear time, with a constant that
+is affine in the store size (the object store's *walk* is the only part that
+scans).  The done stack ends holding exactly `⌜c⌝`, so `SI` reassembles its
+input — it is a self-*interpreter*, not a consumer.
+
+- `RWhileTime.agda` — a **timed** (cost-annotated) big-step semantics
+  `c ⊢ σ ⇒ τ ∣ k`, where `k` counts executed command nodes exactly as
+  `EvalRwhile.evalCom`'s `incr eval_steps` (i.e. `./ri -steps`) does,
+  so the theorem is about the cost model the implementation measures.
+  Ships an executable fuel-indexed evaluator `exec` with `exec-sound`
+  (a computed run *is* a derivation), the tool that makes concrete
+  straight-line interpreter fragments provable by `refl`.  Expressions are
+  flat (operands = variable or constant); the four reversible control
+  constructs, the conditional's exit assertion and the loop's entry/iteration
+  assertions are modelled exactly as in `EvalRwhile.ml`.
+- `RWhileSIEnc.agda` — the program-as-data encoding `⌜_⌝` (the Agda
+  counterpart of `src/Program2DataRwhile.ml`), unary numerals, store encoding
+  and the shared tag table.
+- `RWhileSIWf.agda` — the static side conditions (`Wf`: `X ∉ Vars(E)` at every
+  assignment; `InR`: every variable is inside the store), store separation,
+  frame lemmas for expression evaluation, and `⇒-length` / `Rest-length`
+  (a run never changes the number of store cells — the invariant the walk needs).
+- `RWhileSIMach.agda` — the **agenda machine** behind `examples/ri.rwhile`'s
+  main loop: a todo stack, a *reassembling* done stack (so the source program
+  is restored — `ri` is program-preserving), and the object store.  Theorems:
+  `sim` / `machine-linear` — every terminating object run is simulated
+  correctly in at most **4 machine steps per object step**, ending with `⌜c⌝`
+  on the done stack.  `astep-td`/`astep-dn` give the structural invariants the
+  interpreter's loop assertions need.  Includes executable tests.
+- `RWhileSIRun.agda` — `Run c s t B`: a derivation together with a cost bound,
+  with combinators (`_»_`, `rSeq`, `rThen`, `rElse`, `rWeak`) that make long
+  straight-line interpreter code composable without arithmetic noise.
+- `RWhileSIMac.agda` — the interpreter's 19-slot register file, `emb`, and
+  generic `push`/`pop` (implemented with `^=` only; cost 9 each).
+- `RWhileSIWalk.agda` — walking the encoded object store `Vl` down and back
+  (30 steps per cell, both directions), the reversible core of variable access.
+- `RWhileSILookup.agda` — `LOOKUP` / `UPDATE` for object variables, cost
+  exactly `60k + 27` for variable `k`, plus the store split/rebuild lemmas.
+- `RWhileSIEval.agda` — operand evaluation `opdC` (`60M + 36`) and expression
+  evaluation `evalC` for all five flat forms, bound `evalB M = 240M + 178`.
+  These are **partial involutions** (compute–use–uncompute), so re-running the
+  same code uncomputes — the Agda counterpart of `ri.rwhile`'s `INV-` macros.
+- `RWhileSIStep.agda` — the dispatch body `STEP` as real R-WHILE code (a
+  12-level conditional nest) and **17 run theorems**, one per case, each with
+  its exact cost bound and its agreement with the machine's `astep`.  The
+  tag algebra (each case leaves a unique final tag) is what makes every exit
+  assertion in the nest hold — reversibility and the proof are the same fact.
+- `RWhileSIArith.agda` — the pure-ℕ bound bookkeeping of the composition
+  (one lemma per object case), kept apart so the big machine-state types stay
+  out of the arithmetic.
+- `RWhileSISim.agda` — the main loop `SI = loop (=? Cd' nil) skip STEP (=? Cd nil)`,
+  the composable iteration chains `PChain`/`PC`, their conversion into the
+  loop's `Rest` derivation, the uniform per-step constant `CC`, the induction
+  `simP`/`simPR` that strings the 17 case theorems along an object derivation,
+  and the closed theorem **`si-linear`** above.
+- `RWhileSIProg.agda` — the same statement in modular form: the dispatch body
+  is a parameter (`record Realises`), giving `j ≤ (4(C+1)+2)·k` for any `STEP`
+  that realises one machine step at cost `C`.  `RWhileSISim` discharges it
+  concretely; this module records the shape of the argument.
+- `RWhileSITest.agda` — executable tests: the type checker runs `exec` on
+  concrete interpreter stores and checks both the result and the step count
+  against the proved cost formulas (push/pop 9, walk 62, `lkE` 87/27, `updE`
+  87 and its involution, `opdC` 96/6, `evalC` 235 and its involution).
+
+Scope: expressions are flat and `<=` is not in the object language, so the
+constant is larger than the real `ri.rwhile` (measured a-rev ≈ 364); the
+design — agenda, reassembly, tag algebra, compute–use–uncompute — is the same.
