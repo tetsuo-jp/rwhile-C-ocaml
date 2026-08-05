@@ -22,6 +22,7 @@ open import RWhileTime
 open import RWhileSIEnc using (⌜_⌝; encS)
 open import RWhileSIStep using (embM)
 open import RWhileSISim using (SI)
+open import RWhileTimeSkip using (skips; cost₀; cost-split)
 
 private
   -- interpreting `skip` on the empty object store
@@ -75,3 +76,45 @@ private
   -- do-branch and 1 for the loop node, where R-WHILE's grammar prints an
   -- EMPTY branch, which costs nothing.  The model is the conservative side,
   -- so the proved bounds cover the implementation as well.
+
+  ------------------------------------------------------------------------
+  -- WHERE THE GAP WITH `./ri -steps` COMES FROM.
+  --
+  -- `RWhileTimeSkip.cost-split` proves `k ≡ cost₀ d + skips d`: the model's
+  -- count exceeds the skip-free one by exactly the `skip`s the run executed.
+  -- R-WHILE prints a `skip` branch as an EMPTY branch, which the
+  -- implementation does not charge for -- so `skips` should be exactly the
+  -- gap measured in §4.7 vs §4.75.  It is, on the nose:
+  --
+  --   program              ./ri -steps   exec   gap   skips
+  --   skip                        34      37      3      3
+  --   X0 ^= 'a                   178     182      4      4
+  --   X0 ^= 'a; X0 ^= 'a         516     525      9      9
+  --   the loop                  1821    1869     48     48
+
+  d-skip : SI ⊢ embM (⌜ skip ⌝ ∙ nil) nil [] ⇒ embM nil (⌜ skip ⌝ ∙ nil) [] ∣ 37
+  d-skip = exec-sound 200 SI _ _ _ refl
+
+  n-skip : skips d-skip ≡ 3
+  n-skip = refl
+
+  d-ass : SI ⊢ embM (⌜ ass ⌝ ∙ nil) nil (nil ∷ [])
+             ⇒ embM nil (⌜ ass ⌝ ∙ nil) (atm 1 ∷ []) ∣ 182
+  d-ass = exec-sound 300 SI _ _ _ refl
+
+  n-ass : skips d-ass ≡ 4
+  n-ass = refl
+
+  d-sq : SI ⊢ embM (⌜ sq ⌝ ∙ nil) nil (nil ∷ [])
+            ⇒ embM nil (⌜ sq ⌝ ∙ nil) (nil ∷ []) ∣ 525
+  d-sq = exec-sound 400 SI _ _ _ refl
+
+  n-sq : skips d-sq ≡ 9
+  n-sq = refl
+
+  d-lp : SI ⊢ embM (⌜ lp ⌝ ∙ nil) nil (nil ∷ [])
+            ⇒ embM nil (⌜ lp ⌝ ∙ nil) (atm 7 ∷ []) ∣ 1869
+  d-lp = exec-sound 400 SI _ _ _ refl
+
+  n-lp : skips d-lp ≡ 48
+  n-lp = refl
