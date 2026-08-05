@@ -38,4 +38,33 @@ body = txt[len("read X0;\n"):txt.rindex(";\nwrite X1")]
 open('extracted/SI_run.rwhile','w').write("read X0;\n"+pre+body+post+";\nwrite X1\n")
 print("extracted/SI.rwhile:", len(txt), "chars,", txt.count("\n"), "lines")
 EOF
+# ... and the same for the INVERSE interpreter (RWhileTimeInv.inv SI), which
+# `RWhileSIInv.si-uncompute` proves undoes an interpretation in the same
+# number of steps.  Its wrapper reads (done . store) and writes (todo . store),
+# so it composes with SI_run's output.
+cat > _ExtractSI.agda <<'EOF'
+module _ExtractSI where
+open import Data.String using (String)
+open import Relation.Binary.PropositionalEquality using (_≡_; refl)
+open import RWhileSIShow using (showProg)
+open import RWhileSISim using (SI)
+open import RWhileTimeInv using (inv)
+t : showProg (inv SI) ≡ ""
+t = refl
+EOF
+agda _ExtractSI.agda > _extract.log 2>&1 || true
+python3 - <<'EOF'
+import re
+log = open('_extract.log').read()
+m = re.search(r'"((?:[^"\\]|\\.)*)"\s*!=', log, re.S)
+assert m, "could not find the normalised string in the type checker's output"
+txt = m.group(1).encode().decode('unicode_escape')
+open('extracted/INV_SI.rwhile','w').write(txt)
+pre  = "X1 ^= hd X0;\nX2 ^= tl X0;\nX0 ^= cons X1 X2;\n"
+post = ";\nX5 ^= X0;\nX0 ^= X5;\nX0 ^= cons X5 X2;\nX5 ^= hd X0;\nX2 ^= tl X0"
+body = txt[len("read X0;\n"):txt.rindex(";\nwrite X1")]
+open('extracted/INV_SI_run.rwhile','w').write("read X0;\n"+pre+body+post+";\nwrite X0\n")
+print("extracted/INV_SI.rwhile:", len(txt), "chars,", txt.count("\n"), "lines")
+EOF
+
 rm -f _ExtractSI.agda _ExtractSI.agdai _extract.log
