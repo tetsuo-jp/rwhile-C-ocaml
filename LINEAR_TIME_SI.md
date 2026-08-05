@@ -5,7 +5,7 @@ Glück–Yokoyama の *A linear-time self-interpreter of a reversible imperative
 stdlib、`--safe`・postulate 0・穴 0）で機械検証する開発。**自己解釈系は抽象機械ではなく、
 対象言語そのもので書かれた 1 本の R-WHILE プログラム**である。
 
-新規モジュール（`proofs/agda/`、全 25 本・約 6,100 行、`./check.sh` は PASS=91 FAIL=0）:
+新規モジュール（`proofs/agda/`、全 26 本・約 6,200 行、`./check.sh` は PASS=92 FAIL=0）:
 
 | モジュール | 内容 |
 |---|---|
@@ -30,6 +30,7 @@ stdlib、`--safe`・postulate 0・穴 0）で機械検証する開発。**自己
 | `RWhileSIShow` | **具象構文プリンタ**（`Cmd` → R-WHILE テキスト）。`SI` を実際に走る `.rwhile` として抽出するために使う |
 | `RWhileSIParse` | **プリンタの往復定理**（トークン列の構文解析器と `parse (tok e) ≡ just (e , ts)`）と `;` の結合に関する曖昧性の解消 |
 | `RWhileSINorm` | **右結合化 `nf`**（印字は不変・実行と歩数も不変）。抽出テキストが表す項と `SI` を結ぶ |
+| `RWhileSIRoundTrip` | 上の実例化: **抽出テキストは `nf SI` に読み戻る**（`si-text`） |
 | `RWhileSIP2D` | **実装 `-p2d` との差分テスト**（実装の符号化を Agda でモデル化し、`./ri -p2d` の出力と文字列一致を型検査器が検証）と一様符号化への翻訳定理 |
 | `RWhileTimeDec` | `Wf`/`InR` の**決定手続き**（`wf?`/`inR?`/`Wf!`/`InR!`）。具体プログラムの静的条件を評価で discharge |
 | `RWhileSIInv` | 上を合成した系：**逆プログラムの解釈**（`si-inverse-linear`・`si-round-trip`）と**解釈系自身の逆走**（`si-uncompute`） |
@@ -314,6 +315,43 @@ cd ../../src && ./ri -exp ../proofs/agda/extracted/SI.rwhile      # パース成
 - 実測の `a_p`（対象 1 ステップあたりの解釈系歩数）は 34〜344。手書きの `ri.rwhile`（実測
   a-rev ≈ 364）と**同じ桁**であり、核言語に絞った形式化でも実物並みの効率が出ている。
 
+## 4.8 印字したテキストは読み戻せるか（`RWhileSIParse` / `RWhileSINorm` / `RWhileSIRoundTrip`）
+
+抽出したテキストが本当に Agda の項を表しているかは、**印字が情報を失わないか**の問題である。
+曖昧性が宿るのはトークン列の水準なので、`Rwhile.cf` に沿った構文解析器を Agda 側に書いた
+（先頭トークンごとに 1 節・燃料付きで構造的に停止）。トークンは**差分リスト方式**
+（`tokV v ts` ＝ v のトークンの後に ts が続く）で生成するので `_++_` が現れず、結合律の
+補題が一切要らない。
+
+```agda
+pV-ok / pO-ok / pE-ok : 値・オペランド・式の往復
+round-trip : ∀ c → RN c → pC (suc (depthC c)) (tokC c []) ≡ just (c , [])
+```
+
+**`;` の曖昧性と、その解消**: `showC (c ⨾ d) = showC c ; showC d` は木を平坦化するので
+`(a;b);c` と `a;(b;c)` は同じテキストになる。さらに R-WHILE の文法
+`CSeq. Com ::= Com ";" Com1` は**左再帰**なので実装の構文解析器は左結合に組み、本開発の
+`_⨾_` は infixr である。つまりテキストが表すのは**結合の付け替えを除いて**同じ命令であり、
+それが無害であることを `seq-assocʳ`／`seq-assocˡ`（**意味論も歩数も完全に保存**）で示した。
+
+**抽出物への適用**: `SI` は `STEP` が `(pop ⨾ splitT) ⨾ (DISPATCH ⨾ …)` と括られているため
+右結合ではない。そこで右結合化 `nf` を定義した:
+
+```agda
+nf-tok  : ∀ c ts → tokC (nf c) ts ≡ tokC c ts    -- 印字は完全に同一
+nf-⇒    : c ⊢ σ ⇒ τ ∣ k → nf c ⊢ σ ⇒ τ ∣ k       -- 実行も歩数も不変
+si-text : pC (suc (depthC (nf SI))) (tokC SI []) ≡ just (nf SI , [])
+```
+
+すなわち **`extract-si.sh` が書き出したテキストは `nf SI` を表し、それは意味論が見るかぎり
+`SI` そのものである**。
+
+証明を通すために定義を書き直した箇所が 3 つある: (1) 分岐の印字を
+`if isSkip c then ts else kw ∷ tokC c ts` に（catch-all 節は `c` の構成子が分からないと
+簡約しない）、(2) 構文解析器の先頭判定を `Bool` に（リストの節分けも同様）、(3) `depthC` は
+1 命令あたり 2 を数える（`pC → pC1` の委譲で 1 単位使うため）。いずれも
+「証明が進むように定義を書く」典型で、定義を変えずに証明だけ書こうとすると詰まる。
+
 ## 5. 実装上の教訓（形式化して判明したこと）
 
 - **`with` 抽象を合成で使ってはいけない**。機械状態の型（19 スロット × 符号化プログラム）が
@@ -322,6 +360,13 @@ cd ../../src && ./ri -exp ../proofs/agda/extracted/SI.rwhile      # パース成
 - 上界の算術は別モジュール（`RWhileSIArith`）へ。巨大な型と `Data.Nat.Solver` を混ぜない。
 - 結論を `C * k` の形で述べる補題は、`C`・`k` を**明示的に渡す**（暗黙のままだと Agda が
   `_*_` の逆転を試みて `--inversion-max-depth` に当たる）。
+- **巨大な項の上で `rewrite` を使わない**。`rewrite` は書き換え対象の出現箇所を照合で探すため、
+  37,000 トークンの項では 26.7 GB・154 秒を消費した。motive を明示した `subst` に替えると
+  **0.43 GB・5.0 秒**（62 倍の削減）で同じ定理が通る。`with` 抽象で 44 GB を踏んだ件と同根で、
+  原則は「**Agda に探させない**」。切り分けも同じ手順: 部分ごとに `/usr/bin/time -v` で測る
+  （このときは判定手続き `rn?` の評価が 0.42 GB で無罪と判明した）。
+- **`sed`/`python` の無条件置換は黙って空振りする**。本開発では docs の更新が 2 回失われた。
+  置換は必ず `assert a in s` で当たりを確認し、直後に `grep` で結果を検証する。
 
 ## 6. 検証方法
 
