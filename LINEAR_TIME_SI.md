@@ -6,7 +6,7 @@ stdlib、`--safe`・postulate 0・穴 0）で機械検証する開発。**自己
 対象言語そのもので書かれた 1 本の R-WHILE プログラム**である。
 
 <!-- METRICS:SUMMARY:BEGIN -->
-新規モジュール（`proofs/agda/`、全 27 本・6620 行、`./check.sh` は PASS=94 FAIL=0）:
+新規モジュール（`proofs/agda/`、全 27 本・6628 行、`./check.sh` は PASS=94 FAIL=0）:
 <!-- METRICS:SUMMARY:END -->
 
 | モジュール | 内容 |
@@ -23,7 +23,7 @@ stdlib、`--safe`・postulate 0・穴 0）で機械検証する開発。**自己
 | `RWhileSIStep` | **`STEP`（ディスパッチ本体）と全 12 ケースの実行補題**（17 定理、各 `astep` 一致つき） |
 | `RWhileSIArith` | 合成の**上界計算**（対象 1 ケース＝補題 1 本、純 ℕ。巨大な機械状態の型を算術から隔離） |
 | `RWhileSISim` | 主ループ `SI`、反復連鎖 `PChain`/`PC`、`Rest` への変換、一様定数 `CC`、**合成 `simP`/`simPR` と主定理 `si-linear`** |
-| `RWhileSIProg` | 同じ主張のモジュラ版（`Realises` を仮定。`RWhileSISim` が具体的に discharge） |
+| `RWhileSIProg` | 同じ主張の**モジュラ版**（`Realises` を仮定＝「どんなディスパッチ本体にも要求されること」を読む用。具体版は `RWhileSISim.si-linear`） |
 | `RWhileTimeInv` | **プログラム反転 `inv`（`InvRwhile.ml` の Agda 版）とコスト保存の健全性**・`rupd` の部分対合性・`inv-inv`・`Wf`/`InR` の保存 |
 | `RWhileTimeDet` | **意味論の決定性** `⇒-det`／`Rest-det`（結果ストアもステップ数も一意） |
 | `RWhileTimeExec` | **燃料付き評価器の完全性**（単調性 `exec-mono` ＋ `exec-complete`）と、停止しないプログラムの特徴づけ |

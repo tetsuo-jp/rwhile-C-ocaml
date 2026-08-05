@@ -2,8 +2,15 @@
 ------------------------------------------------------------------------
 -- The self-interpreter as an R-WHILE PROGRAM, and the linear-time theorem.
 --
+-- STATUS: this is the MODULAR form of the theorem, kept for the shape of the
+-- argument.  The dispatch body is a parameter here (`Realises`); the concrete
+-- version -- with `STEP` actually built in R-WHILE and the obligation
+-- discharged -- is `RWhileSISim.si-linear`, which is what the write-up cites.
+-- Read this module for "what has to hold about any dispatch body", and
+-- `RWhileSISim` for "and here is one, with its constant".
+--
 -- `RWhileSIMach` proved that the agenda machine simulates any terminating
--- R-WHILE run with at most 3 machine steps per object step.  Here the machine
+-- R-WHILE run with at most 4 machine steps per object step.  Here the machine
 -- is packaged as an actual R-WHILE program -- the main loop of
 -- `examples/ri.rwhile`,
 --
@@ -14,7 +21,8 @@
 --
 -- The one thing this module does NOT do is BUILD `STEP`: the dispatch body is
 -- taken as a parameter together with its correctness-and-cost obligation
--- (`Realises` below).  Everything else -- that the loop's reversibility
+-- (`Realises` below) -- `RWhileSIStep` builds it and `RWhileSISim` discharges
+-- the obligation.  Everything else -- that the loop's reversibility
 -- assertions really hold, that the iteration chain is a legal `Rest`
 -- derivation, and the arithmetic of the overhead constant -- is proved.
 --
