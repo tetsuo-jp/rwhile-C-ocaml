@@ -5,7 +5,9 @@ Glück–Yokoyama の *A linear-time self-interpreter of a reversible imperative
 stdlib、`--safe`・postulate 0・穴 0）で機械検証する開発。**自己解釈系は抽象機械ではなく、
 対象言語そのもので書かれた 1 本の R-WHILE プログラム**である。
 
-新規モジュール（`proofs/agda/`、全 27 本・約 6,300 行、`./check.sh` は PASS=93 FAIL=0）:
+<!-- METRICS:SUMMARY:BEGIN -->
+新規モジュール（`proofs/agda/`、全 27 本・6527 行、`./check.sh` は PASS=93 FAIL=0）:
+<!-- METRICS:SUMMARY:END -->
 
 | モジュール | 内容 |
 |---|---|
@@ -208,17 +210,20 @@ si-uncompute : Wf c → InR c σ → c ⊢ σ ⇒ τ ∣ k
 ## 4.5 定数の内訳と削減ログ
 
 `proofs/agda/metrics.sh` が**証明で使っている定数そのもの**を型検査器に計算させて表示する
-（見積りではない）。現在値（2026-08-05）:
+（見積りではない）。現在値（`./metrics.sh` が生成）:
 
-| 定数 | M=0 | M=1 | 傾き |
-|---|---:|---:|---:|
-| `CC` | 3196 | 5940 | 2744 |
-| `lpDStep` | 464 | 912 | 448 |
-| `lpAStep` | 444 | 892 | 448 |
-| `assStep` | 429 | 933 | 504 |
-| `condStep` | 445 | 893 | 448 |
-| `condEStep` | 470 | 918 | 448 |
-| `evalB` | 179 | 403 | 224 |
+<!-- METRICS:CONSTANTS:BEGIN -->
+```
+constant            M=0      M=1   slope
+CC                 3196     5940   2744
+lpDStep             464      912   448
+lpAStep             444      892   448
+assStep             429      933   504
+condStep            445      893   448
+condEStep           470      918   448
+evalB               179      403   224
+```
+<!-- METRICS:CONSTANTS:END -->
 
 **削減ログ**
 
@@ -400,14 +405,48 @@ si-text : pC (suc (depthC (nf SI))) (tokC SI []) ≡ just (nf SI , [])
 > `bench.sh` は `_build` 側の interface を消してから測るので、依存は interface から読みつつ
 > **そのモジュール自身のコスト**が得られる。
 
-計測値（2026-08-05）と、重い 3 モジュールの原因:
+計測値（`./bench.sh` が生成。`./update-docs.sh --bench` で更新）:
 
-| モジュール | ピーク RSS | 時間 | 原因 |
-|---|---:|---:|---|
-| `RWhileSISim` | 9.5 GB | 61 s | 合成 `simP`/`simPR` の暗黙引数が巨大な機械状態（19 スロット×符号化プログラム） |
-| `RWhileSIInv` | 8.1 GB | 61 s | **`si-uncompute` の 1 行**で 7.7 GB（切り分け済み）。`inv-sound` を `SI` に実例化する際に `inv SI` を正規化するため |
-| `RWhileSIStep` | 6.6 GB | 39 s | 17 のケース定理を具体状態の計算で証明するため |
-| 他 24 本 | ≤ 0.75 GB | ≤ 19 s | — |
+<!-- METRICS:BENCH:BEGIN -->
+```
+module                         MB        s
+RWhileTime                    339     3.58
+RWhileTimeDec                 327     3.11
+RWhileTimeDet                 334     3.21
+RWhileTimeExec                384     5.21
+RWhileTimeInv                 376     4.63
+RWhileSIArith                 376     3.93
+RWhileSIComplete              426     3.44
+RWhileSIDet                   422     4.12
+RWhileSIEnc                   297     3.33
+RWhileSIEval                  418     5.16
+RWhileSIExecTest              403     4.32
+RWhileSIInv                  8144    58.84
+RWhileSILookup                377     4.10
+RWhileSIMac                   336     3.83
+RWhileSIMach                  492     5.58
+RWhileSINorm                  369     4.20
+RWhileSIP2D                   523     5.71
+RWhileSIParse                 381     5.32
+RWhileSIProg                  375     4.25
+RWhileSIRoundTrip             426     4.90
+RWhileSIRun                   304     2.61
+RWhileSIShow                  515     6.01
+RWhileSISim                  9499    53.47
+RWhileSIStep                 6562    33.50
+RWhileSITest                  382     3.77
+RWhileSIWalk                  363     3.53
+RWhileSIWf                    325     2.99
+```
+<!-- METRICS:BENCH:END -->
+
+重い 3 モジュールの原因:
+
+| モジュール | 原因 |
+|---|---|
+| `RWhileSISim` | 合成 `simP`/`simPR` の暗黙引数が巨大な機械状態（19 スロット×符号化プログラム） |
+| `RWhileSIInv` | **`si-uncompute` の 1 行**で 7.7 GB（切り分け済み）。`inv-sound` を `SI` に実例化する際に `inv SI` を正規化するため |
+| `RWhileSIStep` | 17 のケース定理を具体状態の計算で証明するため |
 
 3 つとも「**Agda が巨大な具体項を正規化する**」ことに帰着する。これはこの開発の様式
 （具体的な解釈系＋計算による証明）に固有のもので、削るには `embM` を `opaque` にして
@@ -419,6 +458,10 @@ si-text : pC (suc (depthC (nf SI))) (tokC SI []) ≡ just (nf SI , [])
 
 ```sh
 cd proofs/agda && ./check.sh          # 84 モジュール、PASS=84 FAIL=0
+./metrics.sh                         # 証明が使っている定数（型検査器に計算させる）
+./bench.sh [module …]                # モジュール別の型検査コスト（_build の interface を消して測る）
+./update-docs.sh [--bench]           # 上の数値で本書の <!-- METRICS:* --> 区画を書き換える
+./extract-si.sh                      # 検証済み SI と inv SI を .rwhile として書き出す
 ```
 
 実行テスト（型検査器が検証）: `push`/`pop` 各 9、`walk` 2 セル 58、`lkE` 変数 1 で 83（= 56k+27）、
