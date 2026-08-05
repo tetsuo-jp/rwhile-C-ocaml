@@ -12,6 +12,7 @@
 --                      | skip | assert E | X <-> Y                (sugar)
 --                      | local X = E in C delocal X = F end       (sugar)
 --                      | for X = A to B do C end                  (sugar)
+--                      | push X S | pop X S                       (sugar)
 --                      | if E then C else D fi F | from E do C loop D until F
 --                      | local X in C end                      (extension: scoped local)
 --                      | iff E then C else D fi                 (extension: auto-fi)
@@ -68,6 +69,8 @@ CAssert. Com1 ::= "assert" Exp ;                                  -- Assertion  
 CSwap.   Com1 ::= RIdent "<->" RIdent ;                           -- Swap             (sugar: cons X Y <= cons Y X)
 CLocalD. Com1 ::= "local" RIdent "=" Exp "in" Com "delocal" RIdent "=" Exp "end" ; -- Janus-style local/delocal
 CFor.    Com1 ::= "for" RIdent "=" Exp1 "to" Exp1 "do" Com "end" ; -- Counted loop     (unary numerals; sugar: from/until)
+CPush.   Com1 ::= "push" RIdent RIdent ;                          -- Stack push       (sugar: S <= cons X S)
+CPop.    Com1 ::= "pop" RIdent RIdent ;                           -- Stack pop        (sugar: cons X S <= S)
 coercions Com 1;
 
 ACase.   CaseArm ::= Pat "=>" Com "=>" Pat ;   -- inPat => body => outPat

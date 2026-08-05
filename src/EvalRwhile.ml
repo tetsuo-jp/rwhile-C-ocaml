@@ -257,7 +257,7 @@ and varCom = function
   | CLocal (x, c) -> insert x (varCom c)
   | CAutoFi (e, t, el) -> fold_right merge [varExp e; varThenBranch t; varElseBranch el] []
   | CArrAss (x, i, e) -> insert x (merge (varExp i) (varExp e))
-  | (CCase _ | CSkip | CAssert _ | CSwap _ | CLocalD _ | CFor _) as c -> varCom (Desugar.desugar_com c)
+  | (CCase _ | CSkip | CAssert _ | CSwap _ | CLocalD _ | CFor _ | CPush _ | CPop _) as c -> varCom (Desugar.desugar_com c)
 
 and varPat : pat -> rIdent list = function
    PCons (q,r) -> merge (varPat q) (varPat r)
@@ -330,7 +330,7 @@ let linearity_violations (Prog (_, _, c, _)) : (string * pat) list =
     | CLoop (_, d, l, _) -> walkD d; walkL l
     | CLocal (_, c) -> walk c
     | CAutoFi (_, t, e) -> walkT t; walkE e
-    | (CCase _ | CSkip | CAssert _ | CSwap _ | CLocalD _ | CFor _) as c -> walk (Desugar.desugar_com c)
+    | (CCase _ | CSkip | CAssert _ | CSwap _ | CLocalD _ | CFor _ | CPush _ | CPop _) as c -> walk (Desugar.desugar_com c)
     | CAss _ | CMac _ | CShow _ | CArrAss _ -> ()
   and walkT = function BThen c -> walk c | BThenNone -> ()
   and walkE = function BElse c -> walk c | BElseNone -> ()
@@ -546,7 +546,7 @@ and evalCom (s : store) (c : com) : store =
        let idx = evalExp s idx_exp in
        let v   = evalExp s val_exp in
        update (x, arr_rupdate arr idx v) s
-  | (CCase _ | CSkip | CAssert _ | CSwap _ | CLocalD _ | CFor _) as c -> evalCom s (Desugar.desugar_com c)  (* normally desugared in evalProgram *)
+  | (CCase _ | CSkip | CAssert _ | CSwap _ | CLocalD _ | CFor _ | CPush _ | CPop _) as c -> evalCom s (Desugar.desugar_com c)  (* normally desugared in evalProgram *)
 
 and evalLoop (s : store) (e, dobranch, loopbranch, f) : store =
   if is_true (evalExp s f)

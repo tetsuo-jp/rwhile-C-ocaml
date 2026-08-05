@@ -1,0 +1,22 @@
+(* List reversal written with the stack sugar `push` / `pop`.
+ *
+ *     push X S   ->   S <= cons X S      (X is left nil)
+ *     pop  X S   ->   cons X S <= S      (fails if S is not a cons)
+ *
+ * The two are exact inverses, which comes for free from the desugaring:
+ * inverting a replacement swaps its two patterns, turning one into the other.
+ * So `./ri -inverse examples/stack_reverse.rwhile` is again a reversal, at the
+ * same cost -- pop/push become push/pop and the loop tests swap.
+ *
+ * `skip` is the natural filler for a loop branch that has nothing to undo.
+ *
+ * Run:  ./ri -steps examples/stack_reverse.rwhile examples/list123.val
+ *         ==> ('3 . ('2 . ('1 . nil)))    in 12 steps
+ *)
+
+read In;
+  from =? Out nil do
+    pop V In;
+    push V Out
+  loop skip until =? In nil;
+write Out

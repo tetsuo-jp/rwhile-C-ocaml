@@ -111,15 +111,25 @@ invisible to macro expansion, evaluation, inversion and program-encoding:
 | `X <-> Y` | `cons X Y <= cons Y X` |
 | `local X = E in C delocal X = F end` | `X ^= E; C; X ^= F` |
 | `for X = A to B do C end` | `X ^= A; from =? X A do C loop <X++> until =? X B; X ^= B` |
+| `push X S` | `S <= cons X S` (`X` is left `nil`) |
+| `pop X S` | `cons X S <= S` (fails if `S` is not a cons) |
 
-`local`/`delocal` must name the same variable (checked). The `for` counter is
+`push` and `pop` are exact inverses with no inversion rule of their own —
+inverting a replacement swaps its two patterns, which turns one into the other.
+Their two variables must differ. `local`/`delocal` must name the same variable
+(checked). The `for` counter is
 loop-**local** — `nil` before and after — so a `for` preserves the store
 invariant; `A` and `B` are unary numerals (`nil`, `(nil.nil)`, …), the body runs
 at least once, and `B` must be `A` extended by `nil`s or the loop diverges, just
 as the underlying `from/until` does. The counter step `<X++>` is the
 four-assignment reversible increment used by the verified interpreter
-(`proofs/agda/RWhileSIMac.incC`). See `examples/sugar.rwhile`; `./ri -exp` shows
-the expansion and `./ri -inverse` the (cost-identical) inverse.
+(`proofs/agda/RWhileSIMac.incC`). See `examples/sugar.rwhile` and
+`examples/stack_reverse.rwhile`; `./ri -exp` shows the expansion and
+`./ri -inverse` the (cost-identical) inverse.
+
+All of these are keywords in lower case, and identifiers must start with an
+upper-case letter, so none of them can shadow an existing variable or macro
+name.
 
 ## Reversible Futamura projections
 

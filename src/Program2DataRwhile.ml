@@ -58,7 +58,7 @@ and transCom (c : com) : valT =
          | CLocal _ -> failwith "CLocal cannot be translated to data"
          | CAutoFi _ -> failwith "CAutoFi cannot be translated to data"
          | CArrAss _ -> failwith "CArrAss cannot be translated to data"
-         | CCase _ | CSkip | CAssert _ | CSwap _ | CLocalD _ | CFor _ ->
+         | CCase _ | CSkip | CAssert _ | CSwap _ | CLocalD _ | CFor _ | CPush _ | CPop _ ->
             failwith "transCom: surface sugar must be desugared first (Desugar.desugar_program)")
 
 and transThenBranch = function

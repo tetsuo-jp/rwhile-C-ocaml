@@ -2315,6 +2315,30 @@ let test_sugar_for () =
     (parse_val "('a . nil)")
     (eval_string "read X; for I = nil to nil do X <= cons 'a X end; write X" "nil")
 
+let test_sugar_push_pop () =
+  (* pop/push move an element from one stack to the other: a list reversal *)
+  let prog = parse_file_program (examples_dir ^ "/stack_reverse.rwhile") in
+  let input = parse_file_val (examples_dir ^ "/list123.val") in
+  Alcotest.(check valT_testable) "push/pop reverse a list"
+    (parse_val "('3 . ('2 . ('1 . nil)))") (EvalRwhile.evalProgram prog input);
+  (* popping something that is not a cons fails *)
+  Alcotest.(check bool) "pop on a non-cons fails" true
+    (fails (fun () -> eval_string "read S; pop V S; V ^= V; write S" "'a"));
+  (* the two names must differ, or the pattern would read S twice *)
+  Alcotest.(check bool) "push X X is rejected" true
+    (try ignore (eval_string "read S; push S S; write S" "'a"); false
+     with Desugar.Desugar_error _ -> true)
+
+let test_sugar_push_pop_inverse () =
+  (* inverting a replacement swaps its patterns, so push and pop map onto each
+     other with no inversion rule of their own *)
+  let pushp = parse_program "read S; push V S; write T"
+  and popp  = parse_program "read T; pop V S; write S" in
+  Alcotest.(check program_testable) "inv (push V S) = pop V S"
+    (Desugar.desugar_program popp) (InvRwhile.invProgram pushp);
+  Alcotest.(check program_testable) "inv (pop V S) = push V S"
+    (Desugar.desugar_program pushp) (InvRwhile.invProgram popp)
+
 let test_sugar_inverse_cost () =
   let prog = parse_file_program (examples_dir ^ "/sugar.rwhile") in
   let input = parse_val "'c" in
@@ -2622,6 +2646,8 @@ let () =
       Alcotest.test_case "local/delocal" `Quick test_sugar_local;
       Alcotest.test_case "local/delocal name mismatch" `Quick test_sugar_local_name_mismatch;
       Alcotest.test_case "for" `Quick test_sugar_for;
+      Alcotest.test_case "push/pop" `Quick test_sugar_push_pop;
+      Alcotest.test_case "push and pop are inverses" `Quick test_sugar_push_pop_inverse;
       Alcotest.test_case "inversion preserves cost" `Quick test_sugar_inverse_cost;
       Alcotest.test_case "self-interpretation" `Quick test_sugar_via_ri;
     ];

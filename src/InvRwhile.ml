@@ -22,7 +22,7 @@ let rec invCom = function
   | CLocal (x, c) -> CLocal (x, invCom c)        (* local scope is symmetric *)
   | CAutoFi (e, t, el) -> CAutoFi (e, invThenBranch t, invElseBranch el)
   | CArrAss (x, i, e) -> CArrAss (x, i, e)       (* array update is self-inverse *)
-  | (CCase _ | CSkip | CAssert _ | CSwap _ | CLocalD _ | CFor _) as c -> invCom (Desugar.desugar_com c)  (* normally desugared in invProgram *)
+  | (CCase _ | CSkip | CAssert _ | CSwap _ | CLocalD _ | CFor _ | CPush _ | CPop _) as c -> invCom (Desugar.desugar_com c)  (* normally desugared in invProgram *)
 
 and invThenBranch = function
     BThen c   -> BThen (invCom c)

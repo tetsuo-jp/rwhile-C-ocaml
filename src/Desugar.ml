@@ -105,6 +105,13 @@ let seq3 a b c = CSeq (CSeq (a, b), c)
                                     from (=? X A) do C loop <X++> until (=? X B) ;
                                     X ^= B
 
+     push X S                   ->  S <= cons X S        (X is left nil)
+     pop  X S                   ->  cons X S <= S        (fails if S is not a cons)
+
+   push and pop are exact inverses of each other, which falls out of the
+   desugaring for free: inverting a replacement swaps its two patterns.  The two
+   variable names must differ (S <= cons S S would read S twice).
+
    The counter step <X++> is the four-assignment increment on unary numerals
    (X := (nil . X)) that needs one fresh scratch variable -- the same idiom the
    verified interpreter uses (proofs/agda/RWhileSIMac.incC).
@@ -143,6 +150,12 @@ let rec desugar_com (c : com) : com =
        raise (Desugar_error "local/delocal: the two variable names must agree")
      else
        CSeq (CAss (x, e), CSeq (desugar_com body, CAss (x, f)))
+  | CPush (x, s) ->
+     if x = s then raise (Desugar_error "push: the two variables must differ")
+     else CRep (PVar (Var s), PCons (PVar (Var x), PVar (Var s)))
+  | CPop (x, s) ->
+     if x = s then raise (Desugar_error "pop: the two variables must differ")
+     else CRep (PCons (PVar (Var x), PVar (Var s)), PVar (Var s))
   | CFor (x, a, b, body) ->
      CSeq (CAss (x, a),
      CSeq (CLoop (EEq (EVar (Var x), a),
