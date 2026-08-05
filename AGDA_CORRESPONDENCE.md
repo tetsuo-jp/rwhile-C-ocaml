@@ -312,7 +312,7 @@ Flag ^= =? Tag 'l4E; Flag ^= =? Tag 'loop;
 全数検査で定義される対が 45 → 67 に増え、単射性・対合性・ストア上の可逆性は
 どちらの版でも成立、**定義域が d と e について対称なのは 3 場合の版だけ**。
 
-### 未修正: 線形時間 SI 層に同じ欠落が残っている（2026-08-05 に発見）
+### 線形時間 SI 層に残っていた同じ欠落（2026-08-05 発見・同日修正）
 
 上の修正は `RWhileValStore` / `RWhileDetConcrete` / `RWhileExecConcrete` の層だけ
 だった。**`RWhileTime.agda` の `rupd` は依然として 2 場合しかない**:
@@ -377,32 +377,46 @@ Agda で定義される場合は実装でも定義され、値も一致する（
 `RWhileTime` を import するモジュールは 27 あるので、`check.sh --si` の全体再検査
 が要る。
 
-**素朴に先頭へ 1 節足してはいけない。** `rupd w nil = just w` を先頭に置くと
+#### 直した内容（PASS=27 FAIL=0）
+
+**第 2 引数で分割し直す設計は失敗した。** `rupd w nil = just w` を先頭に置くと
 `rupd nil v` が開いた `v` に対して簡約しなくなる（Agda は第 1 節のパターン `nil`
-に当たるかを先に決められないため）。既存の証明はこの簡約に依存している。
-**第 2 引数で分割し直して重なりを消す**こと:
+に当たるかを先に決められない）。`RWhileSIMac` / `RWhileSIStep` / `RWhileSIEval`
+には `rupd nil <開いた値> ≡ just _` を `refl` で閉じている証明が多数あり、
+27 モジュール中 **12 が落ちた**。
+
+採用したのは、**第 1 節を温存して第 3 の場合を非 nil 側の 2 節の内側に足す**形
+（実装の分岐順と同じ）:
 
 ```agda
-rupd : V → V → Maybe V
-rupd w       nil     = just w                                  -- 第 3 の場合（恒等）
-rupd nil     (atm n) = just (atm n)
-rupd nil     (a ∙ b) = just (a ∙ b)
-rupd (atm m) (atm n) = if eqℕ m n then just nil else nothing
-rupd (atm m) (_ ∙ _) = nothing
-rupd (a ∙ b) (atm _) = nothing
-rupd (a ∙ b) (c ∙ d) = if eqV (a ∙ b) (c ∙ d) then just nil else nothing
+rupd nil     v = just v                                 -- 1. 空きスロットに置く
+rupd (atm m) v = if eqV (atm m) v then just nil         -- 2. 同じ値なら消す
+                 else if eqV v nil then just (atm m)    -- 3. 右辺が nil なら恒等
+                 else nothing
+rupd (a ∙ b) v = if eqV (a ∙ b) v then just nil
+                 else if eqV v nil then just (a ∙ b) else nothing
 ```
 
-見通し:
+- `rupd nil v` の簡約が保たれるので下流の `refl` が無傷。
+- `eqV v nil` を使ったので `eqV-sound` がそのまま再利用できる。
+- `rupd (atm m) (atm n)` と `rupd (a ∙ b) (c ∙ d)` は `eqV (atm n) nil = false`
+  等が定義的に潰れて**元と同じ形**に戻るため、`rupd-invol` の該当節は元の証明の
+  ままでよい。
+- `rupd-self`（**191 箇所**で使われる最重要補題）は**無修正**で通る。
+- 追加した補助補題は `rupd-nil : ∀ w → rupd w nil ≡ just w` の 1 つだけ
+  （`rupd` は第 1 引数で分割するので `rupd w nil` は開いた `w` で簡約しない）。
+- `rupd-invol` に `v ≡ nil` の枝が 1 つ増えた。そこは `u` が `w` そのものなので、
+  「写像が自分自身の逆である最も安い理由」で済む。
+  `rupd (atm _) (_ ∙ _)` と `rupd (_ ∙ _) (atm _)` は定義的に `nothing` に潰れる
+  ので `with` が不要になり、節はむしろ簡単になった。
+- `RWhileTimeDet` / `RWhileTimeExec` は `rupd` を場合分けしていない（`cong` の
+  引数に置くだけ）ので**変更不要**だった。
 
-- `rupd-self`（**191 箇所**で使われる最重要補題）は新定義でもそのまま通る。
-  `rupd-self nil` は第 1 節で `just nil`、`atm`/`∙` は従来どおり `eqℕ-refl` /
-  `eqV-refl` で潰れる。ここが壊れないので大半の利用箇所は無傷である。
-- `rupd-invol` は `v` が nil かどうかで場合分けを 1 段増やす。`v ≡ nil` の枝は
-  `u ≡ w` なので `refl`、それ以外は既存の証明がそのまま入る。
-- 実質の書き換えは `rupd` を直接分解している `RWhileTimeInv` の 11 箇所と
-  `RWhileTimeDet` の 2 箇所、`RWhileTimeExec` の 1 箇所に限られる見込み。
-- `exec` は `rupd` を呼ぶだけなので定義の変更に追随する。
+変更したのは `RWhileTime.agda` と `RWhileTimeInv.agda` の 2 ファイルのみ。
+`check.sh --si` は **PASS=27 FAIL=0**（275 秒）。`--safe`・postulate 0 は維持。
+
+これで `si-linear`・`inv-sound`・`⇒-det` はいずれも第 3 の場合を含む断片について
+の定理になり、`examples/ri.rwhile` の論理和イディオムもモデルの内側に入った。
 
 ### 直した範囲
 

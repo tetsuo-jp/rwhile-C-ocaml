@@ -169,14 +169,40 @@ evalT s e with evalE s e
 ... | nothing = nothing
 
 ------------------------------------------------------------------------
--- The reversible update `x ^= e` (src/EvalRwhile.ml `rupdate`):
--- assigning to a nil variable sets it; assigning its current value clears
--- it; anything else is a run-time error (partial involution).
+-- The reversible update `x ^= e` (src/EvalRwhile.ml `rupdate`), all THREE
+-- cases of it, in the implementation's order:
+--
+--   1. the variable is nil          -> set it
+--   2. the value equals the current -> clear it
+--   3. the value is nil             -> identity (XOR with 0)
+--   otherwise                       -> run-time error
+--
+-- The third case is easy to miss: the papers' (+) has only two (Gluck &
+-- Yokoyama, Computer Software 33(3), 2016, Eq.(8); the R-CORE paper, IEICE
+-- E100-D(5), 2017, Eq.(1)).  It was dropped here once already -- see
+-- AGDA_CORRESPONDENCE.md -- and it is not decoration: `examples/ri.rwhile`
+-- needs it for the disjunction idiom
+-- `Flag ^= =? Tag 'l4E; Flag ^= =? Tag 'loop`, so a two-case model does not
+-- cover the very self-interpreter this layer is about.
+--
+-- Case 3 is appended INSIDE the two non-nil clauses rather than hoisted to a
+-- leading `rupd w nil = just w`.  Hoisting would stop `rupd nil v` from
+-- reducing for an open `v`, and dozens of proofs downstream (RWhileSIMac,
+-- RWhileSIStep, RWhileSIEval) close goals of the form
+-- `rupd nil <open value> ≡ just _` by `refl`.
 
 rupd : V → V → Maybe V
 rupd nil     v = just v
-rupd (atm m) v = if eqV (atm m) v then just nil else nothing
-rupd (a ∙ b) v = if eqV (a ∙ b) v then just nil else nothing
+rupd (atm m) v = if eqV (atm m) v then just nil
+                 else if eqV v nil then just (atm m) else nothing
+rupd (a ∙ b) v = if eqV (a ∙ b) v then just nil
+                 else if eqV v nil then just (a ∙ b) else nothing
+
+-- assigning nil never fails and never changes the variable (case 3)
+rupd-nil : ∀ w → rupd w nil ≡ just w
+rupd-nil nil     = refl
+rupd-nil (atm n) = refl
+rupd-nil (a ∙ b) = refl
 
 -- assigning a variable its own current value clears it
 rupd-self : ∀ v → rupd v v ≡ just nil

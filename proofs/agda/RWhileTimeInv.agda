@@ -85,15 +85,26 @@ eqV-sound (a ∙ b) (c ∙ d) p with eqV a c in q
 -- 3.  `rupd` is a partial involution: the very property that makes `^=`
 --     reversible in src/EvalRwhile.ml.
 
+-- `rupd` splits on the variable's CURRENT value, so this proof does too.
+-- The extra case is `v ≡ nil` (the identity case): there u IS w, which is the
+-- cheapest possible reason for a map to be its own inverse.  It has to come
+-- first because `rupd w nil` does not reduce for an open w -- `rupd-nil`
+-- supplies the equation instead.
 rupd-invol : ∀ w v u → rupd w v ≡ just u → rupd u v ≡ just w
-rupd-invol nil     v u refl = rupd-self v
-rupd-invol (atm m) v u p with eqV (atm m) v in q
-... | true  = subst (λ w → rupd w v ≡ just (atm m)) (just-inj p)
-                    (cong just (sym (eqV-sound (atm m) v q)))
+rupd-invol w nil u p =
+  trans (rupd-nil u)
+        (cong just (sym (just-inj (trans (sym (rupd-nil w)) p))))
+rupd-invol nil     (atm n) u refl = rupd-self (atm n)
+rupd-invol nil     (a ∙ b) u refl = rupd-self (a ∙ b)
+rupd-invol (atm m) (atm n) u p with eqV (atm m) (atm n) in q
+... | true  = subst (λ w → rupd w (atm n) ≡ just (atm m)) (just-inj p)
+                    (cong just (sym (eqV-sound (atm m) (atm n) q)))
 ... | false = n≢j p
-rupd-invol (a ∙ b) v u p with eqV (a ∙ b) v in q
-... | true  = subst (λ w → rupd w v ≡ just (a ∙ b)) (just-inj p)
-                    (cong just (sym (eqV-sound (a ∙ b) v q)))
+rupd-invol (atm _) (_ ∙ _) u p = n≢j p
+rupd-invol (_ ∙ _) (atm _) u p = n≢j p
+rupd-invol (a ∙ b) (c ∙ d) u p with eqV (a ∙ b) (c ∙ d) in q
+... | true  = subst (λ w → rupd w (c ∙ d) ≡ just (a ∙ b)) (just-inj p)
+                    (cong just (sym (eqV-sound (a ∙ b) (c ∙ d) q)))
 ... | false = n≢j p
 
 ------------------------------------------------------------------------
