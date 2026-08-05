@@ -129,9 +129,15 @@ let data2program : valT -> program = function
      Prog ([], d_ident i, d_com c, d_ident j)
   | _ -> failwith "data2program: malformed program"
 
+(* Opt-in (./ri -hot-vars): number the variables by static access weight instead
+   of first occurrence, so the self-interpreter's store walks are shorter.  See
+   Optimize.ml.  OFF by default: the fp1/fp2/fp3 residuals and examples/*.val
+   are byte-compared against a specific numbering. *)
+let hot_vars : bool ref = ref false
+
 let program2data (p : program) : valT =
   let p2 = MacroRwhile.expMacProgram p in
-  let vs = EvalRwhile.varProgram p2 in
+  let vs = if !hot_vars then Optimize.var_order p2 else EvalRwhile.varProgram p2 in
   let rec incseq m n = if m = n then [m] else m :: incseq (m+1) n in
   let ws = map (fun n -> RIdent (string_of_int n)) (incseq 1 (length vs)) in
   let p3 = Subst.substProgram (combine vs ws) p2 in

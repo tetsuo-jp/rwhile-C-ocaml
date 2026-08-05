@@ -143,6 +143,15 @@ All of these are keywords in lower case, and identifiers must start with an
 upper-case letter, so none of them can shadow an existing variable or macro
 name.
 
+The surface language (this sugar plus what comes next) is **R-WHILE-S**; the
+core stays frozen so the self-interpreter, the specialiser and the Agda
+development are untouched. `./ri -p2d -hot-vars` runs the first optimisation
+pass of the R-WHILE-S → R-WHILE compiler: it numbers variables by static access
+weight rather than first occurrence, which shortens the self-interpreter's store
+walks (measured: 2–10% fewer steps, most on variable-rich programs). See
+[RWHILE_S.md](RWHILE_S.md) for the architecture and for which optimisations
+survive compilation and which do not.
+
 ## Reversible Futamura projections
 
 For a reversible language the ordinary Futamura projections fail (a reversible

@@ -6,7 +6,7 @@ OCAMLC=ocamlfind ocamlopt -g -package extlib -linkpkg
 
 all: ri
 
-ri: BNFC_Util.ml AbsRwhile.ml PrintRwhile.ml ParRwhile.mli ParRwhile.ml LexRwhile.ml Desugar.ml InvRwhile.ml Subst.ml MacroRwhile.ml EvalRwhile.ml Program2DataRwhile.ml Core.ml Simp.ml Main.ml
+ri: BNFC_Util.ml AbsRwhile.ml PrintRwhile.ml ParRwhile.mli ParRwhile.ml LexRwhile.ml Desugar.ml InvRwhile.ml Subst.ml MacroRwhile.ml EvalRwhile.ml Optimize.ml Program2DataRwhile.ml Core.ml Simp.ml Main.ml
 	$(OCAMLC) -o $@ $^
 
 LexRwhile.ml: LexRwhile.mll
@@ -19,22 +19,22 @@ BNFC_Util.ml: Rwhile.cf
 	bnfc -ocaml Rwhile.cf
 	touch BNFC_Util.ml
 
-test-suite: BNFC_Util.ml AbsRwhile.ml PrintRwhile.ml ParRwhile.mli ParRwhile.ml LexRwhile.ml Desugar.ml InvRwhile.ml Subst.ml MacroRwhile.ml EvalRwhile.ml Program2DataRwhile.ml Core.ml TestSuite.ml
-	$(OCAMLC) -package alcotest -linkpkg -o $@ BNFC_Util.ml AbsRwhile.ml PrintRwhile.ml ParRwhile.mli ParRwhile.ml LexRwhile.ml Desugar.ml InvRwhile.ml Subst.ml MacroRwhile.ml EvalRwhile.ml Program2DataRwhile.ml Core.ml TestSuite.ml
+test-suite: BNFC_Util.ml AbsRwhile.ml PrintRwhile.ml ParRwhile.mli ParRwhile.ml LexRwhile.ml Desugar.ml InvRwhile.ml Subst.ml MacroRwhile.ml EvalRwhile.ml Optimize.ml Program2DataRwhile.ml Core.ml TestSuite.ml
+	$(OCAMLC) -package alcotest -linkpkg -o $@ BNFC_Util.ml AbsRwhile.ml PrintRwhile.ml ParRwhile.mli ParRwhile.ml LexRwhile.ml Desugar.ml InvRwhile.ml Subst.ml MacroRwhile.ml EvalRwhile.ml Optimize.ml Program2DataRwhile.ml Core.ml TestSuite.ml
 
 run-tests: test-suite
 	./test-suite
 
 # d2p: decode/evaluate a program-as-data value (residual inspector).
-d2p: BNFC_Util.ml AbsRwhile.ml PrintRwhile.ml ParRwhile.mli ParRwhile.ml LexRwhile.ml Desugar.ml InvRwhile.ml Subst.ml MacroRwhile.ml EvalRwhile.ml Program2DataRwhile.ml Core.ml d2p.ml
+d2p: BNFC_Util.ml AbsRwhile.ml PrintRwhile.ml ParRwhile.mli ParRwhile.ml LexRwhile.ml Desugar.ml InvRwhile.ml Subst.ml MacroRwhile.ml EvalRwhile.ml Optimize.ml Program2DataRwhile.ml Core.ml d2p.ml
 	$(OCAMLC) -o $@ $^
 
 # measure_proj: baseline the Futamura-projection residual sizes (idea 1).
-measure_proj: BNFC_Util.ml AbsRwhile.ml PrintRwhile.ml ParRwhile.mli ParRwhile.ml LexRwhile.ml Desugar.ml InvRwhile.ml Subst.ml MacroRwhile.ml EvalRwhile.ml Program2DataRwhile.ml Core.ml Simp.ml measure_proj.ml
+measure_proj: BNFC_Util.ml AbsRwhile.ml PrintRwhile.ml ParRwhile.mli ParRwhile.ml LexRwhile.ml Desugar.ml InvRwhile.ml Subst.ml MacroRwhile.ml EvalRwhile.ml Optimize.ml Program2DataRwhile.ml Core.ml Simp.ml measure_proj.ml
 	$(OCAMLC) -o $@ $^
 
 # specsize: size spec_av's AV store (FpN) to a subject program's variable count.
-specsize: BNFC_Util.ml AbsRwhile.ml PrintRwhile.ml ParRwhile.mli ParRwhile.ml LexRwhile.ml Desugar.ml InvRwhile.ml Subst.ml MacroRwhile.ml EvalRwhile.ml Program2DataRwhile.ml Core.ml specsize.ml
+specsize: BNFC_Util.ml AbsRwhile.ml PrintRwhile.ml ParRwhile.mli ParRwhile.ml LexRwhile.ml Desugar.ml InvRwhile.ml Subst.ml MacroRwhile.ml EvalRwhile.ml Optimize.ml Program2DataRwhile.ml Core.ml specsize.ml
 	$(OCAMLC) -o $@ $^
 
 clean:

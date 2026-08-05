@@ -2416,6 +2416,56 @@ let test_sugar_via_ri () =
   Alcotest.(check valT_testable) "sugar self-interprets to the same answer"
     direct (run_via_ri (Program2DataRwhile.program2data prog) input)
 
+(* ===== R-WHILE-S compiler (Optimize.ml) =====
+ *
+ * Pass 1 numbers a program's variables by static access weight instead of first
+ * occurrence.  The self-interpreter's store is a list indexed by that number, so
+ * a lookup of variable i walks i cells; putting the hot ones first shortens
+ * every walk.  It is a pure renaming, so the only thing that may change is the
+ * step count -- never the answer.  Measured here: 2-10% fewer SI steps, more for
+ * programs with more variables (compare, 8 variables, 10%). *)
+
+let with_hot_vars (f : unit -> 'a) : 'a =
+  let old = !Program2DataRwhile.hot_vars in
+  Program2DataRwhile.hot_vars := true;
+  let r = (try f () with e -> Program2DataRwhile.hot_vars := old; raise e) in
+  Program2DataRwhile.hot_vars := old; r
+
+let test_hot_vars_same_answer () =
+  let check name valfile =
+    let prog = parse_file_program (examples_dir ^ "/" ^ name ^ ".rwhile") in
+    let input = parse_file_val (examples_dir ^ "/" ^ valfile) in
+    let direct = EvalRwhile.evalProgram prog input in
+    let d = with_hot_vars (fun () -> Program2DataRwhile.program2data prog) in
+    Alcotest.(check valT_testable)
+      (name ^ ": hot-vars numbering self-interprets to the same answer")
+      direct (run_via_ri d input) in
+  check "reverse" "list123.val";
+  check "length"  "list123.val";
+  check "minus"   "minus.val"
+
+let test_hot_vars_permutation () =
+  let prog = MacroRwhile.expMacProgram
+      (parse_file_program (examples_dir ^ "/compare.rwhile")) in
+  let base = EvalRwhile.varProgram prog in
+  let hot  = Optimize.var_order prog in
+  Alcotest.(check int) "no variable gained or lost"
+    (List.length base) (List.length hot);
+  Alcotest.(check bool) "the same set of variables" true
+    (List.for_all (fun v -> List.mem v hot) base
+     && List.for_all (fun v -> List.mem v base) hot);
+  (* deterministic: ties keep first-occurrence order, so re-running agrees *)
+  Alcotest.(check bool) "deterministic" true (hot = Optimize.var_order prog)
+
+(* The default must stay first-occurrence: the fp1/fp2/fp3 residuals and the
+   checked-in examples/*.val are byte-compared against that numbering. *)
+let test_hot_vars_off_by_default () =
+  Alcotest.(check bool) "hot_vars defaults to off" false !Program2DataRwhile.hot_vars;
+  let prog = parse_file_program (examples_dir ^ "/reverse.rwhile") in
+  Alcotest.(check valT_testable) "default encoding is unchanged"
+    (parse_file_val (examples_dir ^ "/reverse.val"))
+    (Program2DataRwhile.program2data prog)
+
 (* RWHILE_HYGIENIC=1 ./test-suite runs the WHOLE suite with -hygienic-macros on,
    used to verify that the core programs (spec/ri/spec_av) are hygiene-clean.
    The hygiene-specific group below already toggles the flag per-test, so it is
@@ -2693,6 +2743,11 @@ let () =
       Alcotest.test_case "SPEC-EXP static var" `Quick test_spec_ext_macro_spec_exp_static_var;
       Alcotest.test_case "LIFT dynamic" `Quick test_spec_ext_macro_lift_dynamic;
       Alcotest.test_case "MAKE-SEQ" `Quick test_spec_ext_macro_make_seq;
+    ];
+    "compiler", [
+      Alcotest.test_case "hot-vars: same answer" `Quick test_hot_vars_same_answer;
+      Alcotest.test_case "hot-vars: permutation" `Quick test_hot_vars_permutation;
+      Alcotest.test_case "hot-vars: off by default" `Quick test_hot_vars_off_by_default;
     ];
     "sugar", [
       Alcotest.test_case "skip" `Quick test_sugar_skip;
