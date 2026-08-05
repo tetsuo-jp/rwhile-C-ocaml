@@ -9,6 +9,9 @@
 -- Patterns    ∋ Q, R ::= X | d | cons Q R
 --                      | [Q, ..., Q]                          (list notation: sugar)
 -- Commands    ∋ C, D ::= X ^= E | Q <= R | C; D
+--                      | skip | assert E | X <-> Y                (sugar)
+--                      | local X = E in C delocal X = F end       (sugar)
+--                      | for X = A to B do C end                  (sugar)
 --                      | if E then C else D fi F | from E do C loop D until F
 --                      | local X in C end                      (extension: scoped local)
 --                      | iff E then C else D fi                 (extension: auto-fi)
@@ -45,7 +48,11 @@ separator RIdent "," ;
 -- Command
 -------------------------------------------------------------------------------
 
-CSeq.    Com  ::= Com ";" Com1 ;                                  -- Sequence
+CSeq.    Com  ::= Com ";" Com1 ;                                  -- Sequence (LEFT-recursive: `read X; C; write Y`
+                                                                  -- uses `;` too, so a right-recursive Com is not
+                                                                  -- LALR(1) here.  The association is semantically and
+                                                                  -- cost-wise irrelevant anyway -- proved in
+                                                                  -- proofs/agda/RWhileSIParse.agda: seq-assocʳ/ˡ.)
 CMac.    Com1 ::= RIdent "(" [RIdent] ")" ;                       -- Parameterized macro
 CAss.    Com1 ::= RIdent "^=" Exp ;                               -- Reversible assignment
 CRep.    Com1 ::= Pat "<=" Pat ;                                  -- Reversible replacement
@@ -56,6 +63,11 @@ CLocal.  Com1 ::= "local" RIdent "in" Com "end" ;                 -- Scoped loca
 CAutoFi. Com1 ::= "iff" Exp ThenBranch ElseBranch "fi" ;          -- Auto-fi conditional (-autofi)
 CArrAss. Com1 ::= RIdent "[" Exp1 "]" "^=" Exp ;                  -- Array element update (-array)
 CCase.   Com1 ::= "case" RIdent "yields" RIdent "of" [CaseArm] "end" ; -- Symmetric reversible match (always-on sugar; desugared to if/fi)
+CSkip.   Com1 ::= "skip" ;                                        -- No-op            (sugar: if 't fi 't)
+CAssert. Com1 ::= "assert" Exp ;                                  -- Assertion        (sugar: if E fi 't -- fails when E is false)
+CSwap.   Com1 ::= RIdent "<->" RIdent ;                           -- Swap             (sugar: cons X Y <= cons Y X)
+CLocalD. Com1 ::= "local" RIdent "=" Exp "in" Com "delocal" RIdent "=" Exp "end" ; -- Janus-style local/delocal
+CFor.    Com1 ::= "for" RIdent "=" Exp1 "to" Exp1 "do" Com "end" ; -- Counted loop     (unary numerals; sugar: from/until)
 coercions Com 1;
 
 ACase.   CaseArm ::= Pat "=>" Com "=>" Pat ;   -- inPat => body => outPat

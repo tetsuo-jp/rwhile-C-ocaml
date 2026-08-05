@@ -99,6 +99,28 @@ concrete, disjoint **input** pattern (the last may be a variable catch-all). See
 `examples/case_swap.rwhile`, `examples/case_tag.rwhile`; `./ri -exp` shows the
 `if/fi` expansion.
 
+### Structured sugar
+
+Five further surface forms are desugared in the same pass, so they too are
+invisible to macro expansion, evaluation, inversion and program-encoding:
+
+| Surface form | Expands to |
+| --- | --- |
+| `skip` | `if 't fi 't` (a no-op that still costs one step) |
+| `assert E` | `if E fi 't` — fails at run time when `E` is false |
+| `X <-> Y` | `cons X Y <= cons Y X` |
+| `local X = E in C delocal X = F end` | `X ^= E; C; X ^= F` |
+| `for X = A to B do C end` | `X ^= A; from =? X A do C loop <X++> until =? X B; X ^= B` |
+
+`local`/`delocal` must name the same variable (checked). The `for` counter is
+loop-**local** — `nil` before and after — so a `for` preserves the store
+invariant; `A` and `B` are unary numerals (`nil`, `(nil.nil)`, …), the body runs
+at least once, and `B` must be `A` extended by `nil`s or the loop diverges, just
+as the underlying `from/until` does. The counter step `<X++>` is the
+four-assignment reversible increment used by the verified interpreter
+(`proofs/agda/RWhileSIMac.incC`). See `examples/sugar.rwhile`; `./ri -exp` shows
+the expansion and `./ri -inverse` the (cost-identical) inverse.
+
 ## Reversible Futamura projections
 
 For a reversible language the ordinary Futamura projections fail (a reversible

@@ -95,7 +95,7 @@ let rec expMacCom (ms : macro list) = function
   | CLocal (x, c) -> CLocal (x, expMacCom ms c)
   | CAutoFi (e, t, el) -> CAutoFi (e, expMacThenBranch ms t, expMacElseBranch ms el)
   | CArrAss _ as e -> e
-  | CCase _ as c -> expMacCom ms (Desugar.desugar_com c)  (* normally already desugared in expMacProgram *)
+  | (CCase _ | CSkip | CAssert _ | CSwap _ | CLocalD _ | CFor _) as c -> expMacCom ms (Desugar.desugar_com c)  (* normally already desugared in expMacProgram *)
 
 and expMacThenBranch ms = function
     BThen c   -> BThen (expMacCom ms c)

@@ -60,7 +60,7 @@ let rec simpCom (c : com) : com =
   | CLocal (x, c1) -> CLocal (x, simpCom c1)
   | CArrAss (x, i, e) -> CArrAss (x, simpExp i, simpExp e)
   | CAutoFi (e, t, el) -> CAutoFi (simpExp e, simpThen t, simpElse el)
-  | CCase _     -> simpCom (Desugar.desugar_com c)
+  | (CCase _ | CSkip | CAssert _ | CSwap _ | CLocalD _ | CFor _) -> simpCom (Desugar.desugar_com c)
   | CLoop (e, d, l, f) -> CLoop (simpExp e, simpDo d, simpLoop l, simpExp f)
   | CCond (e, t, el, f) ->
      let e' = simpExp e and f' = simpExp f in

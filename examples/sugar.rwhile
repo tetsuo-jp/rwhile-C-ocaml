@@ -1,0 +1,43 @@
+(* Structured sugar: skip / assert / <-> / local-delocal / for.
+ *
+ * All five forms are pure desugarings performed by src/Desugar.ml BEFORE macro
+ * expansion, evaluation, inversion and program-to-data, so the self-interpreter
+ * (ri.rwhile) and the specialiser (spec_av.rwhile) need no change: they only
+ * ever see core R-WHILE.
+ *
+ *     skip                     ->  if 't fi 't
+ *     assert E                 ->  if E fi 't
+ *     X <-> Y                  ->  cons X Y <= cons Y X
+ *     local X = E in C
+ *       delocal X = F end      ->  X ^= E ; C ; X ^= F
+ *     for X = A to B do C end  ->  X ^= A ;
+ *                                  from =? X A do C loop <X++> until =? X B ;
+ *                                  X ^= B
+ *
+ * The for-counter is loop-LOCAL (nil before and after), so a for-loop preserves
+ * the store invariant that makes an R-WHILE program reversible.  The body runs
+ * at least once; B must be A extended by nils, or the loop diverges -- exactly
+ * as the underlying from/until does.
+ *
+ * Run:      ./ri -steps examples/sugar.rwhile examples/atom_c.val   ==> ('a . 'p)
+ * Inverse:  ./ri -inverse examples/sugar.rwhile > /tmp/inv.rwhile
+ *           ./ri -steps /tmp/inv.rwhile <input ('a . 'p)>           ==> 'c
+ * Both directions cost the same number of steps (42): desugaring is transparent
+ * to the cost-preserving inversion theorem (proofs/agda/RWhileTimeInv.inv-sound).
+ *)
+
+read X;
+  skip;                            (* a no-op that still costs one step *)
+  assert =? X X;                   (* fails at run time if the test is false *)
+  Y ^= 'a;
+  X <-> Y;                         (* X = 'a, Y = 'c *)
+  local T = 'b in
+    T <-> Y                        (* T = 'c, Y = 'b *)
+  delocal T = 'c end;              (* T is cleared: it held 'c *)
+  Y ^= 'b;                         (* Y is cleared *)
+  P ^= 'p;
+  for I = nil to (nil . (nil . nil)) do
+    P <-> Q                        (* three swaps: P = nil, Q = 'p *)
+  end;
+  R <= cons X Q;
+write R

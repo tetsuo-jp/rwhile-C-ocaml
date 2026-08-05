@@ -659,9 +659,12 @@ let test_file_rle () =
 let test_file_inverse () =
   let prog = parse_file_program (examples_dir ^ "/ri.rwhile") in
   let inv = InvRwhile.invProgram prog in
-  (* inv(inv(p)) = p should hold *)
+  (* inv(inv(p)) = p should hold -- but inversion is defined on CORE R-WHILE, and
+     invProgram desugars first (ri.rwhile uses `case`), so the fixed point of the
+     involution is the desugared program, not the raw parse tree. *)
   let inv2 = InvRwhile.invProgram inv in
-  Alcotest.(check program_testable) "ri.rwhile inv involution" prog inv2
+  Alcotest.(check program_testable) "ri.rwhile inv involution"
+    (Desugar.desugar_program prog) inv2
 
 let test_file_p2d () =
   let prog = parse_file_program (examples_dir ^ "/reverse.rwhile") in
@@ -2248,6 +2251,92 @@ let test_core_equiv_selfinterp () =
       "ri reverse_and_list123", "ri.rwhile", "reverse_and_list123.p_val";
       "ri piorder",             "ri.rwhile", "piorder.p_val" ]
 
+(* ===== Structured sugar (Desugar.ml): skip / assert / <-> / local / for =====
+ *
+ * All five forms are desugared away BEFORE macro expansion, evaluation,
+ * inversion and program-to-data, so nothing downstream -- in particular the
+ * self-interpreter ri.rwhile and the specialiser spec_av.rwhile -- needs to know
+ * about them.  These tests pin (a) the semantics of each form, (b) that a
+ * for-counter is loop-LOCAL so the store invariant survives (a program that ends
+ * with a non-nil variable is rejected by all_cleared, so merely completing is
+ * the check), (c) that inversion stays cost-preserving through the sugar, and
+ * (d) that a sugared program self-interprets to the same answer. *)
+
+(* evaluate, and also return the executed-command-node count (./ri -steps) *)
+let eval_with_steps prog_str val_str =
+  EvalRwhile.reset_steps ();
+  let out = eval_string prog_str val_str in
+  (out, EvalRwhile.get_steps ())
+
+let fails f = try ignore (f ()); false with Failure _ -> true
+
+let test_sugar_skip () =
+  let (out, n) = eval_with_steps "read X; skip; write X" "'a" in
+  Alcotest.(check valT_testable) "skip is the identity" (atom "'a") out;
+  (* skip is  if 't fi 't : exactly one executed command node *)
+  Alcotest.(check int) "skip costs one step" 1 n
+
+let test_sugar_assert () =
+  Alcotest.(check valT_testable) "assert with a true test is a no-op"
+    (atom "'a") (eval_string "read X; assert =? X X; write X" "'a");
+  (* a false test takes the else branch, where the exit assertion 't fails *)
+  Alcotest.(check bool) "assert with a false test fails" true
+    (fails (fun () -> eval_string "read X; assert =? X 'zzz; write X" "'a"))
+
+let test_sugar_swap () =
+  Alcotest.(check valT_testable) "X <-> Y exchanges two variables"
+    (VCons (atom "'a", atom "'c"))
+    (eval_string "read X; Y ^= 'a; X <-> Y; Z <= cons X Y; write Z" "'c")
+
+let test_sugar_local () =
+  (* T is set to 'b, mutated to 'c by the swap, and cleared by delocal T = 'c *)
+  Alcotest.(check valT_testable) "local/delocal brackets a scratch variable"
+    (atom "'b")
+    (eval_string "read X; local T = 'b in T <-> X delocal T = 'c end; write X" "'c");
+  Alcotest.(check bool) "a delocal whose value is wrong fails" true
+    (fails (fun () ->
+       eval_string "read X; local T = 'b in T <-> X delocal T = 'b end; write X" "'c"))
+
+let test_sugar_local_name_mismatch () =
+  Alcotest.(check bool) "local and delocal must name the same variable" true
+    (try ignore (eval_string
+                   "read X; local T = 'b in skip delocal U = 'b end; write X" "'a");
+         false
+     with Desugar.Desugar_error _ -> true)
+
+let test_sugar_for () =
+  (* the counter takes nil, (nil.nil), (nil.(nil.nil)) -- three iterations -- and
+     is cleared again afterwards, otherwise all_cleared would reject the run *)
+  Alcotest.(check valT_testable) "for runs the body once per counter value"
+    (parse_val "('a . ('a . ('a . nil)))")
+    (eval_string
+       "read X; for I = nil to (nil.(nil.nil)) do X <= cons 'a X end; write X" "nil");
+  Alcotest.(check valT_testable) "for A to A runs the body exactly once"
+    (parse_val "('a . nil)")
+    (eval_string "read X; for I = nil to nil do X <= cons 'a X end; write X" "nil")
+
+let test_sugar_inverse_cost () =
+  let prog = parse_file_program (examples_dir ^ "/sugar.rwhile") in
+  let input = parse_val "'c" in
+  EvalRwhile.reset_steps ();
+  let out = EvalRwhile.evalProgram prog input in
+  let fwd = EvalRwhile.get_steps () in
+  Alcotest.(check valT_testable) "sugar.rwhile forward"
+    (VCons (atom "'a", atom "'p")) out;
+  EvalRwhile.reset_steps ();
+  let back = EvalRwhile.evalProgram (InvRwhile.invProgram prog) out in
+  let bwd = EvalRwhile.get_steps () in
+  Alcotest.(check valT_testable) "the inverse restores the input" input back;
+  Alcotest.(check int) "inversion preserves the step count" fwd bwd
+
+let test_sugar_via_ri () =
+  let prog = parse_program
+    "read X; Y ^= 'a; X <-> Y; skip; Z <= cons X Y; write Z" in
+  let input = parse_val "'c" in
+  let direct = EvalRwhile.evalProgram prog input in
+  Alcotest.(check valT_testable) "sugar self-interprets to the same answer"
+    direct (run_via_ri (Program2DataRwhile.program2data prog) input)
+
 (* RWHILE_HYGIENIC=1 ./test-suite runs the WHOLE suite with -hygienic-macros on,
    used to verify that the core programs (spec/ri/spec_av) are hygiene-clean.
    The hygiene-specific group below already toggles the flag per-test, so it is
@@ -2525,6 +2614,16 @@ let () =
       Alcotest.test_case "SPEC-EXP static var" `Quick test_spec_ext_macro_spec_exp_static_var;
       Alcotest.test_case "LIFT dynamic" `Quick test_spec_ext_macro_lift_dynamic;
       Alcotest.test_case "MAKE-SEQ" `Quick test_spec_ext_macro_make_seq;
+    ];
+    "sugar", [
+      Alcotest.test_case "skip" `Quick test_sugar_skip;
+      Alcotest.test_case "assert" `Quick test_sugar_assert;
+      Alcotest.test_case "swap <->" `Quick test_sugar_swap;
+      Alcotest.test_case "local/delocal" `Quick test_sugar_local;
+      Alcotest.test_case "local/delocal name mismatch" `Quick test_sugar_local_name_mismatch;
+      Alcotest.test_case "for" `Quick test_sugar_for;
+      Alcotest.test_case "inversion preserves cost" `Quick test_sugar_inverse_cost;
+      Alcotest.test_case "self-interpretation" `Quick test_sugar_via_ri;
     ];
     "file-integration", [
       Alcotest.test_case "rep.rwhile" `Quick test_file_rep;

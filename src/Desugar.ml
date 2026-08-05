@@ -89,9 +89,67 @@ let rec pairwise_disjoint = function
 
 let seq3 a b c = CSeq (CSeq (a, b), c)
 
+(* ---------------------------------------------------------------- *)
+(* Sugar added 2026-08-05.  Each form below expands to existing R-WHILE
+   syntax, so the interpreter, the inverter, `-p2d` and the
+   self-interpreters need no new cases.
+
+     skip                       ->  if 't fi 't          (a no-op, 1 step)
+     assert E                   ->  if E fi 't           (fails when E is false:
+                                    the else branch is taken and the exit
+                                    assertion 't does not hold)
+     X <-> Y                    ->  cons X Y <= cons Y X (1 step)
+     local X = E in C
+       delocal X = F end        ->  X ^= E; C; X ^= F
+     for X = A to B do C end    ->  X ^= A ;
+                                    from (=? X A) do C loop <X++> until (=? X B) ;
+                                    X ^= B
+
+   The counter step <X++> is the four-assignment increment on unary numerals
+   (X := (nil . X)) that needs one fresh scratch variable -- the same idiom the
+   verified interpreter uses (proofs/agda/RWhileSIMac.incC).
+
+   The counter X is loop-LOCAL: it is nil before and after, so a for-loop keeps
+   the store invariant that makes a program reversible (all_cleared).  The body
+   runs at least once (A = B runs it exactly once), and B must be A extended by
+   some number of nils -- otherwise the loop diverges, exactly as the underlying
+   from/until does. *)
+
+let vtrue = EVal (VAtom (Atom "'t"))
+
+let fresh_counter = ref 0
+let fresh_var () =
+  incr fresh_counter;
+  RIdent (Printf.sprintf "FOR-T-%d" !fresh_counter)
+
+(* X := (nil . X), reversibly, via a fresh scratch T *)
+let incr_unary (x : rIdent) : com =
+  let t = fresh_var () in
+  CSeq (CAss (t, ECons (EVal VNil, EVar (Var x))),
+  CSeq (CAss (x, ETl (EVar (Var t))),
+  CSeq (CAss (x, EVar (Var t)),
+        CAss (t, EVar (Var x)))))
+
 let rec desugar_com (c : com) : com =
   match c with
   | CCase (scrut, result, arms) -> desugar_case scrut result arms
+  (* sugar *)
+  | CSkip                  -> CCond (vtrue, BThenNone, BElseNone, vtrue)
+  | CAssert e              -> CCond (e, BThenNone, BElseNone, vtrue)
+  | CSwap (x, y)           -> CRep (PCons (PVar (Var x), PVar (Var y)),
+                                    PCons (PVar (Var y), PVar (Var x)))
+  | CLocalD (x, e, body, y, f) ->
+     if x <> y then
+       raise (Desugar_error "local/delocal: the two variable names must agree")
+     else
+       CSeq (CAss (x, e), CSeq (desugar_com body, CAss (x, f)))
+  | CFor (x, a, b, body) ->
+     CSeq (CAss (x, a),
+     CSeq (CLoop (EEq (EVar (Var x), a),
+                  BDo (desugar_com body),
+                  BLoop (incr_unary x),
+                  EEq (EVar (Var x), b)),
+           CAss (x, b)))
   (* structural recursion *)
   | CSeq (a, b)            -> CSeq (desugar_com a, desugar_com b)
   | CCond (e, t, el, f)    -> CCond (e, desugar_then t, desugar_else el, f)
