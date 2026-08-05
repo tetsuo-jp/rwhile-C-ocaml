@@ -462,6 +462,21 @@ and evalCom (s : store) (c : com) : store =
 	 | BElseNone -> s
        in
        if evalExp s1 f = vfalse then s1
+       else if thenbranch = BThenNone && elsebranch = BElseNone
+               && f = EVal (VAtom (Atom "'t")) then
+         (* Exactly the shape `assert E` desugars to (Desugar.ml): two empty
+          * branches and the constant exit assertion 't.  The else branch is
+          * reached only when E is false, and 't is never false, so reporting
+          * "'t is not false" would name the scaffolding instead of the failure.
+          * Report the assertion the user actually wrote. *)
+         eval_error ~category:"assertion-failed"
+           ~context:("assert " ^ printTree prtExp e)
+           ~expected:"true"
+           ~actual:(printTree prtValT (evalExp s1 e))
+           ~hint:"`assert E` requires E to hold; local/delocal and a for-counter \
+                  expand to `assert (=? X nil)` around the block, so this can also \
+                  mean the bracketed variable was not nil on entry or on exit"
+           ("Assertion " ^ printTree prtExp e ^ " does not hold.\n")
        else eval_error ~category:"assertion-failed"
               ~context:("exit assertion=" ^ printTree prtExp f ^ "; branch=else")
               ~expected:"false (exit assertion must not hold after the else-branch)"

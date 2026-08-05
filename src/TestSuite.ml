@@ -2297,6 +2297,36 @@ let test_sugar_local () =
     (fails (fun () ->
        eval_string "read X; local T = 'b in T <-> X delocal T = 'b end; write X" "'c"))
 
+(* The two `assert (=? X nil)` guards a local/delocal expands to are NOT
+   defensive decoration.  `X ^= E` is an XOR update: when X already holds E's
+   value it CLEARS X, so without the entry guard the body silently runs with
+   X = nil and the closing assignment restores the old value -- a wrong answer
+   with no error anywhere.  The exit guard rules out the mirror case, where the
+   body has cleared X and the closing assignment sets it instead. *)
+let test_sugar_local_guards () =
+  let prog = "read X; local X = 'b in Y ^= X delocal X = 'b end; \
+              Z <= cons X Y; write Z" in
+  (* entering with X = nil is the intended use: the body really sees X = 'b *)
+  Alcotest.(check valT_testable) "the body sees the bound value"
+    (VCons (VNil, atom "'b")) (eval_string prog "nil");
+  (* entering with X already bound to 'b used to return ('b . nil) silently *)
+  Alcotest.(check bool) "entering with X already bound is rejected" true
+    (fails (fun () -> eval_string prog "'b"));
+  (* the body clears T, so the closing T ^= 'b would SET it and leak a non-nil
+     variable out of the block *)
+  Alcotest.(check bool) "a body that clears the local is rejected" true
+    (fails (fun () -> eval_string
+       "read In; local T = 'b in T <-> Q delocal T = 'b end; Q ^= 'b; write In" "'b"));
+  (* same guard on a for-counter *)
+  Alcotest.(check bool) "entering a for with a bound counter is rejected" true
+    (fails (fun () -> eval_string
+       "read I; for I = nil to (nil.nil) do Y <= cons 'q Y end; \
+        Z <= cons I Y; write Z" "'b"));
+  (* the message names the assertion the user wrote, not the 't scaffolding *)
+  Alcotest.(check bool) "the error names the failing assertion" true
+    (try ignore (eval_string prog "'b"); false
+     with Failure m -> find_substring m "=? X nil" <> None)
+
 let test_sugar_local_name_mismatch () =
   Alcotest.(check bool) "local and delocal must name the same variable" true
     (try ignore (eval_string
@@ -2645,6 +2675,7 @@ let () =
       Alcotest.test_case "swap <->" `Quick test_sugar_swap;
       Alcotest.test_case "local/delocal" `Quick test_sugar_local;
       Alcotest.test_case "local/delocal name mismatch" `Quick test_sugar_local_name_mismatch;
+      Alcotest.test_case "local/for nil guards" `Quick test_sugar_local_guards;
       Alcotest.test_case "for" `Quick test_sugar_for;
       Alcotest.test_case "push/pop" `Quick test_sugar_push_pop;
       Alcotest.test_case "push and pop are inverses" `Quick test_sugar_push_pop_inverse;

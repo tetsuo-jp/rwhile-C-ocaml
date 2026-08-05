@@ -101,7 +101,7 @@ concrete, disjoint **input** pattern (the last may be a variable catch-all). See
 
 ### Structured sugar
 
-Five further surface forms are desugared in the same pass, so they too are
+Seven further surface forms are desugared in the same pass, so they too are
 invisible to macro expansion, evaluation, inversion and program-encoding:
 
 | Surface form | Expands to |
@@ -109,15 +109,25 @@ invisible to macro expansion, evaluation, inversion and program-encoding:
 | `skip` | `if 't fi 't` (a no-op that still costs one step) |
 | `assert E` | `if E fi 't` — fails at run time when `E` is false |
 | `X <-> Y` | `cons X Y <= cons Y X` |
-| `local X = E in C delocal X = F end` | `X ^= E; C; X ^= F` |
-| `for X = A to B do C end` | `X ^= A; from =? X A do C loop <X++> until =? X B; X ^= B` |
+| `local X = E in C delocal X = F end` | `assert (=? X nil); X ^= E; C; X ^= F; assert (=? X nil)` |
+| `for X = A to B do C end` | `assert (=? X nil); X ^= A; from =? X A do C loop <X++> until =? X B; X ^= B; assert (=? X nil)` |
 | `push X S` | `S <= cons X S` (`X` is left `nil`) |
 | `pop X S` | `cons X S <= S` (fails if `S` is not a cons) |
 
 `push` and `pop` are exact inverses with no inversion rule of their own —
 inverting a replacement swaps its two patterns, which turns one into the other.
 Their two variables must differ. `local`/`delocal` must name the same variable
-(checked). The `for` counter is
+(checked).
+
+The two `assert (=? X nil)` guards are load-bearing, not decoration: `X ^= E` is
+an XOR update, not a binding, so when `X` already holds `E`'s value it *clears*
+`X` instead of setting it — the body would then run with `X = nil` and the
+closing assignment would restore the old value, giving a wrong answer with no
+error. The exit guard rules out the mirror case, where the body has cleared `X`
+and the closing assignment sets it. They also keep the desugaring self-dual:
+inverting it yields `local X = F in inv C delocal X = E end`, guards included.
+
+The `for` counter is
 loop-**local** — `nil` before and after — so a `for` preserves the store
 invariant; `A` and `B` are unary numerals (`nil`, `(nil.nil)`, …), the body runs
 at least once, and `B` must be `A` extended by `nil`s or the loop diverges, just

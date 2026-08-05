@@ -9,10 +9,20 @@
  *     assert E                 ->  if E fi 't
  *     X <-> Y                  ->  cons X Y <= cons Y X
  *     local X = E in C
- *       delocal X = F end      ->  X ^= E ; C ; X ^= F
- *     for X = A to B do C end  ->  X ^= A ;
+ *       delocal X = F end      ->  assert (=? X nil) ;
+ *                                  X ^= E ; C ; X ^= F ;
+ *                                  assert (=? X nil)
+ *     for X = A to B do C end  ->  assert (=? X nil) ;
+ *                                  X ^= A ;
  *                                  from =? X A do C loop <X++> until =? X B ;
- *                                  X ^= B
+ *                                  X ^= B ;
+ *                                  assert (=? X nil)
+ *
+ * The two assertions are load-bearing.  `X ^= E` is an XOR update, not a
+ * binding: if X already holds E's value it CLEARS X instead of setting it, the
+ * body then runs with X = nil, and the closing assignment puts the old value
+ * back -- a wrong answer with no error.  The exit assertion rules out the mirror
+ * case, where the body has cleared X and the closing assignment sets it.
  *
  * The for-counter is loop-LOCAL (nil before and after), so a for-loop preserves
  * the store invariant that makes an R-WHILE program reversible.  The body runs
@@ -22,7 +32,7 @@
  * Run:      ./ri -steps examples/sugar.rwhile examples/atom_c.val   ==> ('a . 'p)
  * Inverse:  ./ri -inverse examples/sugar.rwhile > /tmp/inv.rwhile
  *           ./ri -steps /tmp/inv.rwhile <input ('a . 'p)>           ==> 'c
- * Both directions cost the same number of steps (42): desugaring is transparent
+ * Both directions cost the same number of steps (50): desugaring is transparent
  * to the cost-preserving inversion theorem (proofs/agda/RWhileTimeInv.inv-sound).
  *)
 

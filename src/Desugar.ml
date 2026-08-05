@@ -100,10 +100,14 @@ let seq3 a b c = CSeq (CSeq (a, b), c)
                                     assertion 't does not hold)
      X <-> Y                    ->  cons X Y <= cons Y X (1 step)
      local X = E in C
-       delocal X = F end        ->  X ^= E; C; X ^= F
-     for X = A to B do C end    ->  X ^= A ;
+       delocal X = F end        ->  assert (=? X nil);
+                                    X ^= E; C; X ^= F;
+                                    assert (=? X nil)
+     for X = A to B do C end    ->  assert (=? X nil);
+                                    X ^= A ;
                                     from (=? X A) do C loop <X++> until (=? X B) ;
-                                    X ^= B
+                                    X ^= B ;
+                                    assert (=? X nil)
 
      push X S                   ->  S <= cons X S        (X is left nil)
      pop  X S                   ->  cons X S <= S        (fails if S is not a cons)
@@ -120,7 +124,21 @@ let seq3 a b c = CSeq (CSeq (a, b), c)
    the store invariant that makes a program reversible (all_cleared).  The body
    runs at least once (A = B runs it exactly once), and B must be A extended by
    some number of nils -- otherwise the loop diverges, exactly as the underlying
-   from/until does. *)
+   from/until does.
+
+   WHY THE TWO ASSERTIONS AROUND local/delocal AND for ARE NOT OPTIONAL.  The
+   opening  X ^= E  is an XOR update, not a binding: it SETS X only when X is
+   nil.  If X already holds E's value the same assignment CLEARS it, the body
+   then runs with X = nil, the closing  X ^= F  sets X back, and the block
+   returns a wrong answer with no error at all.  (And when E is nil the update is
+   the identity, so the bracket does nothing whatsoever.)  Asserting that X is
+   nil on entry rules that out; asserting it again on exit rules out the mirror
+   case, where the body has already cleared X and the closing assignment SETS it
+   instead of clearing it, silently leaking a non-nil variable out of the block.
+
+   The assertions cost 2 steps per block and keep the desugaring self-dual:
+   inverting it yields  local X = F in inv C delocal X = E end,  assertions and
+   all, because inv (assert P) again asserts P. *)
 
 let vtrue = EVal (VAtom (Atom "'t"))
 
@@ -128,6 +146,19 @@ let fresh_counter = ref 0
 let fresh_var () =
   incr fresh_counter;
   RIdent (Printf.sprintf "FOR-T-%d" !fresh_counter)
+
+let assert_nil (x : rIdent) : com =
+  CCond (EEq (EVar (Var x), EVal VNil), BThenNone, BElseNone, vtrue)
+
+(* assert X = nil ; X ^= E ; C ; X ^= F ; assert X = nil -- the guarded bracket
+   shared by local/delocal and by the for-counter.  See the header for why the
+   two assertions are load-bearing rather than defensive. *)
+let bracket (x : rIdent) (e : exp) (c : com) (f : exp) : com =
+  CSeq (assert_nil x,
+  CSeq (CAss (x, e),
+  CSeq (c,
+  CSeq (CAss (x, f),
+        assert_nil x))))
 
 (* X := (nil . X), reversibly, via a fresh scratch T *)
 let incr_unary (x : rIdent) : com =
@@ -148,8 +179,7 @@ let rec desugar_com (c : com) : com =
   | CLocalD (x, e, body, y, f) ->
      if x <> y then
        raise (Desugar_error "local/delocal: the two variable names must agree")
-     else
-       CSeq (CAss (x, e), CSeq (desugar_com body, CAss (x, f)))
+     else bracket x e (desugar_com body) f
   | CPush (x, s) ->
      if x = s then raise (Desugar_error "push: the two variables must differ")
      else CRep (PVar (Var s), PCons (PVar (Var x), PVar (Var s)))
@@ -157,12 +187,12 @@ let rec desugar_com (c : com) : com =
      if x = s then raise (Desugar_error "pop: the two variables must differ")
      else CRep (PCons (PVar (Var x), PVar (Var s)), PVar (Var s))
   | CFor (x, a, b, body) ->
-     CSeq (CAss (x, a),
-     CSeq (CLoop (EEq (EVar (Var x), a),
-                  BDo (desugar_com body),
-                  BLoop (incr_unary x),
-                  EEq (EVar (Var x), b)),
-           CAss (x, b)))
+     bracket x a
+       (CLoop (EEq (EVar (Var x), a),
+               BDo (desugar_com body),
+               BLoop (incr_unary x),
+               EEq (EVar (Var x), b)))
+       b
   (* structural recursion *)
   | CSeq (a, b)            -> CSeq (desugar_com a, desugar_com b)
   | CCond (e, t, el, f)    -> CCond (e, desugar_then t, desugar_else el, f)
