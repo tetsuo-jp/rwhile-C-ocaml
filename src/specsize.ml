@@ -39,6 +39,14 @@ let read_lines file =
     | exception End_of_file -> close_in ch; List.rev acc in
   go []
 
+(* RWHILE_HYGIENIC=1 sizes the store for -hygienic-macros expansion, which is what
+ * `RWHILE_HYGIENIC=1 ./test-suite` runs.  Alpha-renaming multiplies the variable
+ * count by roughly 4-5x (spec_av 219 -> 897, ri 49 -> 257), so a store sized for
+ * the plain count overflows and the AV-store walk falls off the end with
+ * "Cannot match cons pattern cons U-N Vl against non-cons value nil". *)
+let () =
+  if Sys.getenv_opt "RWHILE_HYGIENIC" <> None then MacroRwhile.hygienic := true
+
 let () =
   match Array.to_list Sys.argv with
   | [_; "-n"; subj] -> Printf.printf "%d\n" (varcount subj)
