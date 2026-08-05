@@ -94,7 +94,24 @@ cd src && make
 ./ri -hygienic-macros prog.rwhile data.val     # 衛生モードで評価
 make run-tests                                 # 通常（OFF）テスト
 RWHILE_HYGIENIC=1 ./test-suite                 # 全テストを衛生モードで実行（検証用）
+RWHILE_HYGIENIC=1 ./test-suite test <グループ> # グループ単位（下記の既知の問題を回避）
 ```
+
+### 既知の問題（2026-08-05 実測）
+
+`RWHILE_HYGIENIC=1 ./test-suite` は現状スイート全体を通せない。グループ単位で
+測ると次のとおり（コミット 5fda2e1 でも同一なので、糖衣の追加とは無関係）。
+
+| グループ | 衛生モード | 通常モード |
+|---|---|---|
+| `rint` | 150 秒でタイムアウト（完走せず） | 完走 |
+| `second-projection` | 失敗 | 成功 |
+| `reversible-spec` | 失敗 | 成功 |
+| 上記以外（`sugar` を含む） | 成功 | 成功 |
+
+つまり「コアプログラムは衛生的に書かれており、フラグの有無で挙動が変わらない」
+という主張は、少なくとも 2 射影・可逆特殊化・`rint` の経路では現状成り立って
+いない。原因は未調査。全体実行を検証手段として使う前にここを直す必要がある。
 
 参考実装：
 - フラグ・グローバルポリシー：`src/MacroRwhile.ml`（`hygienic`/`globals` ref, `expansionSubst`, `expMacProgram`）
