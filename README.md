@@ -133,7 +133,9 @@ invariant; `A` and `B` are unary numerals (`nil`, `(nil.nil)`, …), the body ru
 at least once, and `B` must be `A` extended by `nil`s or the loop diverges, just
 as the underlying `from/until` does. The counter step `<X++>` is the
 four-assignment reversible increment used by the verified interpreter
-(`proofs/agda/RWhileSIMac.incC`). See `examples/sugar.rwhile` and
+(`proofs/agda/RWhileSIMac.incC`); the scratch variable it needs is named with a
+prefix chosen per program, so it cannot collide with an identifier the program
+already uses. See `examples/sugar.rwhile` and
 `examples/stack_reverse.rwhile`; `./ri -exp` shows the expansion and
 `./ri -inverse` the (cost-identical) inverse.
 

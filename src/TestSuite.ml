@@ -2345,6 +2345,31 @@ let test_sugar_for () =
     (parse_val "('a . nil)")
     (eval_string "read X; for I = nil to nil do X <= cons 'a X end; write X" "nil")
 
+(* `FOR-T-1` is a legal RIdent, so a program may already use it.  The scratch the
+   for-counter increment needs must dodge whatever the program mentions rather
+   than silently sharing a name -- which used to fail deep inside the increment
+   with `error in update: var=FOR-T-1 ...` and no hint of the cause. *)
+let test_sugar_for_scratch_fresh () =
+  let clashing = "read In; FOR-T-1 ^= 'x; \
+                  for I = nil to (nil.nil) do R <= cons 'q R end; \
+                  FOR-T-1 ^= 'x; Out <= R; write Out" in
+  Alcotest.(check valT_testable) "a user variable named FOR-T-1 is not clobbered"
+    (parse_val "('q . ('q . nil))") (eval_string clashing "nil");
+  Alcotest.(check bool) "the scratch prefix was lengthened" true
+    (find_substring (show_program (Desugar.desugar_program (parse_program clashing)))
+       "FOR-T'-" <> None);
+  (* a program without such a variable keeps the plain prefix, so nothing that
+     already worked changes shape or step count.  (Only the prefix is pinned:
+     the counter is global and keeps climbing across desugarings, so the number
+     that follows it is not stable within one process.) *)
+  let plain = show_program (Desugar.desugar_program (parse_program
+    "read In; for I = nil to (nil.nil) do R <= cons 'q R end; \
+     Out <= R; write Out")) in
+  Alcotest.(check bool) "otherwise the plain prefix is used" true
+    (find_substring plain "FOR-T-" <> None);
+  Alcotest.(check bool) "and it is not lengthened needlessly" true
+    (find_substring plain "FOR-T'-" = None)
+
 let test_sugar_push_pop () =
   (* pop/push move an element from one stack to the other: a list reversal *)
   let prog = parse_file_program (examples_dir ^ "/stack_reverse.rwhile") in
@@ -2677,6 +2702,7 @@ let () =
       Alcotest.test_case "local/delocal name mismatch" `Quick test_sugar_local_name_mismatch;
       Alcotest.test_case "local/for nil guards" `Quick test_sugar_local_guards;
       Alcotest.test_case "for" `Quick test_sugar_for;
+      Alcotest.test_case "for scratch is fresh" `Quick test_sugar_for_scratch_fresh;
       Alcotest.test_case "push/pop" `Quick test_sugar_push_pop;
       Alcotest.test_case "push and pop are inverses" `Quick test_sugar_push_pop_inverse;
       Alcotest.test_case "inversion preserves cost" `Quick test_sugar_inverse_cost;

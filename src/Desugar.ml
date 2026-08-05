@@ -142,10 +142,24 @@ let seq3 a b c = CSeq (CSeq (a, b), c)
 
 let vtrue = EVal (VAtom (Atom "'t"))
 
+(* Scratch variables for the for-counter increment.
+ *
+ * The prefix is NOT a fixed string: `FOR-T-1` is a perfectly legal RIdent, so a
+ * program may already use it, and a generated scratch that silently shared the
+ * name would blow up deep inside the increment with `error in update:
+ * var=FOR-T-1 ...` and no hint of where it came from.  desugar_program scans the
+ * whole program first and lengthens the stem (FOR-T- / FOR-T'- / FOR-T''- ...)
+ * until no identifier in the program starts with it.
+ *
+ * Sharing one name across several expansions is fine: the scratch is set and
+ * cleared inside the four-assignment increment, so it is nil before and after
+ * and nothing can interleave with it. *)
+let scratch_prefix = ref "FOR-T-"
+
 let fresh_counter = ref 0
 let fresh_var () =
   incr fresh_counter;
-  RIdent (Printf.sprintf "FOR-T-%d" !fresh_counter)
+  RIdent (Printf.sprintf "%s%d" !scratch_prefix !fresh_counter)
 
 let assert_nil (x : rIdent) : com =
   CCond (EEq (EVar (Var x), EVal VNil), BThenNone, BElseNone, vtrue)
@@ -246,5 +260,61 @@ and desugar_arms scrut result = function
 
 let desugar_macro (Mac (name, params, body)) = Mac (name, params, desugar_com body)
 
-let desugar_program (Prog (macros, x, c, y)) =
+(* Every identifier the program mentions, so the for-scratch prefix can dodge
+   them.  Deliberately local rather than reusing Subst.varsCom / EvalRwhile.
+   varProgram: both of those modules already depend on this one. *)
+let idents_of_program (Prog (macros, x, c, y)) : string list =
+  let acc = ref [ (let RIdent s = x in s); (let RIdent s = y in s) ] in
+  let add (RIdent s) = acc := s :: !acc in
+  let addv (Var r) = add r in
+  let rec ex = function
+    | ECons (a, b) | EEq (a, b) -> ex a; ex b
+    | EHd a | ETl a | EPair a -> ex a
+    | EArrGet (v, a) -> addv v; ex a
+    | EVar v -> addv v
+    | EVal _ -> ()
+    | EList es -> List.iter ex es
+  and pa = function
+    | PCons (a, b) -> pa a; pa b
+    | PVar v -> addv v
+    | PVal _ -> ()
+    | PList ps -> List.iter pa ps
+  and co = function
+    | CSeq (a, b) -> co a; co b
+    | CMac (n, args) -> add n; List.iter add args
+    | CAss (r, e) -> add r; ex e
+    | CRep (p, q) -> pa p; pa q
+    | CCond (e, t, el, f) -> ex e; th t; els el; ex f
+    | CLoop (e, d, l, f) -> ex e; dob d; lob l; ex f
+    | CShow e -> ex e
+    | CLocal (r, b) -> add r; co b
+    | CAutoFi (e, t, el) -> ex e; th t; els el
+    | CArrAss (r, a, b) -> add r; ex a; ex b
+    | CCase (s, r, arms) ->
+       add s; add r; List.iter (fun (ACase (p, b, q)) -> pa p; co b; pa q) arms
+    | CSkip -> ()
+    | CAssert e -> ex e
+    | CSwap (a, b) | CPush (a, b) | CPop (a, b) -> add a; add b
+    | CLocalD (a, e, b, r, f) -> add a; ex e; co b; add r; ex f
+    | CFor (r, a, b, body) -> add r; ex a; ex b; co body
+  and th = function BThen c -> co c | BThenNone -> ()
+  and els = function BElse c -> co c | BElseNone -> ()
+  and dob = function BDo c -> co c | BDoNone -> ()
+  and lob = function BLoop c -> co c | BLoopNone -> () in
+  List.iter (fun (Mac (n, ps, b)) -> add n; List.iter add ps; co b) macros;
+  co c;
+  !acc
+
+let starts_with (pre : string) (s : string) : bool =
+  String.length s >= String.length pre && String.sub s 0 (String.length pre) = pre
+
+let pick_scratch_prefix (used : string list) : string =
+  let rec go stem =
+    let pre = stem ^ "-" in
+    if List.exists (starts_with pre) used then go (stem ^ "'") else pre
+  in
+  go "FOR-T"
+
+let desugar_program (Prog (macros, x, c, y) as p) =
+  scratch_prefix := pick_scratch_prefix (idents_of_program p);
   Prog (List.map desugar_macro macros, x, desugar_com c, y)
