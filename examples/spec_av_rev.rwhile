@@ -56,7 +56,8 @@
 (* CLEAR(X): REVERSIBLE discard -- instead of X^=X (irreversible), PUSH X onto
  * the garbage stack GARB (X is consumed -> nil; its value is preserved in GARB).
  * GARB is later embedded into the residual's dead branch by EMBED-GARB, so spec
- * loses no information and runs store-clean.  GARB is shared (declared in main). *)
+ * loses no information and runs store-clean.  GARB is shared: main passes it to EMBED-GARB, which is what puts it in the
+ * globals set so -hygienic-macros leaves it alone. *)
 macro CLEAR(X)
   GARB <= cons X GARB
 
@@ -1154,7 +1155,7 @@ macro MKAV(BT, Src, Ic, AVout)
  * assignment `var0 ^= GARB`).  [Out](d) is unchanged; GARB exits via the output
  * here so spec is store-clean without erasure; spec^-1 recovers the discarded
  * info from the dead branch. *)
-macro EMBED-GARB(Out)
+macro EMBED-GARB(Out, GARB)
   cons EgRV EgRest <= Out;
   cons EgBody EgWV <= EgRest;
   EgDead <= cons 'ass (cons (cons 'var EgGidx) (cons 'val GARB));
@@ -1193,5 +1194,11 @@ read In;
   CLEAR(Vl);
   CLEAR(FpI);
   CLEAR(FpJ);
-  EMBED-GARB(Out);
+  (* GARB is passed explicitly so that it appears in the TOP-LEVEL body: under
+     -hygienic-macros the globals set is exactly main's variables, and a GARB
+     occurring only inside macros gets alpha-renamed per call site, giving every
+     CLEAR its own private garbage stack (50 left non-nil).  Passing it here
+     costs nothing without the flag: formal and actual share the name, so the
+     substitution is the identity. *)
+  EMBED-GARB(Out, GARB);
 write Out
