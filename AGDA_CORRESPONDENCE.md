@@ -312,6 +312,98 @@ Flag ^= =? Tag 'l4E; Flag ^= =? Tag 'loop;
 全数検査で定義される対が 45 → 67 に増え、単射性・対合性・ストア上の可逆性は
 どちらの版でも成立、**定義域が d と e について対称なのは 3 場合の版だけ**。
 
+### 未修正: 線形時間 SI 層に同じ欠落が残っている（2026-08-05 に発見）
+
+上の修正は `RWhileValStore` / `RWhileDetConcrete` / `RWhileExecConcrete` の層だけ
+だった。**`RWhileTime.agda` の `rupd` は依然として 2 場合しかない**:
+
+```agda
+-- The reversible update `x ^= e` (src/EvalRwhile.ml `rupdate`):
+-- assigning to a nil variable sets it; assigning its current value clears
+-- it; anything else is a run-time error (partial involution).
+rupd : V → V → Maybe V
+rupd nil     v = just v
+rupd (atm m) v = if eqV (atm m) v then just nil else nothing
+rupd (a ∙ b) v = if eqV (a ∙ b) v then just nil else nothing
+```
+
+コメントは「それ以外は実行時エラー」と**断定している**が、実装はそうではない。
+同じ原因（論文の ⊙ を写した）で同じ誤りが新しい層に再発している。
+
+実機で確認できる差:
+
+```
+$ ./ri -steps <(printf "read X; Y ^= 'a; Y ^= nil; Y ^= 'a; write X\n") b.val
+'b
+[RWHILE-STEPS] steps=5          <- OCaml は通る（中央は恒等）
+```
+
+Agda モデルでは中央の `Y ^= nil` が `rupd (atm a) nil = nothing` でスタックする。
+`src/Core.ml` は `EvalRwhile.rupdate` をそのまま呼ぶので、`./ri` と `./ri -core`
+の間にずれはない。**ずれは Agda モデルと実装の間だけ**である。
+
+#### 向きと影響
+
+Agda で定義される場合は実装でも定義され、値も一致する（1 と 2 はそのまま、
+`rupd nil nil = just nil` も実装の第 1 分岐と一致）。したがって
+
+- **健全性は保たれる**: `c ⊢ s ⇒ t ∣ k` の導出はすべて本物の実行に対応する。
+- **完全性は主張できない**: 実装が受理する実行のうち、第 3 の場合を使うものには
+  導出が存在しない。`si-linear`・`inv-sound`・`⇒-det` などはいずれも
+  「第 3 の場合を使わない断片」についての定理と読むべきである。
+
+上の節が指摘したとおり `examples/ri.rwhile` は第 3 の場合に依存する
+（`Flag ^= =? Tag 'l4E; Flag ^= =? Tag 'loop`）ので、**この断片は実物の
+自己解釈器を覆っていない**。線形時間の主定理は Agda 内で構成した `SI` について
+のものなので定理自体は無傷だが、「実装の自己解釈器を検証した」とは言えない。
+
+なお `Desugar.ml` が `local`/`for` に入れた `assert (=? X nil)` ガードは、
+ブラケットを**第 3 の場合が起きない領域に閉じ込める**（X が nil であることを
+入口で強制するので `X ^= E` は必ず第 1 分岐）。偶然だが、糖衣はモデル化済みの
+断片の中に収まっている。
+
+#### 直すときの範囲
+
+`rupd` に `rupd u nil = just u` を先頭で足す。恒等なので対合性は保たれる
+（`rupd (rupd u nil) nil = u`）。影響を受けるのは `rupd` を直接扱う 4 モジュール:
+
+| ファイル | `rupd` の出現 |
+|---|---|
+| `RWhileTime.agda` | 12（定義・`rupd-self`・`e-ass`） |
+| `RWhileTimeInv.agda` | 11（`rupd-invol` など） |
+| `RWhileTimeDet.agda` | 2 |
+| `RWhileTimeExec.agda` | 1 |
+
+`RWhileTime` を import するモジュールは 27 あるので、`check.sh --si` の全体再検査
+が要る。
+
+**素朴に先頭へ 1 節足してはいけない。** `rupd w nil = just w` を先頭に置くと
+`rupd nil v` が開いた `v` に対して簡約しなくなる（Agda は第 1 節のパターン `nil`
+に当たるかを先に決められないため）。既存の証明はこの簡約に依存している。
+**第 2 引数で分割し直して重なりを消す**こと:
+
+```agda
+rupd : V → V → Maybe V
+rupd w       nil     = just w                                  -- 第 3 の場合（恒等）
+rupd nil     (atm n) = just (atm n)
+rupd nil     (a ∙ b) = just (a ∙ b)
+rupd (atm m) (atm n) = if eqℕ m n then just nil else nothing
+rupd (atm m) (_ ∙ _) = nothing
+rupd (a ∙ b) (atm _) = nothing
+rupd (a ∙ b) (c ∙ d) = if eqV (a ∙ b) (c ∙ d) then just nil else nothing
+```
+
+見通し:
+
+- `rupd-self`（**191 箇所**で使われる最重要補題）は新定義でもそのまま通る。
+  `rupd-self nil` は第 1 節で `just nil`、`atm`/`∙` は従来どおり `eqℕ-refl` /
+  `eqV-refl` で潰れる。ここが壊れないので大半の利用箇所は無傷である。
+- `rupd-invol` は `v` が nil かどうかで場合分けを 1 段増やす。`v ≡ nil` の枝は
+  `u ≡ w` なので `refl`、それ以外は既存の証明がそのまま入る。
+- 実質の書き換えは `rupd` を直接分解している `RWhileTimeInv` の 11 箇所と
+  `RWhileTimeDet` の 2 箇所、`RWhileTimeExec` の 1 箇所に限られる見込み。
+- `exec` は `rupd` を呼ぶだけなので定義の変更に追随する。
+
 ### 直した範囲
 
 | ファイル | 変更 |
