@@ -13,6 +13,7 @@
 
 module RWhileSIExecTest where
 
+open import Data.Nat using (ℕ)
 open import Data.List using (List; []; _∷_)
 open import Data.Maybe using (Maybe; just)
 open import Data.Product using (_,_)
@@ -21,8 +22,11 @@ open import Relation.Binary.PropositionalEquality using (_≡_; refl)
 open import RWhileTime
 open import RWhileSIEnc using (⌜_⌝; encS)
 open import RWhileSIStep using (embM)
+open import RWhileSIMac using (emb; mkI)
+open import Data.Product using (_×_)
 open import RWhileSISim using (SI)
 open import RWhileTimeSkip using (skips; cost₀; cost-split)
+open import RWhileTimeInv using (inv)
 
 private
   -- interpreting `skip` on the empty object store
@@ -118,3 +122,49 @@ private
 
   n-lp : skips d-lp ≡ 48
   n-lp = refl
+
+  ------------------------------------------------------------------------
+  -- THE WRAPPER, machine-checked.
+  --
+  -- `extract-si.sh` wraps the interpreter so that a single `read` supplies
+  -- both the program and the object store: the prologue unpacks
+  -- `(todo . store)` into the Cd and Vl registers, the epilogue packs
+  -- `(done . store)` back.  Its cost used to be a hand count (and was wrong
+  -- once -- `;` nodes are steps too).  Here it is the type checker's:
+
+  wrapPre wrapPost : Cmd
+  wrapPre  = (2 ^= tlE (var 0)) ⨾ (5 ^= hdE (var 0)) ⨾ (0 ^= cns (var 5) (var 2))
+           ⨾ (0 ^= opd (var 5)) ⨾ (5 ^= opd (var 0))
+  wrapPost = (5 ^= opd (var 1)) ⨾ (1 ^= opd (var 5)) ⨾ (1 ^= cns (var 5) (var 2))
+           ⨾ (5 ^= hdE (var 1)) ⨾ (2 ^= tlE (var 1))
+
+  wrapped : Cmd → Cmd
+  wrapped c = wrapPre ⨾ (c ⨾ wrapPost)
+
+  -- the interpreter's store with only X0 (the todo register) filled
+  embP : V → Store
+  embP p = emb (mkI p nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil)
+
+  costOf : Maybe (Store × ℕ) → ℕ
+  costOf (just (_ , k)) = k
+  costOf nothing        = 0
+
+  -- 20 steps of wrapper (9 + 9 plus the two `;` that attach them), on top of
+  -- the 37 the interpretation itself takes
+  w-skip : costOf (exec 300 (wrapped SI) (embP ((⌜ skip ⌝ ∙ nil) ∙ encS []))) ≡ 57
+  w-skip = refl
+
+  -- the inverse wrapper is shorter (its prologue needs 3 assignments, not 5)
+  wrapInvPre : Cmd
+  wrapInvPre = (1 ^= hdE (var 0)) ⨾ (2 ^= tlE (var 0)) ⨾ (0 ^= cns (var 1) (var 2))
+
+  wrappedInv : Cmd → Cmd
+  wrappedInv c = wrapInvPre ⨾ (c ⨾ wrapPost)
+
+  -- 16 steps of wrapper (5 + 9 plus the two `;`), on top of the same 37:
+  -- `si-uncompute` says the interpretation and its uncomputation agree, and
+  -- so they do, here, by evaluation
+  w-inv-skip : costOf (exec 300 (wrappedInv (inv SI))
+                                (embP ((⌜ skip ⌝ ∙ nil) ∙ encS [])))
+             ≡ 53
+  w-inv-skip = refl
