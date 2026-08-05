@@ -510,3 +510,54 @@ private
           (rn-one (rn-loop rnb-skip
             (rnb-run (rn-one (rn-cond
               (rnb-run (rn-seq rn-ass (rn-one rn-ass))) rnb-skip)))))
+
+------------------------------------------------------------------------
+-- Right-nestedness is decidable, so a concrete program (the interpreter)
+-- can discharge it by evaluation.
+
+open import Relation.Nullary using (Dec; yes; no)
+open import Relation.Nullary.Decidable using (True; toWitness)
+
+rn1? : (c : Cmd) → Dec (RN1 c)
+rn?  : (c : Cmd) → Dec (RN c)
+rnb? : (c : Cmd) → Dec (RNb c)
+
+rn1? skip     = no λ ()
+rn1? (x ^= e) = yes rn-ass
+rn1? (c ⨾ d)  = no λ ()
+rn1? (cond e c d f) with rnb? c | rnb? d
+... | yes p | yes q = yes (rn-cond p q)
+... | no np | _     = no λ { (rn-cond p _) → np p }
+... | yes p | no nq = no λ { (rn-cond _ q) → nq q }
+rn1? (loop e D L f) with rnb? D | rnb? L
+... | yes p | yes q = yes (rn-loop p q)
+... | no np | _     = no λ { (rn-loop p _) → np p }
+... | yes p | no nq = no λ { (rn-loop _ q) → nq q }
+
+rn? skip     = no λ { (rn-one ()) }
+rn? (x ^= e) = yes (rn-one rn-ass)
+rn? (c ⨾ d) with rn1? c | rn? d
+... | yes p | yes q = yes (rn-seq p q)
+... | no np | _     = no λ { (rn-one ()) ; (rn-seq p _) → np p }
+... | yes p | no nq = no λ { (rn-one ()) ; (rn-seq _ q) → nq q }
+rn? (cond e c d f) with rn1? (cond e c d f)
+... | yes p = yes (rn-one p)
+... | no np = no λ { (rn-one p) → np p }
+rn? (loop e D L f) with rn1? (loop e D L f)
+... | yes p = yes (rn-one p)
+... | no np = no λ { (rn-one p) → np p }
+
+rnb? skip = yes rnb-skip
+rnb? (x ^= e) = yes (rnb-run (rn-one rn-ass))
+rnb? (c ⨾ d) with rn? (c ⨾ d)
+... | yes p = yes (rnb-run p)
+... | no np = no λ { (rnb-run p) → np p }
+rnb? (cond e c d f) with rn? (cond e c d f)
+... | yes p = yes (rnb-run p)
+... | no np = no λ { (rnb-run p) → np p }
+rnb? (loop e D L f) with rn? (loop e D L f)
+... | yes p = yes (rnb-run p)
+... | no np = no λ { (rnb-run p) → np p }
+
+RN! : ∀ c {p : True (rn? c)} → RN c
+RN! c {p} = toWitness p

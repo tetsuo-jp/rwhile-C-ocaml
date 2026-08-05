@@ -5,7 +5,7 @@ Glück–Yokoyama の *A linear-time self-interpreter of a reversible imperative
 stdlib、`--safe`・postulate 0・穴 0）で機械検証する開発。**自己解釈系は抽象機械ではなく、
 対象言語そのもので書かれた 1 本の R-WHILE プログラム**である。
 
-新規モジュール（`proofs/agda/`、全 24 本・約 5,900 行、`./check.sh` は PASS=90 FAIL=0）:
+新規モジュール（`proofs/agda/`、全 25 本・約 6,100 行、`./check.sh` は PASS=91 FAIL=0）:
 
 | モジュール | 内容 |
 |---|---|
@@ -29,6 +29,7 @@ stdlib、`--safe`・postulate 0・穴 0）で機械検証する開発。**自己
 | `RWhileSIComplete` | 逆向き（`SI` 停止 ⇒ 対象停止）について**証明できた範囲と残る義務**を明示 |
 | `RWhileSIShow` | **具象構文プリンタ**（`Cmd` → R-WHILE テキスト）。`SI` を実際に走る `.rwhile` として抽出するために使う |
 | `RWhileSIParse` | **プリンタの往復定理**（トークン列の構文解析器と `parse (tok e) ≡ just (e , ts)`）と `;` の結合に関する曖昧性の解消 |
+| `RWhileSINorm` | **右結合化 `nf`**（印字は不変・実行と歩数も不変）。抽出テキストが表す項と `SI` を結ぶ |
 | `RWhileSIP2D` | **実装 `-p2d` との差分テスト**（実装の符号化を Agda でモデル化し、`./ri -p2d` の出力と文字列一致を型検査器が検証）と一様符号化への翻訳定理 |
 | `RWhileTimeDec` | `Wf`/`InR` の**決定手続き**（`wf?`/`inR?`/`Wf!`/`InR!`）。具体プログラムの静的条件を評価で discharge |
 | `RWhileSIInv` | 上を合成した系：**逆プログラムの解釈**（`si-inverse-linear`・`si-round-trip`）と**解釈系自身の逆走**（`si-uncompute`） |
@@ -350,6 +351,21 @@ round-trip : ∀ c → RN c → pC (suc (depthC c)) (tokC c []) ≡ just (c , []
 の形にする（catch-all 節は `c` の構成子が分からないと簡約しない）、(2) 構文解析器の先頭判定を
 `Bool`（`isSemi`/`isThen`/…）にする（リストの節分けだと変数のままでは簡約しない）。
 どちらも「証明が進むように定義を書く」典型で、定義を変えずに証明だけ書こうとすると詰まる。
+
+**抽出物への適用（`RWhileSINorm`）**: `SI` は `STEP` が `(pop ⨾ splitT) ⨾ (DISPATCH ⨾ …)` と
+括られているため右結合ではない。そこで右結合化 `nf` を定義し、
+
+```agda
+nf-tok  : ∀ c ts → tokC (nf c) ts ≡ tokC c ts          -- 印字は完全に同一
+nf-⇒    : c ⊢ σ ⇒ τ ∣ k → nf c ⊢ σ ⇒ τ ∣ k             -- 実行も歩数も不変
+nf-Rest : ループの残り実行についても同様
+```
+
+を証明した。したがって **`extract-si.sh` が書き出したテキストは `nf SI` を表し、それは
+意味論が見るかぎり `SI` そのものである**。`SI` への実例化（`RN (nf SI)` を決定手続きの
+評価で discharge）は `ExtractRoundTrip.agda` に分離した — 26.7 GB・154 秒かかるため
+`check.sh` の常用セットには入れず、一度きりの成果物として検証する（ファイル名が
+`RWhile*.agda` に一致しないので glob から外れる）。
 
 ## 5. 実装上の教訓（形式化して判明したこと）
 
