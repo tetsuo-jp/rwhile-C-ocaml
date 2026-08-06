@@ -135,10 +135,19 @@ let data2program : valT -> program = function
    are byte-compared against a specific numbering. *)
 let hot_vars : bool ref = ref false
 
+(* Opt-in (./ri -share-slots): give variables with disjoint live ranges the SAME
+   store slot, so the self-interpreter's store gets shorter.  See Optimize.ml
+   pass 2.  Subsumes -hot-vars (it renumbers too), so it wins if both are set. *)
+let share_slots : bool ref = ref false
+
 let program2data (p : program) : valT =
   let p2 = MacroRwhile.expMacProgram p in
-  let vs = if !hot_vars then Optimize.var_order p2 else EvalRwhile.varProgram p2 in
-  let rec incseq m n = if m = n then [m] else m :: incseq (m+1) n in
-  let ws = map (fun n -> RIdent (string_of_int n)) (incseq 1 (length vs)) in
-  let p3 = Subst.substProgram (combine vs ws) p2 in
+  let sub =
+    if !share_slots then Optimize.slot_alloc p2
+    else
+      let vs = if !hot_vars then Optimize.var_order p2 else EvalRwhile.varProgram p2 in
+      let rec incseq m n = if m = n then [m] else m :: incseq (m+1) n in
+      let ws = map (fun n -> RIdent (string_of_int n)) (incseq 1 (length vs)) in
+      combine vs ws in
+  let p3 = Subst.substProgram sub p2 in
   transProgram p3

@@ -2466,6 +2466,64 @@ let test_hot_vars_off_by_default () =
     (parse_file_val (examples_dir ^ "/reverse.val"))
     (Program2DataRwhile.program2data prog)
 
+(* Pass 2 (Optimize.slot_alloc): variables whose live ranges are disjoint share
+   one store slot.  Sound because an R-WHILE variable is nil before its first
+   occurrence and nil after its last (it starts nil, can only change at its own
+   occurrences, and all_cleared forces it back to nil) -- with loops widened to
+   their whole extent, since a loop-carried variable is non-nil between
+   iterations.  Conditional arms are alternatives, which is where the win is.
+   Measured: spec 155->119 slots (23%), spec_av_rev 233->198, spec_av 219->193;
+   loop-dominated programs share nothing, correctly. *)
+
+let with_share_slots (f : unit -> 'a) : 'a =
+  let old = !Program2DataRwhile.share_slots in
+  Program2DataRwhile.share_slots := true;
+  let r = (try f () with e -> Program2DataRwhile.share_slots := old; raise e) in
+  Program2DataRwhile.share_slots := old; r
+
+let test_share_slots_same_answer () =
+  let check name valfile =
+    let prog = parse_file_program (examples_dir ^ "/" ^ name ^ ".rwhile") in
+    let input = parse_file_val (examples_dir ^ "/" ^ valfile) in
+    let direct = EvalRwhile.evalProgram prog input in
+    let d = with_share_slots (fun () -> Program2DataRwhile.program2data prog) in
+    Alcotest.(check valT_testable)
+      (name ^ ": slot sharing self-interprets to the same answer")
+      direct (run_via_ri d input) in
+  check "reverse" "list123.val";
+  check "length"  "list123.val";
+  check "minus"   "minus.val";
+  check "compare" "compare1.val"
+
+(* scratch confined to opposite arms of a conditional is never live together, so
+   it collapses onto one slot; the answer must not change *)
+let test_share_slots_branches () =
+  let src = "read In;              if 't then A1 ^= 'a; A1 ^= 'a; A2 ^= 'a; A2 ^= 'a              else B1 ^= 'b; B1 ^= 'b; B2 ^= 'b; B2 ^= 'b fi 't;              write In" in
+  let prog = parse_program src in
+  let expanded = MacroRwhile.expMacProgram prog in
+  let nvars = List.length (EvalRwhile.varProgram expanded) in
+  let slots = List.length
+      (List.sort_uniq compare (List.map snd (Optimize.slot_alloc expanded))) in
+  Alcotest.(check bool) "the two arms' scratch shares slots" true (slots < nvars);
+  let input = parse_val "'q" in
+  let d = with_share_slots (fun () -> Program2DataRwhile.program2data prog) in
+  Alcotest.(check valT_testable) "and the answer is unchanged"
+    (EvalRwhile.evalProgram prog input) (run_via_ri d input)
+
+(* a loop-carried variable must NOT be merged with one used later in the same
+   loop body: widening every interval that meets a loop is what prevents it *)
+let test_share_slots_loop_widening () =
+  let prog = MacroRwhile.expMacProgram
+      (parse_file_program (examples_dir ^ "/reverse.rwhile")) in
+  let nvars = List.length (EvalRwhile.varProgram prog) in
+  let slots = List.length
+      (List.sort_uniq compare (List.map snd (Optimize.slot_alloc prog))) in
+  Alcotest.(check int) "a loop-dominated program shares nothing" nvars slots
+
+let test_share_slots_off_by_default () =
+  Alcotest.(check bool) "share_slots defaults to off" false
+    !Program2DataRwhile.share_slots
+
 (* RWHILE_HYGIENIC=1 ./test-suite runs the WHOLE suite with -hygienic-macros on,
    used to verify that the core programs (spec/ri/spec_av) are hygiene-clean.
    The hygiene-specific group below already toggles the flag per-test, so it is
@@ -2748,6 +2806,10 @@ let () =
       Alcotest.test_case "hot-vars: same answer" `Quick test_hot_vars_same_answer;
       Alcotest.test_case "hot-vars: permutation" `Quick test_hot_vars_permutation;
       Alcotest.test_case "hot-vars: off by default" `Quick test_hot_vars_off_by_default;
+      Alcotest.test_case "share-slots: same answer" `Quick test_share_slots_same_answer;
+      Alcotest.test_case "share-slots: branches merge" `Quick test_share_slots_branches;
+      Alcotest.test_case "share-slots: loops do not merge" `Quick test_share_slots_loop_widening;
+      Alcotest.test_case "share-slots: off by default" `Quick test_share_slots_off_by_default;
     ];
     "sugar", [
       Alcotest.test_case "skip" `Quick test_sugar_skip;

@@ -50,6 +50,15 @@ let () =
 let () =
   match Array.to_list Sys.argv with
   | [_; "-n"; subj] -> Printf.printf "%d\n" (varcount subj)
+  (* how many store slots the subject needs after Optimize's slot sharing --
+     i.e. the largest number of simultaneously live variables *)
+  | [_; "-slots"; subj] ->
+     let ch = open_in subj in
+     let p = ParRwhile.pProgram LexRwhile.token (Lexing.from_channel ch) in
+     close_in ch;
+     let sub = Optimize.slot_alloc (MacroRwhile.expMacProgram p) in
+     let slots = List.sort_uniq compare (List.map snd sub) in
+     Printf.printf "%d\n" (List.length slots)
   | _ :: spec :: subj :: rest ->
      let margin = match rest with m :: _ -> int_of_string m | [] -> 8 in
      let n = varcount subj in
