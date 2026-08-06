@@ -308,10 +308,41 @@ data _⊩_⇒_∣_ : SCmd → Store → Store → ℕ → Set where
 | `for` | **カウンタの局所性を証明済み**。ループ本体の意味論は未 |
 | `assert` | **証明済み** |
 | `skip` | タイムド核の `skip` そのもの（コスト差は `cost-split` が説明） |
-| `X <-> Y` / `push` / `pop` | **未**。タイムド核に `<=` が無いため、`RWhileCRep` 層で行う必要がある |
+| `push` / `pop` | **証明済み**（`RWhilePushPop.agda`、`RWhileCRep` 層） |
+| `X <-> Y` | **未**（`push`/`pop` と同じ層で同じ手口で書ける） |
 | `case` | 反転については `RWhileCaseInv` で証明済み。コストは未 |
 
 `--safe`・postulate 0・hole 0。`check.sh --si` は PASS=30 FAIL=0（181 秒）。
+
+## スタック糖衣 push / pop（`RWhilePushPop.agda`、2026-08-06）
+
+タイムド層に置けない 2 つの糖衣を、`<=` をモデル化している `RWhileCRep` 層で形式化
+した。
+
+```agda
+pushC x s = crepC (pvar s) (pcons (pvar x) (pvar s))     -- S <= cons X S
+popC  x s = crepC (pcons (pvar x) (pvar s)) (pvar s)     -- cons X S <= S
+```
+
+| 定理 | 主張 |
+|---|---|
+| `push-pop` / `pop-push` | 互いに逆。**独自の反転規則を一切持たない** |
+| `push-sem` | S は `(X . S)` になり、X は nil に残る |
+| `pop-sem` | pop は積みを**分解**する: `σ S ≡ cons (σ' X) (σ' S)` |
+| `pop-needs-nil` | pop が走るのは X が事前に nil のときだけ |
+
+`push-pop` / `pop-push` は `crep-reversible` そのものである。R-WHILE は `q <= r` を
+**2 つのパターンの入れ替え**で反転し、push と pop はまさに互いの入れ替えなので、
+他に何も要らない。`src/Desugar.ml` がこの 2 つに反転規則を与えていないことの、
+これが理由である。
+
+`pop-needs-nil` は `push-sem` の「X は nil に残る」と対になっていて、
+`push X S ; pop X S` が単に型が付くだけでなく**打ち消し合う**理由になっている。
+
+2 変数は異なる必要がある（`S <= cons S S` は S を 2 回読む）。実装は
+`Desugar.ml` で拒否し、ここではパターンの線形性が禁じている。
+
+`--safe`・postulate 0・hole 0。
 
 ## 糖衣のガード付きブラケット（`RWhileSugar.agda`、2026-08-06）
 
