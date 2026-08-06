@@ -129,11 +129,14 @@ let data2program : valT -> program = function
      Prog ([], d_ident i, d_com c, d_ident j)
   | _ -> failwith "data2program: malformed program"
 
-(* Opt-in (./ri -hot-vars): number the variables by static access weight instead
-   of first occurrence, so the self-interpreter's store walks are shorter.  See
-   Optimize.ml.  OFF by default: the fp1/fp2/fp3 residuals and examples/*.val
-   are byte-compared against a specific numbering. *)
-let hot_vars : bool ref = ref false
+(* ON by default (./ri -first-occurrence-vars turns it off): number the
+   variables by static access weight instead of first occurrence.  See
+   Optimize.ml pass 1.  A variable's number is a UNARY numeral in the encoding,
+   so this halves the encoded program (|spec_av| 817701 -> 399565 nodes) and the
+   fp2 compiler with it (812515 -> 386681), and makes the whole test suite run
+   3.5x faster (125 s -> 36 s).  It is a pure renaming: the answer never
+   changes, and fp1/fp2/fp3 all still hold. *)
+let hot_vars : bool ref = ref true
 
 (* Opt-in (./ri -share-slots): give variables with disjoint live ranges the SAME
    store slot, so the self-interpreter's store gets shorter.  See Optimize.ml
@@ -144,7 +147,7 @@ let share_slots : bool ref = ref false
    command lines (test-suite, measure_proj, specsize) can be run both ways:
      RWHILE_HOT_VARS=1 ./measure_proj      RWHILE_SHARE_SLOTS=1 ./measure_proj *)
 let () =
-  if Sys.getenv_opt "RWHILE_HOT_VARS" <> None then hot_vars := true;
+  if Sys.getenv_opt "RWHILE_FIRST_OCCURRENCE_VARS" <> None then hot_vars := false;
   if Sys.getenv_opt "RWHILE_SHARE_SLOTS" <> None then share_slots := true
 
 let program2data (p : program) : valT =

@@ -1498,9 +1498,17 @@ let fp1_store_out_slot src_name =
 let test_fp1_step_bug_opaque_result () =
   let slot = fp1_store_out_slot "swap" in
   let result = (match slot with VCons (_, VCons (_, tl)) -> tl | _ -> slot) in
-  Alcotest.(check valT_testable)
-    "KNOWN BUG (STEP): swap Result half is opaque ('D.('var.0)), not structural"
-    (parse_val "('D . ('var . nil))") result
+  (* Assert the SHAPE, not the variable number: the bug is that Result stays a
+     dynamic variable reference instead of becoming a structural cons.  Pinning
+     the numeral would make this test track Optimize's numbering instead of the
+     bug (it did: the same opaque result moved from index 0 to index 36 when
+     access-weight numbering became the default). *)
+  Alcotest.(check bool)
+    "KNOWN BUG (STEP): swap Result half is opaque ('D.('var.N)), not structural"
+    true
+    (match result with
+     | VCons (VAtom (Atom "'D"), VCons (VAtom (Atom "'var"), _)) -> true
+     | _ -> false)
 
 (* ROOT-CAUSE test: PAT-WRITE-STRUCT must handle a NESTED cons pattern.
  * `cons (cons V1e V2e) St <= var0` with var0 = ('C.((D var0).(S nil))) (a
@@ -2457,14 +2465,23 @@ let test_hot_vars_permutation () =
   (* deterministic: ties keep first-occurrence order, so re-running agrees *)
   Alcotest.(check bool) "deterministic" true (hot = Optimize.var_order prog)
 
-(* The default must stay first-occurrence: the fp1/fp2/fp3 residuals and the
-   checked-in examples/*.val are byte-compared against that numbering. *)
-let test_hot_vars_off_by_default () =
-  Alcotest.(check bool) "hot_vars defaults to off" false !Program2DataRwhile.hot_vars;
+(* Access-weight numbering is the DEFAULT since 2026-08-06, and the old
+   first-occurrence numbering is still reachable through -first-occurrence-vars.
+   Both encodings are pinned, so a change to either is deliberate. *)
+let test_var_numbering_default () =
+  Alcotest.(check bool) "access-weight numbering is on by default" true
+    !Program2DataRwhile.hot_vars;
   let prog = parse_file_program (examples_dir ^ "/reverse.rwhile") in
-  Alcotest.(check valT_testable) "default encoding is unchanged"
+  Alcotest.(check valT_testable) "default encoding"
     (parse_file_val (examples_dir ^ "/reverse.val"))
-    (Program2DataRwhile.program2data prog)
+    (Program2DataRwhile.program2data prog);
+  let old = !Program2DataRwhile.hot_vars in
+  Program2DataRwhile.hot_vars := false;
+  let d = (try Program2DataRwhile.program2data prog
+           with e -> Program2DataRwhile.hot_vars := old; raise e) in
+  Program2DataRwhile.hot_vars := old;
+  Alcotest.(check valT_testable) "-first-occurrence-vars reproduces the old one"
+    (parse_file_val (examples_dir ^ "/reverse_first_occurrence.val")) d
 
 (* Pass 2 (Optimize.slot_alloc): variables whose live ranges are disjoint share
    one store slot.  Sound because an R-WHILE variable is nil before its first
@@ -2805,7 +2822,7 @@ let () =
     "compiler", [
       Alcotest.test_case "hot-vars: same answer" `Quick test_hot_vars_same_answer;
       Alcotest.test_case "hot-vars: permutation" `Quick test_hot_vars_permutation;
-      Alcotest.test_case "hot-vars: off by default" `Quick test_hot_vars_off_by_default;
+      Alcotest.test_case "numbering: weighted by default" `Quick test_var_numbering_default;
       Alcotest.test_case "share-slots: same answer" `Quick test_share_slots_same_answer;
       Alcotest.test_case "share-slots: branches merge" `Quick test_share_slots_branches;
       Alcotest.test_case "share-slots: loops do not merge" `Quick test_share_slots_loop_widening;

@@ -145,10 +145,13 @@ name.
 
 The surface language (this sugar plus what comes next) is **R-WHILE-S**; the
 core stays frozen so the self-interpreter, the specialiser and the Agda
-development are untouched. `./ri -p2d -hot-vars` runs the first optimisation
-pass of the R-WHILE-S → R-WHILE compiler: it numbers variables by static access
-weight rather than first occurrence, which shortens the self-interpreter's store
-walks (measured: 2–10% fewer steps, most on variable-rich programs). See
+development are untouched. The first optimisation pass of the
+R-WHILE-S → R-WHILE compiler is **on by default**: `./ri -p2d` numbers variables
+by static access weight rather than first occurrence. A variable's number is a
+unary numeral in the encoding, so this halves the encoded program (`spec_av`
+817701 → 399565 nodes) and the fp2 compiler with it (812515 → 386681), and makes
+the test suite run 3.5× faster (125 s → 36 s) — with fp1, fp2 and fp3 all still
+holding. `./ri -p2d -first-occurrence-vars` restores the old numbering. See
 [RWHILE_S.md](RWHILE_S.md) for the architecture and for which optimisations
 survive compilation and which do not.
 

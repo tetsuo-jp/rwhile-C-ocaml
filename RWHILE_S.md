@@ -41,8 +41,11 @@ R-WHILE-S  --(脱糖 Desugar.ml)-->  R-WHILE  --(最適化 Optimize.ml)-->  R-WH
 10 倍（繰り返し実行されるのはそこだから）。条件分岐では倍率を変えない。同点は
 初出順を保つので決定的。
 
+**2026-08-06 から既定。** 旧採番は `./ri -p2d -first-occurrence-vars` で戻せる。
+
 ```bash
-./ri -p2d -hot-vars prog.rwhile     # 重み順で採番して符号化
+./ri -p2d prog.rwhile                        # 重み順（既定）
+./ri -p2d -first-occurrence-vars prog.rwhile # 初出順（旧）
 ```
 
 **実測（`examples/ri.rwhile` で自己解釈したときの歩数）**
@@ -73,8 +76,17 @@ R-WHILE-S  --(脱糖 Desugar.ml)-->  R-WHILE  --(最適化 Optimize.ml)-->  R-WH
 `[comp2](('S.swap)) == B` は成立したまま。`loop_weight` を 1 / 10 / 100 と振っても
 符号化サイズは同一だったので、ヒューリスティックは繊細ではない。
 
-**既定は OFF。** fp1/fp2/fp3 の残余と `examples/*.val` は特定の採番と byte 比較
-されているため、既定を変えると壊れる。
+**既定にした根拠（2026-08-06）**: `RWHILE_HOT_VARS=1` で全スイートを回すと、
+落ちたのは**採番に依存した期待値 3 件だけ**で、実際の退行はゼロだった。しかも
+**スイート全体が 125 秒 → 36 秒（3.5 倍）**になる。fp1・fp2・fp3 はいずれも成立。
+
+切り替えに伴って直した 3 件:
+
+| 落ちたもの | 実態 | 対応 |
+|---|---|---|
+| `compiler`: 既定 OFF の検査 | 設計どおり | 既定 ON を検査するテストに書き換え、旧採番も `reverse_first_occurrence.val` で固定 |
+| `file-integration`: `reverse.val` | 期待値ファイル | 再生成。旧版は `reverse_first_occurrence.val` に保存 |
+| `assemble-fp1`: 既知バグの特徴づけ | **変数番号 0 を固定していた**（バグは健在、番号が 36 に動いただけ） | 番号ではなく「不透明な `('D . ('var . N))` である」という**形**を主張するよう修正。テストが採番を追いかけていた |
 
 ### パス 2: スロット共有（実装済み・`./ri -p2d -share-slots`）
 

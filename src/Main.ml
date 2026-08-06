@@ -31,9 +31,10 @@ let () =
       "extension: array index operations  (A[I] ^= E  /  get A[I])");
      ("-hygienic-macros", Arg.Set MacroRwhile.hygienic,
       "expand macros hygienically: alpha-rename internal local variables");
-     ("-hot-vars", Arg.Set Program2DataRwhile.hot_vars,
-      "p2d: number variables by static access weight, not first occurrence \
-       (shortens the self-interpreter's store walks; see Optimize.ml)");
+     ("-first-occurrence-vars", Arg.Clear Program2DataRwhile.hot_vars,
+      "p2d: number variables in first-occurrence order (the pre-2026-08 \
+       numbering).  The default is by static access weight, which halves the \
+       encoding; see Optimize.ml pass 1");
      ("-share-slots", Arg.Set Program2DataRwhile.share_slots,
       "p2d: give variables with disjoint live ranges the same store slot \
        (shortens the self-interpreter's store.  Sound for EXECUTION only -- \
@@ -50,7 +51,7 @@ let () =
       "simplify the (residual) program: constant-fold and remove dead reversible branches")]
     (fun s -> files := !files @ [s])
     ("R-WHILE Interpreter (C) Tetsuo Yokoyama\n" ^
-       Printf.sprintf "usage: %s [-inverse] [-p2d] [-exp] [-local] [-autofi] [-array] [-hygienic-macros] [-hot-vars] [-share-slots] [-llm-errors] [-stats] [-steps] [-core] program [data]"
+       Printf.sprintf "usage: %s [-inverse] [-p2d] [-exp] [-local] [-autofi] [-array] [-hygienic-macros] [-first-occurrence-vars] [-share-slots] [-llm-errors] [-stats] [-steps] [-core] program [data]"
          Sys.argv.(0));
   match !files with
   | [prog_filename] ->
