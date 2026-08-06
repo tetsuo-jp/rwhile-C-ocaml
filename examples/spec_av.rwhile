@@ -820,7 +820,16 @@ macro SPEC-STEP-AV(Cd, Cd', RCode)
       * Two rehomes stage through the SAME working slot without it being freed in
       * between -- the same family as the transposition bug, but at the level of
       * residual sequencing rather than of one cons split.  Pinned by
-      * TestSuite's "fp1-via-ri_fp3 KNOWN BUG: residual still fails to run". *)
+      * TestSuite's "fp1-via-ri_fp3 KNOWN BUG: residual still fails to run".
+      *
+      * The remaining failure is EXACTLY the transposition case, and nothing
+      * else.  Measured 2026-08-07 over id / id2 / id3 / rep / swap /
+      * sx_splitjoin: every non-transposing source now yields a residual that
+      * runs and agrees with direct evaluation; only the two that exchange the
+      * halves of a cons fail.  And what they used to do was worse than failing:
+      * before PAT-WRITE-ITER was wired, swap's residual RAN and returned
+      * ('a.'b) -- the input unchanged, where swap must give ('b.'a).  A silent
+      * wrong answer.  It is now either right or loud. *)
      PAT-WRITE-ITER(RpQ, RpAV, RCode);
      Arg <= cons RpQ RpR
    else

@@ -1597,6 +1597,38 @@ let test_fp1_ri_fp3_known_bug () =
  * residual sequencing rather than of one cons split.  This test pins the
  * remaining failure so "structural ops preserved" is not mistaken for "fp1 via
  * ri_fp3 works". *)
+(* NEW CAPABILITY, measured 2026-08-07 against 128802a~1 (before PAT-WRITE-ITER
+ * was wired).  fp1 via ri_fp3 now produces residuals that RUN and agree with
+ * direct evaluation, for every source that does not transpose:
+ *
+ *     source   before the fix                     after
+ *     id       ran, but from a degenerate body    real body, correct
+ *     id2      FAIL Pattern write conflict        correct
+ *     id3      FAIL Pattern write conflict        correct
+ *     rep      FAIL Pattern write conflict        correct
+ *     swap     ran and SILENTLY RETURNED ('a.'b)  fails loudly
+ *              -- the input unchanged, when swap
+ *              must give ('b.'a)
+ *
+ * So the old "structural ops lost" bug was not merely cosmetic: the residual
+ * computed the WRONG ANSWER and said nothing.  It is now either right or loud. *)
+let test_fp1_ri_fp3_nontransposing_ok () =
+  let spec_av = parse_file_program (examples_dir ^ "/spec_av.rwhile") in
+  let ri_fp3 = Program2DataRwhile.program2data
+      (parse_file_program (examples_dir ^ "/ri_fp3.rwhile")) in
+  let d = VCons (atom "'a", atom "'b") in
+  let check name =
+    let srcp = parse_file_program (examples_dir ^ "/" ^ name ^ ".rwhile") in
+    let comp = EvalRwhile.evalProgram spec_av
+        (spec_in ri_fp3 (Program2DataRwhile.program2data srcp)) in
+    let got = (match EvalRwhile.evalProgram
+                       (Program2DataRwhile.data2program comp) d with
+               | VCons (_, res) -> res | v -> v) in
+    Alcotest.(check valT_testable)
+      (name ^ ": fp1-via-ri_fp3 residual runs and agrees with direct evaluation")
+      (EvalRwhile.evalProgram srcp d) got in
+  check "id2"; check "id3"; check "rep"
+
 let test_fp1_ri_fp3_residual_still_fails () =
   let spec_av = parse_file_program (examples_dir ^ "/spec_av.rwhile") in
   let ri_fp3 = Program2DataRwhile.program2data
@@ -2810,6 +2842,7 @@ let () =
       Alcotest.test_case "ri_fp3 reversible-clear self-interp: id" `Quick test_ri_fp3_selfinterp_id;
       Alcotest.test_case "ri_fp3 reversible-clear self-interp: swap" `Quick test_ri_fp3_selfinterp_swap;
       Alcotest.test_case "fp1-via-ri_fp3: structural ops preserved (was a KNOWN BUG)" `Quick test_fp1_ri_fp3_known_bug;
+      Alcotest.test_case "fp1-via-ri_fp3: non-transposing sources now run correctly" `Quick test_fp1_ri_fp3_nontransposing_ok;
       Alcotest.test_case "fp1-via-ri_fp3 KNOWN BUG: residual still fails to run" `Quick test_fp1_ri_fp3_residual_still_fails;
       Alcotest.test_case "dyn-cond comp correct directly; KNOWN ri.rwhile 'cond bug via run_via_ri" `Quick test_fp1_dyncond_known_bug;
       Alcotest.test_case "depth-general nested read residualizes (PAT-READ-ITER)" `Quick test_fp1_nested_read;
