@@ -917,9 +917,36 @@ macro SPEC-STEP-AV(Cd, Cd', RCode)
       * enlarging EVERY residual -- against this project's own goal of getting
       * comp2/|spec_av| below 1.  Snapshotting only when a live AV would go stale
       * needs escape analysis over the AV store.  Choosing between them is a
-      * design decision, not a mechanical fix.  The rest of the work is threading
-      * RCode through PAT-READ-LEAF-AV2 / PAT-READ-AV / PAT-READ-ITER-STEP /
-      * PAT-READ-ITER, plus the reversible temp allocator. *)
+      * design decision, not a mechanical fix.
+      *
+      * SNAPSHOT-ALWAYS WAS TRIED AND REJECTED (2026-08-07, measured).  It is
+      * cheap to write -- RCode is already a global, so no threading is needed;
+      * a TMP-ALLOC of three lines (copy the counter with `^=`, bump it with one
+      * replacement) suffices, with the counter initialised and cleared in main.
+      * Two things killed it:
+      *
+      *   1. RESIDUAL SIZE.  Every dynamic var read emits one capture:
+      *        ri_min swap  115 ->  367   ri_min id   81 ->  333
+      *        ri_seq rep   123 ->  375   ri_fp3 id2 1045 -> 1841
+      *        ri_fp3 swap 1661 -> 4073
+      *      2.5x to 4x, on every residual -- the opposite direction from
+      *      comp2/|spec_av| < 1.
+      *   2. IT STILL DOES NOT RUN.  The double-consume error does go away, so
+      *      the diagnosis was right, but the residual is no longer store-clean:
+      *      captured temps are stranded.  AV-LIFT turns ('D.('var.Tmp)) into an
+      *      EXPRESSION, and an expression READS its variable without consuming
+      *      it, so a lifted temp is never released.  Releasing it needs yet more
+      *      residual commands.
+      *
+      * WHAT THAT LEAVES.  Snapshot-on-demand -- capture only when an outstanding
+      * AV would go stale -- needs to REWRITE that outstanding AV from
+      * ('D.('var.k)) to ('D.('var.Tmp)).  The AV representation cannot express
+      * that: a dynamic AV refers to a slot by index, and the copies already
+      * handed out (sitting on ri_fp3's stack, inside other AVs) are unreachable.
+      * So this is not a matter of choosing a policy -- the representation has to
+      * change first, e.g. so that a dynamic AV names a value cell that can be
+      * re-pointed.  That is the real remaining work, and it is a redesign, not a
+      * patch. *)
      PAT-WRITE-ITER(RpQ, RpAV, RCode);
      Arg <= cons RpQ RpR
    else
