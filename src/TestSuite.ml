@@ -2541,6 +2541,39 @@ let test_share_slots_off_by_default () =
   Alcotest.(check bool) "share_slots defaults to off" false
     !Program2DataRwhile.share_slots
 
+(* Pass 3 (Optimize.order_static_last): the variables the caller declares STATIC
+   are numbered last, so the dynamic ones -- the only ones that survive into a
+   residual -- get the short unary indices.  Measured over all 120 numberings of
+   ri_min: the fp1 residual for swap ranges 83..115 nodes purely from numbering,
+   and the mean falls exactly 5 nodes for each position the one static variable
+   moves later (109.0 / 104.0 / 99.0 / 94.0 / 89.0).  Marking Op static takes
+   the swap residual 103 -> 87 nodes (0.63x -> 0.51x of |ri_min|) and id 63 -> 55,
+   still round-tripping. *)
+let test_static_vars_last () =
+  let prog = MacroRwhile.expMacProgram
+      (parse_file_program (examples_dir ^ "/ri_min.rwhile")) in
+  let vs = Optimize.var_order prog in
+  let ordered = Optimize.order_static_last [RIdent "Op"] vs in
+  Alcotest.(check bool) "the static variable is numbered last" true
+    (match List.rev ordered with RIdent "Op" :: _ -> true | _ -> false);
+  Alcotest.(check int) "still a permutation" (List.length vs) (List.length ordered);
+  Alcotest.(check bool) "of the same variables" true
+    (List.for_all (fun v -> List.mem v ordered) vs
+     && List.for_all (fun v -> List.mem v vs) ordered)
+
+let test_static_vars_same_answer () =
+  let prog = parse_file_program (examples_dir ^ "/reverse.rwhile") in
+  let input = parse_file_val (examples_dir ^ "/list123.val") in
+  let direct = EvalRwhile.evalProgram prog input in
+  let old = !Program2DataRwhile.static_vars in
+  Program2DataRwhile.static_vars := ["X"];
+  let d = (try Program2DataRwhile.program2data prog
+           with e -> Program2DataRwhile.static_vars := old; raise e) in
+  Program2DataRwhile.static_vars := old;
+  Alcotest.(check valT_testable)
+    "static-vars numbering self-interprets to the same answer"
+    direct (run_via_ri d input)
+
 (* RWHILE_HYGIENIC=1 ./test-suite runs the WHOLE suite with -hygienic-macros on,
    used to verify that the core programs (spec/ri/spec_av) are hygiene-clean.
    The hygiene-specific group below already toggles the flag per-test, so it is
@@ -2827,6 +2860,8 @@ let () =
       Alcotest.test_case "share-slots: branches merge" `Quick test_share_slots_branches;
       Alcotest.test_case "share-slots: loops do not merge" `Quick test_share_slots_loop_widening;
       Alcotest.test_case "share-slots: off by default" `Quick test_share_slots_off_by_default;
+      Alcotest.test_case "static-vars: numbered last" `Quick test_static_vars_last;
+      Alcotest.test_case "static-vars: same answer" `Quick test_static_vars_same_answer;
     ];
     "sugar", [
       Alcotest.test_case "skip" `Quick test_sugar_skip;

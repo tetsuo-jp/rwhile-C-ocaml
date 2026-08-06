@@ -35,6 +35,12 @@ let () =
       "p2d: number variables in first-occurrence order (the pre-2026-08 \
        numbering).  The default is by static access weight, which halves the \
        encoding; see Optimize.ml pass 1");
+     ("-static-vars",
+      Arg.String (fun s -> Program2DataRwhile.static_vars :=
+        String.split_on_char ',' s),
+      "p2d: comma-separated names of the subject's STATIC variables; they are \
+       numbered last so the dynamic ones get short indices and the residual of \
+       a specialisation shrinks (see Optimize.ml pass 3)");
      ("-share-slots", Arg.Set Program2DataRwhile.share_slots,
       "p2d: give variables with disjoint live ranges the same store slot \
        (shortens the self-interpreter's store.  Sound for EXECUTION only -- \

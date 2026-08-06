@@ -143,19 +143,30 @@ let hot_vars : bool ref = ref true
    pass 2.  Subsumes -hot-vars (it renumbers too), so it wins if both are set. *)
 let share_slots : bool ref = ref false
 
+(* ./ri -p2d -static-vars X,Y : names of the subject's STATIC variables, pushed
+   to the end of the numbering so the dynamic ones -- the only ones that survive
+   into a residual -- get the short unary indices.  See Optimize.ml pass 3. *)
+let static_vars : string list ref = ref []
+
 (* Also settable by environment variable, so the drivers that do not parse
    command lines (test-suite, measure_proj, specsize) can be run both ways:
      RWHILE_HOT_VARS=1 ./measure_proj      RWHILE_SHARE_SLOTS=1 ./measure_proj *)
 let () =
   if Sys.getenv_opt "RWHILE_FIRST_OCCURRENCE_VARS" <> None then hot_vars := false;
-  if Sys.getenv_opt "RWHILE_SHARE_SLOTS" <> None then share_slots := true
+  if Sys.getenv_opt "RWHILE_SHARE_SLOTS" <> None then share_slots := true;
+  (match Sys.getenv_opt "RWHILE_STATIC_VARS" with
+   | Some s when s <> "" -> static_vars := String.split_on_char ',' s
+   | _ -> ())
 
 let program2data (p : program) : valT =
   let p2 = MacroRwhile.expMacProgram p in
   let sub =
     if !share_slots then Optimize.slot_alloc p2
     else
-      let vs = if !hot_vars then Optimize.var_order p2 else EvalRwhile.varProgram p2 in
+      let vs0 = if !hot_vars then Optimize.var_order p2 else EvalRwhile.varProgram p2 in
+      let vs = match !static_vars with
+        | [] -> vs0
+        | ss -> Optimize.order_static_last (map (fun s -> RIdent s) ss) vs0 in
       let rec incseq m n = if m = n then [m] else m :: incseq (m+1) n in
       let ws = map (fun n -> RIdent (string_of_int n)) (incseq 1 (length vs)) in
       combine vs ws in

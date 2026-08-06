@@ -78,6 +78,34 @@ let weight_of (p : program) : rIdent -> int =
   let ws = (x, 1) :: (y, 1) :: wcom 1 c in
   fun v -> List.fold_left (fun a (u, k) -> if u = v then a + k else a) 0 ws
 
+(* PASS 3: static variables last.
+ *
+ *   Pass 1 minimises the SOURCE encoding.  The residual of a specialisation is a
+ *   different objective, and measuring all 120 numberings of ri_min showed how
+ *   different: the fp1 residual for swap ranges over 83..115 nodes and for id
+ *   over 39..79 -- purely from how the subject's variables are numbered, with
+ *   the best numbering having a LARGER source encoding (171 vs 163 nodes).
+ *
+ *   The relationship is exactly linear.  Averaging over all numberings by where
+ *   the one static variable (ri_min's `Op`) sits:
+ *
+ *      position of Op    1      2      3      4      5
+ *      mean |residual|   109.0  104.0   99.0   94.0   89.0
+ *
+ *   Five nodes per position, because only DYNAMIC variables survive into the
+ *   residual: moving a static variable later shifts every dynamic index down by
+ *   one, and a variable index is a unary numeral, so each of the residual's
+ *   dynamic-variable occurrences loses one cons.  The rule that follows is the
+ *   same frequency argument as pass 1, applied to the RESIDUAL instead of the
+ *   source: give the smallest numbers to the variables that survive.
+ *
+ *   We cannot know the residual before specialising, but the binding-time
+ *   division is an input to it -- so the caller names the static variables and
+ *   they go last. *)
+let order_static_last (statics : rIdent list) (vs : rIdent list) : rIdent list =
+  let is_static v = List.mem v statics in
+  List.filter (fun v -> not (is_static v)) vs @ List.filter is_static vs
+
 let var_order (p : program) : rIdent list =
   let weight = weight_of p in
   let vs = EvalRwhile.varProgram p in
