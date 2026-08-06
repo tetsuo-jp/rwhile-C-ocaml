@@ -848,7 +848,29 @@ macro SPEC-STEP-AV(Cd, Cd', RCode)
       * residualized earlier.  Both stagings therefore land before both
       * consumptions, and the shared working slot is occupied twice.  The fix is
       * to emit each rehome immediately after the staging that produced it, not
-      * at the end -- a scheduling change, with no new residual content. *)
+      * at the end -- a scheduling change, with no new residual content.
+      *
+      * WHY THAT IS NOT A ONE-LINE MOVE (traced 2026-08-07 by putting `show` at
+      * every RCode emission point and reading the order).  The emission sequence
+      * for swap ends:
+      *
+      *     ... rehome, rehome, assdyn, assdyn, assdyn, assdyn
+      *
+      * The two rehomes come out ADJACENT because they are the two var leaves of
+      * ONE pattern write, and both of their AVs reference the SAME slot (ri_fp3's
+      * working register), not each other -- so the round-8 transposition
+      * detector, which looks for a 2-cycle between the two leaves, does not fire.
+      * The four assdyn are the two moves that refill that shared slot, emitted
+      * separately.  Correct execution needs them interleaved
+      * (refill, deliver, refill, deliver); the emitter has no notion of the
+      * dependency on the shared slot.
+      *
+      * A design that removes the dependency instead of scheduling around it:
+      * capture the value into a FRESH temp at the moment the alias is created,
+      * and deliver from that temp at write time.  Each rehome then depends only
+      * on its own temp, so order stops mattering.  That needs a temp ALLOCATOR;
+      * TEMP-IDX currently returns one fixed index, which SWAP-VIA-TEMP can use
+      * precisely because it consumes it immediately. *)
      PAT-WRITE-ITER(RpQ, RpAV, RCode);
      Arg <= cons RpQ RpR
    else
