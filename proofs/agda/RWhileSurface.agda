@@ -28,10 +28,10 @@ module RWhileSurface where
 
 open import Data.Nat using (ℕ; zero; suc; _+_)
 open import Data.Nat.Properties using (+-suc; +-identityʳ)
-open import Data.List using (List; []; _∷_)
+open import Data.List using (List; []; _∷_; length; map)
 open import Data.Maybe using (Maybe; just; nothing)
 open import Data.Bool using (Bool; true; false)
-open import Data.Product using (_×_; _,_; Σ; Σ-syntax)
+open import Data.Product using (_×_; _,_; Σ; Σ-syntax; proj₁; proj₂)
 open import Relation.Nullary using (¬_)
 open import Relation.Binary.PropositionalEquality
   using (_≡_; refl; sym; trans; cong; subst)
@@ -334,3 +334,66 @@ for-iter-step : ∀ {x t body w y z k m}
 for-iter-step {x} {t} keep nxt ntx gwt di db
   with incr-restores-scratch nxt ntx gwt di
 ... | gx , gt , _ = trans (keep db) gx , gt
+
+------------------------------------------------------------------------
+-- 10.  The dispatch cost of a `case`.
+--
+--     `case Scrut yields Result of ... end` expands (src/Desugar.ml) to a NEST
+--     of conditionals: arm i is guarded by its own entry test and its else
+--     branch is the nest of the arms after it, the last arm being the
+--     fall-through.  The arm BODIES contain pattern replacements, which the
+--     timed core does not have -- so they are abstracted as opaque commands
+--     here.  The dispatch itself is pure core, and that is what is measured.
+--
+--     Two things fall out:
+--
+--     * the overhead of reaching an arm is EXACTLY its index -- one conditional
+--       node per arm skipped (matches ./ri -steps: 8 / 9 / 10 steps for the
+--       last arm of a 2 / 3 / 4-arm case);
+--     * getting there requires every skipped arm's EXIT assertion to be false
+--       at the final store.  That is precisely what Desugar.ml's check "the
+--       output patterns must have pairwise-disjoint discriminants" buys, and
+--       why the check is not optional.
+
+CaseArm : Set
+CaseArm = Exp × Cmd × Exp        -- entry test, body, exit assertion
+
+caseNest : List CaseArm → Cmd → Cmd
+caseNest []                  last = last
+caseNest ((e , c , f) ∷ arms) last = cond e c (caseNest arms last) f
+
+-- every expression in the list is false in store s
+data AllFalse (s : Store) : List Exp → Set where
+  []  : AllFalse s []
+  _∷_ : ∀ {e es} → evalT s e ≡ just false → AllFalse s es → AllFalse s (e ∷ es)
+
+tests exits : List CaseArm → List Exp
+tests = map proj₁
+exits = map (λ a → proj₂ (proj₂ a))
+
+caseNest-cost : ∀ arms {last s t k}
+              → AllFalse s (tests arms)
+              → caseNest arms last ⊢ s ⇒ t ∣ k
+              → Σ[ m ∈ ℕ ] ((last ⊢ s ⇒ t ∣ m) × (k ≡ length arms + m))
+caseNest-cost []                   _         d = _ , d , refl
+caseNest-cost ((e , c , f) ∷ arms) (fe ∷ af) (e-else _ d _)
+  with caseNest-cost arms af d
+... | m , dl , refl = m , dl , refl
+caseNest-cost ((e , c , f) ∷ arms) (fe ∷ _)  (e-then te _ _)
+  with trans (sym fe) te
+... | ()
+
+-- The exit assertion of every skipped arm must be FALSE at the answer.  This is
+-- the formal content of Desugar.ml's disjointness check on the OUTPUT patterns:
+-- without it an outer arm would close on an inner arm's result, and the case
+-- would not be invertible.
+caseNest-exits-false : ∀ arms {last s t k}
+                     → AllFalse s (tests arms)
+                     → caseNest arms last ⊢ s ⇒ t ∣ k
+                     → AllFalse t (exits arms)
+caseNest-exits-false []                   _         _               = []
+caseNest-exits-false ((e , c , f) ∷ arms) (fe ∷ af) (e-else _ d tf)  =
+  tf ∷ caseNest-exits-false arms af d
+caseNest-exits-false ((e , c , f) ∷ arms) (fe ∷ _)  (e-then te _ _)
+  with trans (sym fe) te
+... | ()

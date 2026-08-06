@@ -291,6 +291,8 @@ data _⊩_⇒_∣_ : SCmd → Store → Store → ℕ → Set where
 | `rest-exits-at` / `loop-exits-at` | 何周したかによらず、脱出テストが `=? X B` のループは **X = B で止まる**（`Rest` の帰納。本体への仮定は一切不要） |
 | `loop-body-runs` | 本体は**少なくとも 1 回**走る（`e-loop` が `Rest` を見る前に D を走らせるので、`for X = A to A` でも実行される） |
 | `for-iter-step` | 本体がカウンタを触らないなら、1 周でカウンタは**ちょうど nil 1 つ分**伸び、一時変数は nil に戻る |
+| `caseNest-cost` | `case` の腕 i に到達する手間は**ちょうど i**（飛ばした腕 1 つにつき条件分岐ノード 1 つ）。`./ri -steps` の実測（2/3/4 腕の最終腕で 8/9/10 歩）と一致 |
+| `caseNest-exits-false` | 飛ばした腕の**出口表明はすべて最終ストアで偽**でなければならない。これが `Desugar.ml` の「出力パターンの判別子は互いに素」検査の形式的内容であり、検査が省けない理由 |
 
 `loop-exits-at` はカウンタが最後に nil になる**理由**を与える。ループが X = B を
 残すので、閉じ側の `X ^= B` が消去になる。従来は出口の表明からしか分かっていなかった。
@@ -328,7 +330,7 @@ data _⊩_⇒_∣_ : SCmd → Store → Store → ℕ → Set where
 | `assert` | **証明済み** |
 | `skip` | タイムド核の `skip` そのもの（コスト差は `cost-split` が説明） |
 | `push` / `pop` / `X <-> Y` | **証明済み**（`RWhilePushPop.agda`、`RWhileCRep` 層） |
-| `case` | 反転については `RWhileCaseInv` で証明済み。コストは未 |
+| `case` | 反転は `RWhileCaseInv`、**選択コストと出口表明の役割は `RWhileSurface.caseNest-cost` / `caseNest-exits-false`**（腕本体は不透明な `Cmd` として抽象化。本体が含む `<=` はタイムド核に無いため） |
 
 `--safe`・postulate 0・hole 0。`check.sh --si` は PASS=30 FAIL=0（181 秒）。
 
