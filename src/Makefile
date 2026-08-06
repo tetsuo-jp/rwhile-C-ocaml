@@ -29,6 +29,17 @@ run-tests: test-suite
 d2p: BNFC_Util.ml AbsRwhile.ml PrintRwhile.ml ParRwhile.mli ParRwhile.ml LexRwhile.ml Desugar.ml InvRwhile.ml Subst.ml MacroRwhile.ml EvalRwhile.ml Optimize.ml Program2DataRwhile.ml Core.ml d2p.ml
 	$(OCAMLC) -o $@ $^
 
+# dump_vars / dump_vars_hy: print a program's p2d variable order, and its
+# variable COUNT with or without -hygienic-macros (RWHILE_HYGIENIC=1).  The
+# counts quoted in HYGIENIC_MACROS.md and RWHILE_S.md come from these.
+COMMON=BNFC_Util.ml AbsRwhile.ml PrintRwhile.ml ParRwhile.mli ParRwhile.ml LexRwhile.ml Desugar.ml InvRwhile.ml Subst.ml MacroRwhile.ml EvalRwhile.ml Optimize.ml Program2DataRwhile.ml Core.ml
+
+dump_vars: $(COMMON) dump_vars.ml
+	$(OCAMLC) -o $@ $^
+
+dump_vars_hy: $(COMMON) dump_vars_hy.ml
+	$(OCAMLC) -o $@ $^
+
 # measure_proj: baseline the Futamura-projection residual sizes (idea 1).
 measure_proj: BNFC_Util.ml AbsRwhile.ml PrintRwhile.ml ParRwhile.mli ParRwhile.ml LexRwhile.ml Desugar.ml InvRwhile.ml Subst.ml MacroRwhile.ml EvalRwhile.ml Optimize.ml Program2DataRwhile.ml Core.ml Simp.ml measure_proj.ml
 	$(OCAMLC) -o $@ $^

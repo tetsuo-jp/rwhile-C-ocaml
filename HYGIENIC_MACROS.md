@@ -110,8 +110,8 @@ alpha 変換は変数を 4〜5 倍に増やすため、衛生モードでは足�
 
 | プログラム | 通常 | 衛生 |
 |---|---|---|
-| `spec_av` | 219 | **897** |
-| `spec_av_rev` | 233 | **1127** |
+| `spec_av` | 230 | **806** |
+| `spec_av_rev` | 244 | **813** |
 | `spec` | 155 | 651 |
 | `ri` | 49 | 257 |
 | `ri_min`（マクロなし） | 5 | 5 |
@@ -121,12 +121,12 @@ alpha 変換は変数を 4〜5 倍に増やすため、衛生モードでは足�
 `specsize` を `RWHILE_HYGIENIC=1` 対応にしたので、衛生モード用に寸法を出せる:
 
 ```bash
-RWHILE_HYGIENIC=1 ./specsize -n ../examples/spec_av.rwhile          # => 897
+RWHILE_HYGIENIC=1 ./specsize -n ../examples/spec_av.rwhile          # => 806
 RWHILE_HYGIENIC=1 ./specsize ../examples/spec_av.rwhile \
                              ../examples/spec_av.rwhile > /tmp/sa.rwhile
 ```
 
-**検証済み**: こうして `FpN` を 905 に拡げると `second-projection` は衛生モードで
+**検証済み**: こうして `FpN` を十分に拡げると `second-projection` は衛生モードで
 **2 件とも通過**（15.95 秒）。つまりこの失敗は寸法の問題であって、
 `spec_av` が不衛生だからではない。
 

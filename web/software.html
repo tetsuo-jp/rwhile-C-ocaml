@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="style.css">
+  <title>ソフトウェア・ツール - 横山研究室</title>
+  <style>
+@media (max-width: 640px) {
+    }
+  </style>
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="index.html" class="tb-brand">横山研究室</a>
+  <span class="tb-crumb">&gt; ソフトウェア・ツール</span>
+  <span class="tb-affil"><a href="https://www.nanzan-u.ac.jp/" target="_blank">南山大学</a> <a href="https://www.st.nanzan-u.ac.jp/" target="_blank">理工学部</a> <a href="https://www.st.nanzan-u.ac.jp/elecomm/" target="_blank">電子情報工学科</a></span>
+</nav>
+
+<div class="page-title"><h1>ソフトウェア・ツール</h1></div>
+
+<div class="ai-note">AI（ChatGPT）を利用して生成されたページです</div>
+
+<!-- Janus Playground -->
+<div class="section-label">可逆プログラミング言語</div>
+
+<div class="tool-card">
+  <div class="tool-header">
+    <div class="tool-icon">&#x1F504;</div>
+    <div class="tool-info">
+      <h2>Janus Playground</h2>
+      <div class="tool-meta">
+        <span>可逆言語</span>
+        <span>ブラウザで実行可能</span>
+      </div>
+    </div>
+  </div>
+  <div class="tool-body">
+    <p>
+      <strong>Janus</strong>は、世界で初めて設計された可逆プログラミング言語のひとつです。
+      すべてのプログラムを逆方向にも実行できるという特徴を持っています。
+    </p>
+    <p>
+      Janus Playgroundでは、ブラウザ上でJanusプログラムを書いて実行することができます。
+      インストール不要で、可逆プログラミングを体験できます。
+    </p>
+    <ul>
+      <li>変数の値を「増やす」操作（+=）に対して「減らす」操作（-=）が対応</li>
+      <li>if文には正方向と逆方向の両方の条件が必要</li>
+      <li>プログラム全体を逆実行できる</li>
+    </ul>
+    <a href="http://tetsuo.jp/janus-playground/" target="_blank" class="tool-link">Janus Playground を試す</a>
+  </div>
+</div>
+
+<!-- Jana インタプリタ -->
+<div class="tool-card">
+  <div class="tool-header">
+    <div class="tool-icon">&#x1F6E0;</div>
+    <div class="tool-info">
+      <h2>Jana / Janus インタプリタ</h2>
+      <div class="tool-meta">
+        <span>Haskell</span>
+        <span>GitHub</span>
+      </div>
+    </div>
+  </div>
+  <div class="tool-body">
+    <p>
+      Janus言語のインタプリタ実装です。Haskellで書かれており、
+      コマンドラインから可逆プログラムを実行できます。
+    </p>
+    <ul>
+      <li>正方向・逆方向の実行をサポート</li>
+      <li>Haskell Stack でビルド可能</li>
+      <li>研究・教育目的で利用可能</li>
+    </ul>
+    <a href="https://github.com/kirkedal/Jana-JanusInterp" target="_blank" class="tool-link">GitHub リポジトリ</a>
+  </div>
+</div>
+
+<!-- R-WHILE インタプリタ -->
+<div class="tool-card">
+  <div class="tool-header">
+    <div class="tool-icon">&#x1F333;</div>
+    <div class="tool-info">
+      <h2>R-WHILE インタプリタ</h2>
+      <div class="tool-meta">
+        <span>OCaml</span>
+        <span>可逆言語</span>
+        <span>GitHub</span>
+      </div>
+    </div>
+  </div>
+  <div class="tool-body">
+    <p>
+      <strong>R-WHILE</strong>は、木構造データを扱う最小限の可逆プログラミング言語です。
+      可逆チューリング完全であることが証明されており、可逆自己インタプリタも存在します。
+    </p>
+    <ul>
+      <li>正方向の実行・逆プログラムの自動生成</li>
+      <li>マクロ展開・プログラムの木データへの変換（P2D）</li>
+      <li>Alcotest による 71 件のテストスイート付き</li>
+      <li>ブラウザ上で実行可能な Playground を提供</li>
+    </ul>
+    <a href="rwhile.html" class="tool-link">R-WHILE の詳細</a>
+    <a href="https://github.com/tetsuo-jp/rwhile-C-ocaml" target="_blank" class="tool-link">GitHub リポジトリ</a>
+  </div>
+</div>
+
+<!-- ROOPL++ インタプリタ -->
+<div class="tool-card">
+  <div class="tool-header">
+    <div class="tool-icon">&#x1F527;</div>
+    <div class="tool-info">
+      <h2>ROOPL++ インタプリタ</h2>
+      <div class="tool-meta">
+        <span>OCaml</span>
+        <span>GitHub</span>
+      </div>
+    </div>
+  </div>
+  <div class="tool-body">
+    <p>
+      <strong>ROOPL++</strong>は、可逆オブジェクト指向プログラミング言語です。
+      横山研究室で開発されたインタプリタはOCamlで実装されており、
+      プログラムの逆実行（inverse）の生成にも対応しています。
+    </p>
+    <ul>
+      <li>可逆オブジェクト指向プログラミングをサポート</li>
+      <li><code>-inverse</code> フラグで逆プログラムを表示</li>
+      <li>標準ライブラリ付き</li>
+      <li>Webインターフェースでブラウザからも実行可能</li>
+    </ul>
+    <a href="https://github.com/yokoyama-lab/ROOPLPP-interpreter" target="_blank" class="tool-link">GitHub リポジトリ</a>
+  </div>
+</div>
+
+<!-- 学生の研究成果 -->
+<div class="section-label">学生の研究成果（論文）</div>
+
+<div class="tool-card">
+  <div class="tool-header">
+    <div class="tool-icon">&#x1F4C4;</div>
+    <div class="tool-info">
+      <h2>横山研 学生の発表論文</h2>
+      <div class="tool-meta">
+        <span>学内アクセス可</span>
+      </div>
+    </div>
+  </div>
+  <div class="tool-body">
+    <p>横山研究室の学生が執筆した論文の一部です。学内ネットワークからアクセスできます。</p>
+    <ul>
+      <li><a href="http://id.nii.ac.jp/1001/00102871/">可逆プログラミング言語の引数渡し機構の拡張</a>（情報処理学会）</li>
+      <li><a href="http://doi.org/10.14923/transinfj.2018JDL8008">可逆プログラミング言語R-WHILEの可逆チューリング完全性</a>（電子情報通信学会）</li>
+      <li><a href="http://doi.org/10.14923/transinfj.2018PDP0021">二分木の辞書順のランク計算の効率的なクリーン可逆シミュレーション</a>（電子情報通信学会）</li>
+      <li><a href="https://doi.org/10.1007/978-3-319-73216-9_11">Clean Reversible Simulations of Ranking Binary Trees</a>（Springer）</li>
+      <li><a href="http://id.nii.ac.jp/1001/00196300/">あるクラフトゲームの計算モデルについて</a>（情報処理学会 全国大会）</li>
+      <li><a href="http://id.nii.ac.jp/1001/00196277">円板上の非圧縮流の反転の解析</a>（情報処理学会 全国大会）</li>
+      <li><a href="https://www.jp-c.jp/upload/rengo2019_0826/pdf/G4-4.pdf">量子桁上げ伝播加算器回路の深さの効率化について</a>（東海支部連合大会）</li>
+    </ul>
+    <div class="highlight">教員の全業績は<a href="publications.html">業績一覧ページ</a>をご覧ください。</div>
+  </div>
+</div>
+
+<footer>
+  &copy; 2026 <a href="index.html">横山研究室</a> &ndash;
+  <a href="https://www.nanzan-u.ac.jp/">南山大学</a>
+  <a href="https://www.st.nanzan-u.ac.jp/">理工学部</a>
+  <a href="https://www.st.nanzan-u.ac.jp/elecomm/">電子情報工学科</a>
+</footer>
+
+</body>
+</html>

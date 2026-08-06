@@ -20,6 +20,7 @@ src/BNFC_Util.ml
 src/LexRwhile.mll
 src/LexRwhile.ml
 src/ParRwhile.mly
+src/ParRwhile.mly.ml
 src/ParRwhile.ml
 src/ParRwhile.mli
 src/PrintRwhile.ml

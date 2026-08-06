@@ -1,0 +1,21 @@
+(* Array lookup - rewritten using -array extension *)
+(* Original: lookup.rwhile  (uses AUX / INV-AUX macros) *)
+(*
+ * Change: replace the AUX loop + LOOKUP/UPDATE macros with direct
+ *   array-index syntax:
+ *     X ^= get Vl[J]    -- read  (non-destructive, like LOOKUP)
+ *     Vl[J] ^= X        -- write (XOR-update,       like UPDATE)
+ *
+ * Index encoding (same as the AUX loop):
+ *   0 = nil,  1 = (nil.nil),  2 = (nil.(nil.nil)), ...
+ *)
+
+read X;
+  Vl ^= ('00.('11.('22.nil)));  (* initialise store with three entries *)
+  J  ^= (nil.(nil.nil));        (* index J = 2  ->  entry '22          *)
+
+  X ^= get Vl[J];               (* LOOKUP: X := Vl[J] = '11            *)
+
+  J  ^= (nil.(nil.nil));        (* restore J to nil                     *)
+  Vl ^= ('00.('11.('22.nil))); (* restore Vl to nil                    *)
+write X

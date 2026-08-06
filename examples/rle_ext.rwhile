@@ -1,0 +1,36 @@
+(* run-length encoding - rewritten using -local and -autofi *)
+(* Original: rle.rwhile *)
+(*
+ * Changes:
+ *  1. (-local)  F is declared as a scoped local variable.
+ *               The interpreter checks F = nil at every "end", so a missing
+ *               "F ^= (nil.nil)" cleanup is caught immediately at block exit
+ *               rather than only at program end.
+ *
+ *  2. (-autofi) "if =? S nil then ... fi =? S nil" and
+ *               "if =? C1 (hd S) else ... fi =? C1 (hd S)"
+ *               are replaced by "iff ... fi".
+ *               S, C1, and hd S are never modified inside the branches,
+ *               so the auto-assertion is valid.
+ *)
+read S;
+  from  =? S' nil
+  loop  cons C1 S <= S;
+        local F in
+          from  =? N nil
+          do    iff =? S nil then
+                  F ^= (nil.nil)         (* S exhausted: stop *)
+                else
+                  iff =? C1 (hd S) else
+                    F ^= (nil.nil)       (* different char: stop *)
+                  fi                     (* same char: do nothing *)
+                fi
+          loop  cons C2 S <= S;
+                C2 ^= C1;               (* verify and consume duplicate *)
+                N <= cons nil N          (* increment run length *)
+          until F;
+          F ^= (nil.nil)                 (* clear flag -- checked by local *)
+        end;
+        S' <= cons (cons C1 N) S'        (* emit (char . count) *)
+  until =? S nil;
+write S'

@@ -1,0 +1,24 @@
+(* length - rewritten using -local extension *)
+(* Original: length.rwhile *)
+(* Change: variable T in each loop body is declared as a scoped local.
+ *   The interpreter checks that T is nil at every "end",
+ *   catching cleanup bugs early instead of only at program exit. *)
+(* Given a list X of length N, return (X.N) *)
+read X;
+  from  =? X' nil
+  loop  N <= cons nil N;
+        local T in
+          cons T X <= X;     (* T := head of X, X := tail *)
+          X' <= cons T X'    (* push T onto X', T cleared *)
+        end
+  until =? X nil;
+
+  (* reverse X' back into X *)
+  from  =? X nil
+  loop  local T in
+          cons T X' <= X';   (* T := head of X', X' := tail *)
+          X <= cons T X      (* push T onto X, T cleared *)
+        end
+  until =? X' nil;
+  X <= cons X N;
+write X

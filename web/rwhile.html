@@ -1,0 +1,880 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="style.css">
+<title>R-WHILE インタプリタ - 横山研</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+.breadcrumb {
+  max-width: 880px;
+  margin: 14px auto 0;
+  padding: 0 16px;
+  font-size: 0.82rem;
+  color: #666;
+}
+.breadcrumb a { color: var(--primary-light); text-decoration: none; }
+.breadcrumb a:hover { text-decoration: underline; }
+main {
+  max-width: 880px;
+  margin: 24px auto 40px;
+  padding: 0 16px;
+}
+.card p, .card li {
+  font-size: 0.95rem;
+  margin-bottom: 10px;
+}
+.card ul, .card ol {
+  padding-left: 1.5em;
+  margin-bottom: 12px;
+}
+.info-box strong { color: var(--primary); }
+.code-box {
+  background: #1e2a38;
+  color: #e0e8f0;
+  border-radius: 8px;
+  padding: 20px 24px;
+  margin: 16px 0;
+  font-family: "Courier New", monospace;
+  font-size: 0.9rem;
+  line-height: 1.8;
+  overflow-x: auto;
+}
+.code-box .comment { color: #6a9955; }
+.code-box .keyword { color: #569cd6; }
+.code-box .op { color: #d4d4d4; }
+.code-box .var { color: #9cdcfe; }
+.code-box .num { color: #b5cea8; }
+.arrow-box {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin: 16px 0;
+  flex-wrap: wrap;
+}
+.arrow-box .state {
+  background: var(--bg);
+  border: 1px solid #dde2e8;
+  border-radius: 8px;
+  padding: 12px 20px;
+  font-family: monospace;
+  font-size: 0.95rem;
+  text-align: center;
+}
+.arrow-box .arrow {
+  font-size: 1.5rem;
+  color: var(--primary-light);
+}
+.lang-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 14px 0;
+  font-size: 0.9rem;
+}
+.lang-table th, .lang-table td {
+  padding: 8px 12px;
+  border: 1px solid #dde2e8;
+  text-align: left;
+}
+.lang-table th {
+  background: var(--primary);
+  color: #fff;
+  font-weight: 600;
+}
+.lang-table tr:nth-child(even) { background: #f8f9fb; }
+.tool-btn {
+  display: inline-block;
+  background: #1565c0;
+  color: #fff !important;
+  text-decoration: none !important;
+  padding: 10px 20px;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin: 4px 8px 4px 0;
+  transition: background 0.2s;
+}
+.tool-btn:hover { background: #0d47a1; color: #fff !important; }
+.tool-btn.secondary {
+  background: #fff;
+  color: var(--primary) !important;
+  border: 1px solid var(--primary-light);
+}
+.tool-btn.secondary:hover { background: var(--bg); }
+.arch-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin: 16px 0;
+}
+.arch-item {
+  background: var(--bg);
+  border: 1px solid #dde2e8;
+  border-radius: 8px;
+  padding: 16px 20px;
+}
+.arch-item h4 {
+  color: var(--primary);
+  font-size: 0.95rem;
+  margin-bottom: 6px;
+}
+.arch-item p {
+  font-size: 0.88rem;
+  margin-bottom: 0;
+}
+.arch-item code {
+  background: #edf2f8;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 0.85rem;
+}
+.playground-container {
+  background: #1e2a38;
+  border-radius: 10px;
+  overflow: hidden;
+  margin: 16px 0;
+}
+.playground-tabs {
+  display: flex;
+  background: #162536;
+}
+.playground-tabs label {
+  padding: 10px 20px;
+  color: #b8c8d8;
+  cursor: pointer;
+  font-size: 0.88rem;
+  font-weight: 600;
+  border-bottom: 2px solid transparent;
+  transition: all 0.2s;
+}
+.playground-tabs label:hover,
+.playground-tabs label.active {
+  color: #fff;
+  border-bottom-color: #4a9eda;
+}
+.playground-area {
+  display: flex;
+  gap: 0;
+}
+.playground-area textarea {
+  flex: 1;
+  background: #1e2a38;
+  color: #e0e8f0;
+  border: none;
+  padding: 20px;
+  font-family: "Courier New", monospace;
+  font-size: 0.88rem;
+  line-height: 1.7;
+  resize: vertical;
+  min-height: 200px;
+  outline: none;
+}
+.playground-area textarea:first-child {
+  border-right: 1px solid #2d3d4e;
+}
+.playground-area textarea::placeholder {
+  color: #4a5a6a;
+}
+.playground-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
+  background: #162536;
+  flex-wrap: wrap;
+}
+.playground-controls button {
+  padding: 8px 20px;
+  border-radius: 5px;
+  border: none;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.btn-run {
+  background: #2e7d32;
+  color: #fff;
+}
+.btn-run:hover { background: #1b5e20; }
+.btn-inv {
+  background: #1565c0;
+  color: #fff;
+}
+.btn-inv:hover { background: #0d47a1; }
+.btn-p2d {
+  background: #6a1b9a;
+  color: #fff;
+}
+.btn-p2d:hover { background: #4a148c; }
+.btn-exp {
+  background: #e65100;
+  color: #fff;
+}
+.btn-exp:hover { background: #bf360c; }
+.btn-clear {
+  background: #455a64;
+  color: #fff;
+}
+.btn-clear:hover { background: #37474f; }
+.playground-controls .sep {
+  width: 1px;
+  height: 24px;
+  background: #2d3d4e;
+}
+.example-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 20px 14px;
+  background: #162536;
+}
+.example-chips span {
+  font-size: 0.78rem;
+  color: #8899aa;
+  padding-top: 2px;
+}
+.example-chips button {
+  background: #2d3d4e;
+  color: #b8c8d8;
+  border: none;
+  padding: 4px 14px;
+  border-radius: 14px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.example-chips button:hover {
+  background: #3d4d5e;
+  color: #fff;
+}
+#output-area {
+  width: 100%;
+  background: #0d1a26;
+  color: #a0d0a0;
+  border: none;
+  border-top: 1px solid #2d3d4e;
+  padding: 16px 20px;
+  font-family: "Courier New", monospace;
+  font-size: 0.88rem;
+  line-height: 1.6;
+  min-height: 80px;
+  resize: vertical;
+  outline: none;
+}
+.keyword-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  list-style: none;
+  padding: 0;
+}
+.keyword-list li {
+  background: #e8eef5;
+  color: var(--primary);
+  padding: 4px 14px;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  margin-bottom: 0;
+}
+@media (max-width: 600px) {
+  .arch-grid { grid-template-columns: 1fr; }
+  .playground-area { flex-direction: column; }
+  .playground-area textarea:first-child { border-right: none; border-bottom: 1px solid #2d3d4e; }
+}
+</style>
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="index.html" class="tb-brand"><span class="ylab">Y Lab</span></a>
+  <span class="tb-crumb">&gt; R-WHILE インタプリタ</span>
+  
+</nav>
+
+<div class="page-title"><h1>可逆プログラミング言語 R-WHILE とそのインタプリタ</h1></div>
+
+<div class="breadcrumb">
+  <a href="index.html">横山研トップ</a> &gt; <a href="software.html">ソフトウェア</a> &gt; R-WHILE インタプリタ
+</div>
+
+
+<main>
+
+  <!-- R-WHILEとは -->
+  <div class="card">
+    <h2>R-WHILE とは</h2>
+    <p><strong>R-WHILE</strong> は、可逆計算の理論研究を目的として設計された最小限の<strong>可逆プログラミング言語</strong>です。
+    <a href="janus.html" style="color:var(--primary-light)">Janus</a> が整数を扱うのに対し、R-WHILE はすべてのデータを<strong>木構造（二分木）</strong>で表現します。</p>
+
+    <p>R-WHILE は<strong>可逆チューリング完全</strong>であることが証明されており、
+    任意の可逆計算をR-WHILEプログラムとして表現できます。
+    さらに、R-WHILE で書かれた<strong>可逆自己インタプリタ</strong>（自分自身を解釈実行するプログラム）が存在することも示されています。</p>
+
+    <div class="info-box">
+      <strong>理論的な重要性</strong>：R-WHILE は、可逆計算の理論的限界を探るための「実験室」として機能します。
+      最小限の構文で可逆チューリング完全性を達成しているため、可逆計算の本質的な構造を研究するのに適しています。
+    </div>
+  </div>
+
+  <!-- データ構造 -->
+  <div class="card">
+    <h2>データ構造：木（ツリー）</h2>
+    <p>R-WHILE のデータはすべて<strong>二分木</strong>です。基本的なデータ型は以下の3種類です。</p>
+
+    <table class="lang-table">
+      <tr><th>型</th><th>構文</th><th>説明</th></tr>
+      <tr><td>nil</td><td><code>nil</code></td><td>空の木（何もないことを表す）</td></tr>
+      <tr><td>atom</td><td><code>'a</code>, <code>'hello</code>, <code>'32</code></td><td>アトム（名前付きの葉ノード）</td></tr>
+      <tr><td>cons</td><td><code>(A . B)</code></td><td>二分木の節（左の子 A と右の子 B）</td></tr>
+    </table>
+
+    <p>例えば、リスト <code>[1, 2, 3]</code> は <code>('1.('2.('3.nil)))</code> と表現されます。
+    自然数 N は nil を N 個入れ子にした木 <code>(nil.(nil.(nil.nil)))</code>（= 3）で表現できます。</p>
+  </div>
+
+  <!-- 言語の構文 -->
+  <div class="card">
+    <h2>言語の構文</h2>
+    <p>R-WHILE プログラムは以下の要素から構成されます。</p>
+
+    <h3>プログラムの全体構造</h3>
+    <div class="code-box">
+<span class="keyword">read</span> <span class="var">X</span>;  <span class="comment">(* 入力変数 *)</span><br>
+&nbsp;&nbsp;<span class="comment">(* コマンド列 *)</span><br>
+<span class="keyword">write</span> <span class="var">Y</span>  <span class="comment">(* 出力変数 *)</span>
+    </div>
+
+    <h3>コマンド一覧</h3>
+    <table class="lang-table">
+      <tr><th>コマンド</th><th>構文</th><th>説明</th></tr>
+      <tr><td>可逆代入</td><td><code>X ^= E</code></td><td>変数 X と式 E の XOR 更新（可逆）</td></tr>
+      <tr><td>可逆置換</td><td><code>Q &lt;= R</code></td><td>パターン Q と R の間でデータを交換</td></tr>
+      <tr><td>条件分岐</td><td><code>if E then C else D fi F</code></td><td>入口条件 E・出口条件 F 付きの可逆 if</td></tr>
+      <tr><td>ループ</td><td><code>from E do C loop D until F</code></td><td>入口条件 E・出口条件 F 付きの可逆ループ</td></tr>
+      <tr><td>マクロ呼出</td><td><code>M(X, Y, ...)</code></td><td>マクロ M の呼び出し</td></tr>
+      <tr><td>逐次実行</td><td><code>C; D</code></td><td>C を実行した後に D を実行</td></tr>
+    </table>
+
+    <h3>式</h3>
+    <table class="lang-table">
+      <tr><th>式</th><th>構文</th><th>説明</th></tr>
+      <tr><td>cons</td><td><code>cons E F</code></td><td>二分木の構築</td></tr>
+      <tr><td>hd</td><td><code>hd E</code></td><td>木の左の子を取得</td></tr>
+      <tr><td>tl</td><td><code>tl E</code></td><td>木の右の子を取得</td></tr>
+      <tr><td>等値判定</td><td><code>=? E F</code></td><td>E と F が等しければ (nil.nil)、異なれば nil</td></tr>
+    </table>
+  </div>
+
+  <!-- サンプルプログラム -->
+  <div class="card">
+    <h2>サンプルプログラム</h2>
+
+    <h3>例1：Swap（2要素の交換）</h3>
+    <div class="code-box">
+<span class="keyword">read</span> <span class="var">X</span>;<br>
+&nbsp;&nbsp;<span class="keyword">cons</span> <span class="var">Y</span> <span class="var">Z</span> <span class="op">&lt;=</span> <span class="var">X</span>;<br>
+&nbsp;&nbsp;<span class="var">X</span> <span class="op">&lt;=</span> <span class="keyword">cons</span> <span class="var">Z</span> <span class="var">Y</span>;<br>
+<span class="keyword">write</span> <span class="var">X</span>
+    </div>
+    <div class="arrow-box">
+      <div class="state">入力: ('a . 'b)</div>
+      <div class="arrow">&rarr;</div>
+      <div class="state">出力: ('b . 'a)</div>
+    </div>
+
+    <h3>例2：Reverse（リストの反転）</h3>
+    <div class="code-box">
+<span class="keyword">read</span> <span class="var">Y</span>;<br>
+&nbsp;&nbsp;<span class="keyword">from</span> <span class="op">=?</span> <span class="var">X</span> <span class="keyword">nil</span> <span class="keyword">loop</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;(<span class="keyword">cons</span> <span class="var">Z</span> <span class="var">Y</span>) <span class="op">&lt;=</span> <span class="var">Y</span>;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="var">X</span> <span class="op">&lt;=</span> (<span class="keyword">cons</span> <span class="var">Z</span> <span class="var">X</span>)<br>
+&nbsp;&nbsp;<span class="keyword">until</span> <span class="op">=?</span> <span class="var">Y</span> <span class="keyword">nil</span>;<br>
+<span class="keyword">write</span> <span class="var">X</span>
+    </div>
+    <div class="arrow-box">
+      <div class="state">入力: ('1.('2.('3.nil)))</div>
+      <div class="arrow">&rarr;</div>
+      <div class="state">出力: ('3.('2.('1.nil)))</div>
+    </div>
+    <p>このプログラムを<strong>逆変換</strong>すると、入力と出力が入れ替わった逆プログラムが自動的に得られます。
+    逆プログラムは反転されたリストを元の順序に戻します。</p>
+
+    <h3>例3：Minus（引き算、マクロ使用）</h3>
+    <div class="code-box">
+<span class="keyword">macro</span> <span class="var">MINUS</span>(<span class="var">X</span>,<span class="var">Y</span>)<br>
+&nbsp;&nbsp;<span class="keyword">from</span> <span class="op">=?</span> <span class="var">Y'</span> <span class="keyword">nil</span><br>
+&nbsp;&nbsp;<span class="keyword">loop</span> <span class="keyword">cons</span> <span class="keyword">nil</span> <span class="var">X</span> <span class="op">&lt;=</span> <span class="var">X</span>;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="keyword">cons</span> <span class="keyword">nil</span> <span class="var">Y</span> <span class="op">&lt;=</span> <span class="var">Y</span>;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="var">Y'</span> <span class="op">&lt;=</span> <span class="keyword">cons</span> <span class="keyword">nil</span> <span class="var">Y'</span><br>
+&nbsp;&nbsp;<span class="keyword">until</span> <span class="op">=?</span> <span class="var">Y</span> <span class="keyword">nil</span>;<br>
+&nbsp;&nbsp;<span class="var">Y</span> <span class="op">&lt;=</span> <span class="var">Y'</span><br>
+<br>
+<span class="keyword">read</span> <span class="var">Z</span>;<br>
+&nbsp;&nbsp;<span class="keyword">cons</span> <span class="var">X</span> <span class="var">Y</span> <span class="op">&lt;=</span> <span class="var">Z</span>;<br>
+&nbsp;&nbsp;<span class="var">MINUS</span>(<span class="var">X</span>,<span class="var">Y</span>);<br>
+&nbsp;&nbsp;<span class="var">Z</span> <span class="op">&lt;=</span> <span class="keyword">cons</span> <span class="var">X</span> <span class="var">Y</span>;<br>
+<span class="keyword">write</span> <span class="var">Z</span>
+    </div>
+    <div class="arrow-box">
+      <div class="state">入力: (4 . 3)</div>
+      <div class="arrow">&rarr;</div>
+      <div class="state">出力: (1 . 3)</div>
+    </div>
+  </div>
+
+  <!-- インタプリタのアーキテクチャ -->
+  <div class="card">
+    <h2>インタプリタの構成</h2>
+    <p>R-WHILE インタプリタは OCaml で実装されており、BNFC（BNF Converter）で生成されたパーサと連携して動作します。</p>
+
+    <div class="arch-grid">
+      <div class="arch-item">
+        <h4>構文解析</h4>
+        <p>BNFC が文法定義 <code>Rwhile.cf</code> からレキサー・パーサ・AST型を自動生成します。</p>
+      </div>
+      <div class="arch-item">
+        <h4>マクロ展開 <code>MacroRwhile.ml</code></h4>
+        <p>マクロ定義を展開し、逆マクロ（<code>INV-M</code>）の呼び出しにも対応します。</p>
+      </div>
+      <div class="arch-item">
+        <h4>評価器 <code>EvalRwhile.ml</code></h4>
+        <p>可逆ストアモデルに基づいてプログラムを実行します。全変数がプログラム終了時に nil であることを検査します。</p>
+      </div>
+      <div class="arch-item">
+        <h4>逆変換器 <code>InvRwhile.ml</code></h4>
+        <p>任意のR-WHILEプログラムから、その逆プログラムを自動生成します。</p>
+      </div>
+      <div class="arch-item">
+        <h4>置換モジュール <code>Subst.ml</code></h4>
+        <p>変数の置換処理を共通化したモジュールです。マクロ展開やプログラム変換で利用されます。</p>
+      </div>
+      <div class="arch-item">
+        <h4>P2D変換 <code>Program2DataRwhile.ml</code></h4>
+        <p>R-WHILEプログラムを木構造データに変換します。自己インタプリタへの入力として使用されます。</p>
+      </div>
+    </div>
+
+    <h3>コマンドラインオプション</h3>
+    <table class="lang-table">
+      <tr><th>オプション</th><th>説明</th><th>使用例</th></tr>
+      <tr><td>（なし）</td><td>プログラムを実行</td><td><code>ri prog.rwhile data.val</code></td></tr>
+      <tr><td><code>-inverse</code></td><td>逆プログラムを生成して表示</td><td><code>ri -inverse prog.rwhile</code></td></tr>
+      <tr><td><code>-p2d</code></td><td>プログラムを木データに変換</td><td><code>ri -p2d prog.rwhile</code></td></tr>
+      <tr><td><code>-exp</code></td><td>マクロを展開して表示</td><td><code>ri -exp prog.rwhile</code></td></tr>
+    </table>
+  </div>
+
+  <!-- Playground -->
+  <div class="card">
+    <h2>R-WHILE Playground</h2>
+    <p>ブラウザ上で R-WHILE プログラムを入力し、実行・逆変換・マクロ展開・P2D変換を試すことができます。</p>
+
+    <div class="playground-container">
+      <div class="example-chips">
+        <span>例題:</span>
+        <button onclick="loadExample('swap')">Swap</button>
+        <button onclick="loadExample('reverse')">Reverse</button>
+        <button onclick="loadExample('minus')">Minus</button>
+        <button onclick="loadExample('rep')">Rep</button>
+        <button onclick="loadExample('if')">If</button>
+        <button onclick="loadExample('enumeration')">Enumeration</button>
+        <button onclick="loadExample('length')">Length</button>
+        <button onclick="loadExample('ri_id')">Self-interp (id)</button>
+        <button onclick="loadExample('ri_reverse')">Self-interp (reverse)</button>
+      </div>
+      <div class="playground-area">
+        <textarea id="prog-area" placeholder="R-WHILE プログラムを入力...">read Y;
+    from  =? X nil loop
+        cons Z Y <= Y;
+        X <= cons Z X
+    until =? Y nil;
+write X</textarea>
+        <textarea id="data-area" placeholder="入力データ...">('1.('2.('3.nil)))</textarea>
+      </div>
+      <div class="playground-controls">
+        <button class="btn-run" onclick="execute('run')">実行</button>
+        <button class="btn-inv" onclick="execute('inverse')">逆変換</button>
+        <button class="btn-exp" onclick="execute('expand')">マクロ展開</button>
+        <button class="btn-p2d" onclick="execute('p2d')">P2D変換</button>
+        <span class="sep"></span>
+        <button class="btn-clear" onclick="clearOutput()">出力クリア</button>
+      </div>
+      <textarea id="output-area" readonly placeholder="実行結果がここに表示されます..."></textarea>
+    </div>
+  </div>
+
+  <!-- ビルドとテスト -->
+  <div class="card">
+    <h2>ビルドとテスト</h2>
+
+    <h3>前提条件</h3>
+    <ul>
+      <li>OCaml（ocamlfind, ocamlyacc, extlib が必要）</li>
+      <li>BNFC（BNF Converter）</li>
+      <li>Alcotest（テスト実行時のみ）</li>
+    </ul>
+
+    <h3>ビルド手順</h3>
+    <div class="code-box">
+<span class="comment"># 依存パッケージのインストール</span><br>
+opam install extlib ocamlfind alcotest<br>
+<br>
+<span class="comment"># ビルド</span><br>
+cd src<br>
+make<br>
+<br>
+<span class="comment"># テスト実行（71テスト）</span><br>
+make run-tests
+    </div>
+
+    <h3>テストスイート</h3>
+    <p>Alcotest フレームワークによる 71 件のテストケースを用意しています。</p>
+    <table class="lang-table">
+      <tr><th>カテゴリ</th><th>テスト数</th><th>内容</th></tr>
+      <tr><td>store</td><td>10</td><td>ストア操作（insert, rupdate, update, all_cleared）</td></tr>
+      <tr><td>eval-exp</td><td>9</td><td>式評価（cons, hd, tl, =?, リテラル, エラーケース）</td></tr>
+      <tr><td>var-collect</td><td>2</td><td>変数名収集</td></tr>
+      <tr><td>inversion</td><td>8</td><td>コマンド反転, 二重反転不変性 inv(inv(p)) = p</td></tr>
+      <tr><td>substitution</td><td>5</td><td>変数置換</td></tr>
+      <tr><td>macro</td><td>4</td><td>マクロ展開, エラーケース</td></tr>
+      <tr><td>p2d</td><td>4</td><td>プログラム→データ変換</td></tr>
+      <tr><td>eval-integration</td><td>13</td><td>完全なプログラム実行</td></tr>
+      <tr><td>inv-eval</td><td>2</td><td>逆プログラムの実行検証</td></tr>
+      <tr><td>roundtrip</td><td>2</td><td>parse &rarr; print &rarr; parse の往復一致</td></tr>
+      <tr><td>file-integration</td><td>12</td><td>examples/ を使った統合テスト</td></tr>
+    </table>
+  </div>
+
+  <!-- Python実装 -->
+  <div class="card">
+    <h2>Python 実装：可逆メタプログラミング基盤</h2>
+    <p>OCaml 版インタプリタに加え、<strong>Python 版インタプリタ</strong>（rwhile-python）を開発しています。
+    Python 版はOCaml版と同一の意味論を実装しつつ、可逆メタプログラミングの理論的性質を実証する拡張モジュール群を備えています。</p>
+
+    <div class="arch-grid">
+      <div class="arch-item">
+        <h4>コアモジュール</h4>
+        <p><code>evaluator.py</code> <code>parser.py</code> <code>inverter.py</code> <code>specializer.py</code> <code>program2data.py</code> <code>data2program.py</code></p>
+      </div>
+      <div class="arch-item">
+        <h4>メタプログラミング層</h4>
+        <p><code>qi.py</code> <code>futamura.py</code> <code>invert_data.py</code> <code>smn.py</code> <code>step_counter.py</code> <code>inverse_composition.py</code> <code>equivalence.py</code> <code>kleene.py</code></p>
+      </div>
+    </div>
+
+    <div class="info-box">
+      <strong>テスト規模</strong>：208件の自動テスト（pytest）。OCaml版71件 + Python版208件で合計279件のテストが全通過しています。
+    </div>
+  </div>
+
+  <!-- 第1弾：基盤 -->
+  <div class="card">
+    <h2>メタプログラミング拡張 第1弾：プログラム&ndash;データ双対性</h2>
+    <p>第1弾として、R-WHILEにおけるプログラムとデータの双対性を実現する基盤を構築しました。</p>
+
+    <table class="lang-table">
+      <tr><th>モジュール</th><th>機能</th><th>理論的意義</th></tr>
+      <tr><td><code>data2program.py</code></td><td>データ表現からプログラムASTへの復元</td><td>program2data の逆変換</td></tr>
+      <tr><td><code>invert_data.py</code></td><td>データレベルでのプログラム反転</td><td>ASTを経由せずにデータ上で反転操作</td></tr>
+      <tr><td><code>qi.py</code></td><td>逆自己インタプリタ qi = inv(ri)</td><td>万能的入力復元</td></tr>
+      <tr><td><code>futamura.py</code></td><td>3段階の二村射影</td><td>特殊化によるコンパイラ生成</td></tr>
+    </table>
+
+    <p>可換図式の検証：プログラム反転とデータレベル反転が可換であること &mdash;
+    <code>p2d(inv(P)) == invert_data(p2d(P))</code> &mdash; を9種類のプログラムで検証済みです。</p>
+  </div>
+
+  <!-- 第2弾：理論的完全性 -->
+  <div class="card">
+    <h2>メタプログラミング拡張 第2弾：理論的完全性の実証</h2>
+    <p>第2弾では、可逆計算理論の中核的定理を実証する5つの拡張を実装しました。
+    これらは「可逆メタプログラミングの理論的完全性」を示す統一的な物語を形成します。</p>
+  </div>
+
+  <!-- smn定理 -->
+  <div class="card">
+    <h3>1. smn定理 &mdash; 可逆カリー化</h3>
+    <p>プログラム P(x,y) と値 a が与えられたとき、P<sub>a</sub>(y) = P(a, y) を計算するプログラムを
+    <strong>効果的に</strong>構成できることを示す定理です。R-WHILEでは P<sub>a</sub> も可逆でなければなりません。</p>
+
+    <div class="info-box">
+      <strong>理論的意義</strong>：smn定理 + 万能関数(ri) = r-Turing完全性（Jones, 1997）。
+      可逆計算が通常の計算理論の基盤を満たすことの中核的証明です。
+    </div>
+
+    <p><strong>実装方法</strong>：プログラム変換によるペア構成。P<sub>a</sub> は入力 y を受け取り、
+    CRep命令を用いて可逆的に (a . y) を構成し、Pの本体を実行します。</p>
+
+    <div class="code-box">
+<span class="comment">(* smn(swap, 'a) が生成するプログラム *)</span><br>
+<span class="keyword">read</span> <span class="var">SDYN</span>; <span class="comment">(* y を読む *)</span><br>
+&nbsp;&nbsp;<span class="var">STMP</span> <span class="op">^=</span> <span class="keyword">'a</span>; <span class="comment">(* 静的引数をセット *)</span><br>
+&nbsp;&nbsp;<span class="var">X</span> <span class="op">&lt;=</span> <span class="keyword">cons</span> <span class="var">STMP</span> <span class="var">SDYN</span>; <span class="comment">(* X = ('a . y), STMP=nil, SDYN=nil *)</span><br>
+&nbsp;&nbsp;<span class="comment">(* swap の本体 *)</span><br>
+&nbsp;&nbsp;<span class="keyword">cons</span> <span class="var">Y</span> <span class="var">Z</span> <span class="op">&lt;=</span> <span class="var">X</span>;<br>
+&nbsp;&nbsp;<span class="var">X</span> <span class="op">&lt;=</span> <span class="keyword">cons</span> <span class="var">Z</span> <span class="var">Y</span>;<br>
+<span class="keyword">write</span> <span class="var">X</span> <span class="comment">(* 結果: (y . 'a) *)</span>
+    </div>
+
+    <p><strong>検証済み性質</strong>：正当性（eval(P<sub>a</sub>, y) = eval(P, (a.y))）、
+    可逆性保存（inv(P<sub>a</sub>) が y を復元）、
+    identity・swap・reverse の各プログラムで確認。</p>
+  </div>
+
+  <!-- ステップ計数 -->
+  <div class="card">
+    <h3>2. ステップ計数インタプリタ &mdash; 線形時間自己解釈の検証</h3>
+    <p>R-WHILEの自己インタプリタ ri は、プログラムPの実行を <strong>O(T)</strong> ステップでシミュレートします
+    （T は直接実行のステップ数）。通常の自己インタプリタが少なくとも O(T&sup2;) のオーバーヘッドを持つのに対し、
+    R-WHILEの構造が O(T) を可能にしています。</p>
+
+    <div class="info-box">
+      <strong>理論的意義</strong>：線形時間自己解釈は r-Turing完全性の証明に不可欠です。
+      オーバーヘッドが定数倍であることは、メタプログラミング塔全体の実用性を保証します
+      （Gl&uuml;ck &amp; Yokoyama, 2016）。
+    </div>
+
+    <p><strong>実装</strong>：既存の evaluator.py を変更せず、ラッパーで各コマンド実行をカウントします。</p>
+
+    <table class="lang-table">
+      <tr><th>プログラム</th><th>入力サイズ n</th><th>直接ステップ</th><th>ri ステップ</th><th>比率</th></tr>
+      <tr><td>reverse</td><td>1</td><td colspan="3" rowspan="3" style="text-align:center; vertical-align:middle; font-style:italic;">
+        比率 ri_steps / direct_steps が n に依存せず<br>定数値 c に収束することを検証済み
+      </td></tr>
+      <tr><td>reverse</td><td>2</td></tr>
+      <tr><td>reverse</td><td>3</td></tr>
+    </table>
+  </div>
+
+  <!-- 逆解釈合成 -->
+  <div class="card">
+    <h3>3. 逆解釈合成 &mdash; 4経路入力復元定理</h3>
+    <p>プログラムPと入力vが与えられたとき、出力 eval(P, v) から入力 v を復元する
+    <strong>4つの等価な経路</strong>が存在します。4経路の一致は、プログラム反転・自己解釈・データ符号化・
+    データレベル反転の<strong>コヒーレンス</strong>（整合性）を実証します。</p>
+
+    <div class="code-box" style="text-align:center; line-height:2.2;">
+<span style="color:#9cdcfe;">経路A（直接反転）</span>: eval(<span class="keyword">inv</span>(P), eval(P, v)) = v<br>
+<span style="color:#9cdcfe;">経路B（ri+qi往復）</span>: qi(ri(p2d(P), v)) &rarr; 末尾 = v<br>
+<span style="color:#9cdcfe;">経路C（inv経由ri）</span>: ri(p2d(<span class="keyword">inv</span>(P)), eval(P, v)) &rarr; 末尾 = v<br>
+<span style="color:#9cdcfe;">経路D（データ反転経由）</span>: ri(<span class="keyword">invert_data</span>(p2d(P)), eval(P, v)) &rarr; 末尾 = v
+    </div>
+
+    <p><strong>検証済み</strong>：identity・swap プログラムにおいて、全4経路が一致することを確認。
+    特に経路CとDの等価性は、可換図式 p2d(inv(P)) = invert_data(p2d(P)) の<strong>実行レベル検証</strong>です。</p>
+  </div>
+
+  <!-- 全数的双射検証 -->
+  <div class="card">
+    <h3>4. 全数的双射検証 &mdash; 有限領域での等価性判定</h3>
+    <p>R-WHILEプログラムは（終了する入力の範囲で）<strong>全単射</strong>を計算します。
+    有限領域 D = {深さ &le; d の全 ValT} 上で、この性質を<strong>網羅的に</strong>検証します。</p>
+
+    <table class="lang-table">
+      <tr><th>検証項目</th><th>方法</th><th>対象プログラム</th></tr>
+      <tr><td>全単射性</td><td>終了する全入力について出力が互いに異なるか（単射性）を確認</td><td>identity, swap, reverse</td></tr>
+      <tr><td>逆写像の正当性</td><td>inv(P)(P(v)) = v を全入力 v で確認</td><td>identity, swap, reverse</td></tr>
+      <tr><td>対合性</td><td>P と inv(inv(P)) が同じ関数を計算するか全数的に確認</td><td>identity, swap, reverse</td></tr>
+      <tr><td>全射性</td><td>出力集合 &sube; 入力集合を確認</td><td>identity</td></tr>
+    </table>
+
+    <p><strong>領域規模</strong>：深さ2のアトム1種で38個の値を生成し、全組合せを検証。</p>
+  </div>
+
+  <!-- Kleene不動点 -->
+  <div class="card">
+    <h3>5. Kleene不動点定理 &mdash; 可逆プログラムの自己参照</h3>
+    <p>Kleeneの再帰定理は計算可能性理論の基礎です。可逆計算の文脈で不動点が存在することは、
+    R-WHILEが「十分に表現力がある」ことを示します。
+    <strong>反転不動点</strong>（自己逆プログラム）は可逆計算に固有の概念です。</p>
+
+    <table class="lang-table">
+      <tr><th>不動点の種類</th><th>定義</th><th>結果</th></tr>
+      <tr><td>反転不動点</td><td>inv(P) = P</td><td>identity, X ^= nil が該当。swap, reverse は非該当</td></tr>
+      <tr><td>二重反転不動点</td><td>inv(inv(P)) = P</td><td><strong>全プログラム</strong>が不動点（対合性）</td></tr>
+      <tr><td>意味的不動点</td><td>eval(P, x) = eval(inv(P), x)</td><td>自己逆プログラムについて有限領域で検証</td></tr>
+    </table>
+
+    <div class="info-box">
+      <strong>注目すべき結果</strong>：CAss（可逆代入 X ^= e）は常に自己逆であり、
+      代入のみからなるプログラムは必ず反転不動点です。
+      一方、CRep（可逆置換）を含むプログラムは一般に自己逆ではありません。
+    </div>
+  </div>
+
+  <!-- テストスイート全体 -->
+  <div class="card">
+    <h2>Python版テストスイート（208件）</h2>
+    <table class="lang-table">
+      <tr><th>カテゴリ</th><th>テスト数</th><th>内容</th></tr>
+      <tr><td>store</td><td>10</td><td>ストア操作（insert, rupdate, update, all_cleared）</td></tr>
+      <tr><td>eval-exp</td><td>9</td><td>式評価</td></tr>
+      <tr><td>eval-integration</td><td>13</td><td>完全なプログラム実行</td></tr>
+      <tr><td>file-integration</td><td>12</td><td>examples/ を使った統合テスト</td></tr>
+      <tr><td>specializer</td><td>10</td><td>オンライン部分評価</td></tr>
+      <tr><td>inversion</td><td>8</td><td>プログラム反転</td></tr>
+      <tr><td>p2d / d2p</td><td>8</td><td>プログラム&harr;データ変換</td></tr>
+      <tr><td>commutativity</td><td>12</td><td>可換図式検証</td></tr>
+      <tr><td>qi roundtrip</td><td>7</td><td>qi(ri(P,v)) = (P,v)</td></tr>
+      <tr><td>futamura</td><td>19</td><td>二村射影（3段階）</td></tr>
+      <tr><td>substitution</td><td>5</td><td>変数置換</td></tr>
+      <tr><td>macro</td><td>4</td><td>マクロ展開</td></tr>
+      <tr><td>roundtrip</td><td>2</td><td>parse &rarr; print 往復</td></tr>
+      <tr><td>var-collect</td><td>2</td><td>変数収集</td></tr>
+      <tr><td>inv-eval</td><td>2</td><td>逆プログラムの実行検証</td></tr>
+      <tr><td colspan="3" style="background:#e8f0fe; font-weight:600;">第2弾 メタプログラミング拡張</td></tr>
+      <tr><td>smn</td><td>14</td><td>smn定理（正当性、可逆性保存、意味的等価性）</td></tr>
+      <tr><td>step-counter</td><td>11</td><td>ステップ計数、線形時間検証、riオーバーヘッド</td></tr>
+      <tr><td>inverse-composition</td><td>16</td><td>4経路入力復元</td></tr>
+      <tr><td>equivalence</td><td>15</td><td>全数的双射・逆写像・等価性検証</td></tr>
+      <tr><td>kleene</td><td>11</td><td>不動点分類、対合性、意味的不動点</td></tr>
+      <tr style="font-weight:600"><td>合計</td><td>208</td><td></td></tr>
+    </table>
+  </div>
+
+  <!-- 関連情報 -->
+  <div class="card">
+    <h2>関連情報</h2>
+    <ul>
+      <li><a href="https://github.com/tetsuo-jp/rwhile-C-ocaml" target="_blank">GitHub リポジトリ（rwhile-C-ocaml）</a></li>
+      <li><a href="janus.html">可逆プログラミング言語 Janus と横山研の研究</a></li>
+      <li><a href="software.html">ソフトウェア・ツール一覧</a></li>
+      <li><a href="http://doi.org/10.14923/transinfj.2018JDL8008" target="_blank">可逆プログラミング言語R-WHILEの可逆チューリング完全性（論文）</a></li>
+    </ul>
+
+    <h3>主な論文</h3>
+    <ol>
+      <li>Tetsuo Yokoyama, Robert Gl&uuml;ck. <strong>A Reversible Programming Language and its Invertible Self-Interpreter</strong>. <em>Proc. ACM SIGPLAN PEPM</em>, pp.144&ndash;153, 2007. DOI: <a href="https://doi.org/10.1145/1244381.1244404" target="_blank">10.1145/1244381.1244404</a></li>
+      <li>Robert Gl&uuml;ck, Tetsuo Yokoyama. <strong>A Minimalist's Reversible While Language</strong>. <em>IEICE Transactions on Information and Systems</em>, E100-D(5), pp.1026&ndash;1034, 2017. DOI: <a href="https://doi.org/10.1587/transinf.2016EDP7274" target="_blank">10.1587/transinf.2016EDP7274</a></li>
+      <li>Robert Gl&uuml;ck, Tetsuo Yokoyama. <strong>A Linear-Time Self-Interpreter of a Reversible Imperative Language</strong>. <em>Computer Software</em>, 33(3), pp.108&ndash;121, 2016. DOI: <a href="https://doi.org/10.11309/jssst.33.3_108" target="_blank">10.11309/jssst.33.3_108</a></li>
+      <li>Neil D. Jones. <strong>Computability and Complexity from a Programming Perspective</strong>. MIT Press, 1997.</li>
+    </ol>
+  </div>
+
+  <!-- キーワード -->
+  <div class="card">
+    <h2>キーワード</h2>
+    <ul class="keyword-list">
+      <li>R-WHILE</li>
+      <li>可逆プログラミング</li>
+      <li>可逆チューリング完全</li>
+      <li>自己インタプリタ</li>
+      <li>プログラムインバータ</li>
+      <li>smn定理</li>
+      <li>二村射影</li>
+      <li>Kleene不動点</li>
+      <li>線形時間自己解釈</li>
+      <li>全単射検証</li>
+      <li>OCaml</li>
+      <li>Python</li>
+      <li>BNFC</li>
+      <li>木構造データ</li>
+    </ul>
+  </div>
+
+</main>
+
+<footer>
+  <div class="ai-note">このページは生成AIを用いて文章を校正しています。内容には誤りが含まれている可能性がありますのでご注意ください。</div>
+  &copy; 2009-2026 <a href="index.html">横山研</a> &ndash; <a href="https://www.nanzan-u.ac.jp/">南山大学</a> <a href="https://www.st.nanzan-u.ac.jp/">理工学部</a> <a href="https://www.st.nanzan-u.ac.jp/elecomm/">電子情報工学科</a>
+</footer>
+
+<script>
+const examples = {
+  swap: {
+    prog: 'read X;\n  cons Y Z <= X;\n  X <= cons Z Y;\nwrite X',
+    data: "('a.'b)"
+  },
+  reverse: {
+    prog: 'read Y;\n    from  =? X nil loop\n        cons Z Y <= Y;\n        X <= cons Z X\n    until =? Y nil;\nwrite X',
+    data: "('1.('2.('3.nil)))"
+  },
+  minus: {
+    prog: 'macro MINUS(X,Y)\n  from  =? Y\' nil\n  loop  cons nil X <= X;\n        cons nil Y <= Y;\n        Y\' <= cons nil Y\'\n  until =? Y nil;\n  Y <= Y\'\n\nread Z;\n  cons X Y <= Z;\n  MINUS(X,Y);\n  Z <= cons X Y;\nwrite Z',
+    data: "((nil.(nil.(nil.(nil.nil)))).\n (nil.(nil.(nil.nil))))"
+  },
+  rep: {
+    prog: 'read Y;\n  X <= Y;\nwrite X',
+    data: "('1.('2.('3.nil)))"
+  },
+  'if': {
+    prog: 'read Y;\n  if Y fi Y;\nwrite Y',
+    data: "(nil.nil)"
+  },
+  enumeration: {
+    prog: 'read X;\n  from =? X nil\n  do   X <= cons X nil\n  loop X <= cons X nil\n  until =? X (nil.nil);\nwrite X',
+    data: "nil"
+  },
+  length: {
+    prog: "(* length *)\n(* Given a list X of length N, return (X.N) *)\nread X;\n  from  =? X' nil\n  loop  N <= cons nil N;\n        cons T X <= X;\n        X' <= cons T X'\n  until =? X nil;\n  from  =? X nil\n  loop  cons T X' <= X';\n        X <= cons T X\n  until =? X' nil;\n  X <= cons X N;\nwrite X",
+    data: "('1.('2.('3.nil)))"
+  },
+  ri_id: {
+    prog: '',
+    data: ''
+  },
+  ri_reverse: {
+    prog: '',
+    data: ''
+  }
+};
+
+function loadExample(name) {
+  if (name === 'ri_id' || name === 'ri_reverse') {
+    // Load from files via fetch for large examples
+    const progFile = 'ri.rwhile';
+    const dataFile = name === 'ri_id' ? 'id_and_nil.p_val' : 'reverse_and_list123.p_val';
+    Promise.all([
+      fetch('examples/' + progFile).then(r => r.ok ? r.text() : '(* File not available *)'),
+      fetch('examples/' + dataFile).then(r => r.ok ? r.text() : '(* File not available *)')
+    ]).then(([prog, data]) => {
+      document.getElementById('prog-area').value = prog;
+      document.getElementById('data-area').value = data;
+    });
+    return;
+  }
+  const ex = examples[name];
+  if (ex) {
+    document.getElementById('prog-area').value = ex.prog;
+    document.getElementById('data-area').value = ex.data;
+  }
+}
+
+function execute(mode) {
+  const prog = document.getElementById('prog-area').value;
+  const data = document.getElementById('data-area').value;
+  const output = document.getElementById('output-area');
+
+  const formData = new FormData();
+  formData.append('prog', prog);
+  formData.append('data', data);
+
+  if (mode === 'inverse') formData.append('invert', '1');
+  if (mode === 'p2d') formData.append('p2d', '1');
+  if (mode === 'expand') formData.append('exp', '1');
+
+  output.value = 'Executing...';
+
+  fetch('execute.php', {
+    method: 'POST',
+    body: formData
+  })
+  .then(response => response.text())
+  .then(text => {
+    output.value = text.trim();
+  })
+  .catch(err => {
+    output.value = 'Error: ' + err.message;
+  });
+}
+
+function clearOutput() {
+  document.getElementById('output-area').value = '';
+}
+</script>
+
+</body>
+</html>

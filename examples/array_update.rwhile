@@ -1,0 +1,17 @@
+(* Array UPDATE demo - using -array extension *)
+(*
+ * Input:  a list acting as an array, e.g. ('a.('b.('c.nil)))
+ * Output: the same list after reversibly toggling the element at index 1.
+ *
+ * Operation:
+ *   Vl[1] ^= 'b  -- if Vl[1] = 'b, clears it to nil  (forward)
+ *                 -- if Vl[1] = nil, restores it to 'b (backward = inverse)
+ *
+ * Compare with the AUX/INV-AUX loop in lookup.rwhile and update.rwhile:
+ *   With -array, a single line replaces ~10 lines of macro boilerplate.
+ *
+ * Index encoding: nil=0, (nil.nil)=1, (nil.(nil.nil))=2, ...
+ *)
+read Vl;
+  Vl[(nil.nil)] ^= 'b;  (* toggle element at index 1 *)
+write Vl

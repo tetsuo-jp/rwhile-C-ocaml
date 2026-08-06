@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="style.css">
+<title>可逆プログラミング言語 Janus と横山研究室の研究 - 横山研究室</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+.breadcrumb {
+  max-width: 880px;
+  margin: 14px auto 0;
+  padding: 0 16px;
+  font-size: 0.82rem;
+  color: #666;
+}
+.breadcrumb a { color: var(--primary-light); text-decoration: none; }
+.breadcrumb a:hover { text-decoration: underline; }
+main {
+  max-width: 880px;
+  margin: 24px auto 40px;
+  padding: 0 16px;
+}
+.card p, .card li {
+  font-size: 0.95rem;
+  margin-bottom: 10px;
+}
+.card ul, .card ol {
+  padding-left: 1.5em;
+  margin-bottom: 12px;
+}
+.info-box strong { color: var(--primary); }
+.code-box {
+  background: #1e2a38;
+  color: #e0e8f0;
+  border-radius: 8px;
+  padding: 20px 24px;
+  margin: 16px 0;
+  font-family: "Courier New", monospace;
+  font-size: 0.9rem;
+  line-height: 1.8;
+  overflow-x: auto;
+}
+.code-box .comment { color: #6a9955; }
+.code-box .keyword { color: #569cd6; }
+.code-box .op { color: #d4d4d4; }
+.code-box .var { color: #9cdcfe; }
+.code-box .num { color: #b5cea8; }
+.arrow-box {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin: 16px 0;
+  flex-wrap: wrap;
+}
+.arrow-box .state {
+  background: var(--bg);
+  border: 1px solid #dde2e8;
+  border-radius: 8px;
+  padding: 12px 20px;
+  font-family: monospace;
+  font-size: 0.95rem;
+  text-align: center;
+}
+.arrow-box .arrow {
+  font-size: 1.5rem;
+  color: var(--primary-light);
+}
+.timeline {
+  position: relative;
+  padding-left: 32px;
+  margin: 16px 0;
+}
+.timeline::before {
+  content: '';
+  position: absolute;
+  left: 12px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--primary-light);
+}
+.timeline-item {
+  position: relative;
+  margin-bottom: 20px;
+}
+.timeline-item::before {
+  content: '';
+  position: absolute;
+  left: -26px;
+  top: 6px;
+  width: 12px;
+  height: 12px;
+  background: var(--primary-light);
+  border-radius: 50%;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 2px var(--primary-light);
+}
+.timeline-item .year {
+  font-weight: 700;
+  color: var(--primary);
+  font-size: 0.9rem;
+}
+.timeline-item .desc {
+  font-size: 0.92rem;
+  color: var(--text-light);
+  margin-top: 2px;
+}
+.research-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin: 16px 0;
+}
+.research-item {
+  background: var(--bg);
+  border: 1px solid #dde2e8;
+  border-radius: 8px;
+  padding: 16px 20px;
+}
+.research-item h4 {
+  color: var(--primary);
+  font-size: 0.95rem;
+  margin-bottom: 6px;
+}
+.research-item p {
+  font-size: 0.88rem;
+  margin-bottom: 8px;
+}
+.research-item a {
+  color: var(--primary-light);
+  font-size: 0.85rem;
+}
+.lang-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 14px 0;
+  font-size: 0.9rem;
+}
+.lang-table th, .lang-table td {
+  padding: 8px 12px;
+  border: 1px solid #dde2e8;
+  text-align: left;
+}
+.lang-table th {
+  background: var(--primary);
+  color: #fff;
+  font-weight: 600;
+}
+.lang-table tr:nth-child(even) { background: #f8f9fb; }
+.tool-btn {
+  display: inline-block;
+  background: #1565c0;
+  color: #fff;
+  text-decoration: none;
+  padding: 10px 20px;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin: 4px 8px 4px 0;
+  transition: background 0.2s;
+}
+.tool-btn:hover { background: #0d47a1; }
+.tool-btn.secondary {
+  background: #fff;
+  color: var(--primary);
+  border: 1px solid var(--primary-light);
+}
+.tool-btn.secondary:hover { background: var(--bg); }
+.keyword-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  list-style: none;
+  padding: 0;
+}
+.keyword-list li {
+  background: #e8eef5;
+  color: var(--primary);
+  padding: 4px 14px;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  margin-bottom: 0;
+}
+footer a:hover { text-decoration: underline; }
+@media (max-width: 600px) {
+  .research-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="index.html" class="tb-brand">横山研究室</a>
+  <span class="tb-crumb">&gt; 可逆プログラミング言語 Janus</span>
+  <span class="tb-affil"><a href="https://www.nanzan-u.ac.jp/" target="_blank">南山大学</a> <a href="https://www.st.nanzan-u.ac.jp/" target="_blank">理工学部</a> <a href="https://www.st.nanzan-u.ac.jp/elecomm/" target="_blank">電子情報工学科</a></span>
+</nav>
+
+<div class="page-title"><h1>可逆プログラミング言語 Janus と横山研究室の研究</h1></div>
+
+<div class="breadcrumb">
+  <a href="index.html">横山研究室トップ</a> &gt; 可逆プログラミング言語 Janus
+</div>
+
+<div class="ai-note">AI（ChatGPT）を利用して生成されたページです</div>
+
+<main>
+
+  <!-- Janusとは -->
+  <div class="card">
+    <h2>Janusとは？</h2>
+    <p><strong>Janus</strong>（ヤヌス）は、世界で初めて設計された<strong>可逆プログラミング言語</strong>のひとつです。
+    名前はローマ神話の双面神ヤヌス（過去と未来の両方を見る神）に由来しています。</p>
+
+    <p>普通のプログラミング言語（CやPythonなど）で書いたプログラムは、入力から出力への一方通行です。
+    たとえば <code>x = 5</code> と書くと、それまでの <code>x</code> の値は上書きされて失われてしまいます。</p>
+
+    <p>Janusで書いたプログラムは、<strong>すべての計算を逆向きにも実行できます</strong>。
+    出力の値から入力の値を完全に復元できるのです。
+    動画の再生と巻き戻しのように、プログラムの実行を自由に前にも後ろにも進めることができます。</p>
+
+    <div class="info-box">
+      <strong>身近な例え</strong>：折り紙を折るとき、折る手順（順方向）を知っていれば、逆にたどって元の平らな紙に戻す（逆方向）こともできます。
+      でも、途中でハサミで切ってしまう（情報を失う操作）と、元に戻せなくなります。
+      Janusは「ハサミで切る操作」を一切使わないプログラミング言語です。
+    </div>
+
+    <p>Janusについては <a href="https://ja.wikipedia.org/wiki/Janus_(%E5%8F%AF%E9%80%86%E3%83%97%E3%83%AD%E3%82%B0%E3%83%A9%E3%83%9F%E3%83%B3%E3%82%B0%E8%A8%80%E8%AA%9E)" target="_blank" style="color:var(--primary-light)">Wikipedia（日本語）</a> / <a href="https://en.wikipedia.org/wiki/Janus_(time-reversible_computing_programming_language)" target="_blank" style="color:var(--primary-light)">Wikipedia（英語）</a> も参照してください。</p>
+  </div>
+
+  <!-- なぜ可逆が重要か -->
+  <div class="card">
+    <h2>なぜ「可逆」が重要なのか</h2>
+    <p>「プログラムを逆に動かす」ことは、一見するとただの面白い性質に見えるかもしれません。しかし、可逆計算は実際にさまざまな場面で役に立ちます。</p>
+
+    <ul>
+      <li><strong>デバッグ（バグ探し）</strong>：プログラムがエラーを起こしたとき、その時点から実行を「巻き戻し」て原因を探ることができます。通常のデバッガでは最初からやり直す必要がありますが、可逆プログラムなら直前の状態に戻れます。</li>
+      <li><strong>暗号</strong>：暗号化（データを秘密にする）と復号（元に戻す）は、まさに逆の操作です。可逆プログラムなら、暗号化プログラムを書くだけで、復号プログラムが自動的に得られます。</li>
+      <li><strong>量子コンピュータ</strong>：量子コンピュータの基本的な演算（量子ゲート）はすべて可逆です。そのため、可逆プログラミングの技術は量子回路の設計に直接応用できます。</li>
+      <li><strong>省エネルギー</strong>：物理法則に基づくランダウアーの原理によれば、情報を消去するときにエネルギーが消費されます。情報を消去しない可逆計算は、理論的には発熱を最小限に抑えることができます。</li>
+      <li><strong>ニューラルネットワーク</strong>：<a href="project-revnet.html" style="color:var(--primary-light)">RevNet（可逆残差ネットワーク）</a>のように、可逆性を利用してメモリを大幅に節約する深層学習の手法もあります。</li>
+    </ul>
+  </div>
+
+  <!-- Janusの仕組み -->
+  <div class="card">
+    <h2>Janusの仕組み：普通のプログラムと何が違うの？</h2>
+
+    <h3 style="font-size:1rem;color:#444;margin:16px 0 8px;">ルール1：代入（=）が使えない</h3>
+    <p>普通の言語では <code>x = 5</code> のように変数に値を代入しますが、これは元の値を上書きして消してしまいます。
+    Janusでは代入の代わりに、<strong>可逆な更新演算子</strong>を使います。</p>
+    <ul>
+      <li><code>x += 5</code>（xに5を足す）&harr; 逆は <code>x -= 5</code>（xから5を引く）</li>
+      <li><code>x -= 3</code>（xから3を引く）&harr; 逆は <code>x += 3</code>（xに3を足す）</li>
+      <li><code>x ^= y</code>（xとyのXOR）&harr; 逆は <code>x ^= y</code>（XORは自分自身の逆）</li>
+    </ul>
+
+    <h3 style="font-size:1rem;color:#444;margin:16px 0 8px;">ルール2：if文には「入口条件」と「出口条件」の両方が必要</h3>
+    <p>普通のif文は「入口条件」だけですが、Janusのif文には「出口条件」（fi）も書きます。
+    逆実行するときは出口条件が入口条件の役割を果たすので、逆方向でも正しく分岐を判断できます。</p>
+
+    <h3 style="font-size:1rem;color:#444;margin:16px 0 8px;">例：2つの変数の値を交換するプログラム</h3>
+    <p>Janusで <code>x</code> と <code>y</code> の値を入れ替えるプログラムは以下のようになります。</p>
+
+    <div class="code-box">
+<span class="comment">// 入力: x=3, y=5 → 出力: x=5, y=3</span><br>
+<span class="keyword">procedure</span> swap<br>
+&nbsp;&nbsp;<span class="var">x</span> <span class="op">+=</span> <span class="var">y</span>&nbsp;&nbsp;&nbsp;&nbsp;<span class="comment">// x = 3+5 = 8</span><br>
+&nbsp;&nbsp;<span class="var">y</span> <span class="op">-=</span> <span class="var">x</span>&nbsp;&nbsp;&nbsp;&nbsp;<span class="comment">// y = 5-8 = -3</span><br>
+&nbsp;&nbsp;<span class="var">y</span> <span class="op">*=</span> <span class="num">-1</span>&nbsp;&nbsp;&nbsp;&nbsp;<span class="comment">// y = -(-3) = 3</span><br>
+&nbsp;&nbsp;<span class="var">x</span> <span class="op">-=</span> <span class="var">y</span>&nbsp;&nbsp;&nbsp;&nbsp;<span class="comment">// x = 8-3 = 5</span>
+    </div>
+
+    <p>このプログラムを<strong>逆向きに実行する</strong>と、各行の操作が逆になり、下から上に実行されます。</p>
+
+    <div class="code-box">
+<span class="comment">// 逆実行: x=5, y=3 → x=3, y=5（元に戻る！）</span><br>
+&nbsp;&nbsp;<span class="var">x</span> <span class="op">+=</span> <span class="var">y</span>&nbsp;&nbsp;&nbsp;&nbsp;<span class="comment">// x = 5+3 = 8 （-= の逆）</span><br>
+&nbsp;&nbsp;<span class="var">y</span> <span class="op">*=</span> <span class="num">-1</span>&nbsp;&nbsp;&nbsp;&nbsp;<span class="comment">// y = -3 　　 （*= -1 の逆は自分自身）</span><br>
+&nbsp;&nbsp;<span class="var">y</span> <span class="op">+=</span> <span class="var">x</span>&nbsp;&nbsp;&nbsp;&nbsp;<span class="comment">// y = -3+8 = 5（-= の逆）</span><br>
+&nbsp;&nbsp;<span class="var">x</span> <span class="op">-=</span> <span class="var">y</span>&nbsp;&nbsp;&nbsp;&nbsp;<span class="comment">// x = 8-5 = 3 （+= の逆）</span>
+    </div>
+
+    <div class="arrow-box">
+      <div class="state">x=3, y=5</div>
+      <div class="arrow">&xrarr; 順方向 &xrarr;</div>
+      <div class="state">x=5, y=3</div>
+      <div class="arrow">&xrarr; 逆方向 &xrarr;</div>
+      <div class="state">x=3, y=5</div>
+    </div>
+
+    <p>値が完全に元に戻ることが確認できます。Janusでは、どんなプログラムでもこのように逆実行が可能です。</p>
+  </div>
+
+  <!-- Janusの歴史 -->
+  <div class="card">
+    <h2>Janusの歴史</h2>
+    <div class="timeline">
+      <div class="timeline-item">
+        <div class="year">1982年</div>
+        <div class="desc">Christopher LutzとHoward Derbyが、アメリカのカリフォルニア工科大学（Caltech）でJanusのアイデアを考案。世界初の可逆プログラミング言語の構想が生まれる。</div>
+      </div>
+      <div class="timeline-item">
+        <div class="year">1986年</div>
+        <div class="desc">Lutzが Janus の言語仕様を記述した文書「<a href="https://tetsuo.jp/ref/janus.html" target="_blank" style="color:var(--primary-light)">Janus: a time-reversible language</a>」を公開。</div>
+      </div>
+      <div class="timeline-item">
+        <div class="year">2007年</div>
+        <div class="desc"><a href="https://dl.acm.org/profile/81100100963" target="_blank" style="color:var(--primary-light)">横山哲郎</a>とRobert Gl&uuml;ckが、Janusの操作的意味論（プログラムの動作を数学的に定義したもの）を形式化。プログラムを自動的に逆変換する「プログラムインバータ」と、自分自身を解釈実行できる「可逆自己インタプリタ」を発表。この論文がJanusの現代的な研究の出発点となる。</div>
+      </div>
+      <div class="timeline-item">
+        <div class="year">2008年</div>
+        <div class="desc">横山・Axelsen・Gl&uuml;ckが「可逆フローチャート言語の基本原理」を発表。可逆言語の構造定理（すべての可逆フローチャートプログラムは構造化できる）を証明。</div>
+      </div>
+      <div class="timeline-item">
+        <div class="year">2016年</div>
+        <div class="desc">横山らが「可逆フローチャート言語の基礎」をTheoretical Computer Scienceに発表。可逆プログラミング言語の数学的基盤を確立。</div>
+      </div>
+      <div class="timeline-item">
+        <div class="year">2021年</div>
+        <div class="desc">国際会議 Reversible Computation（RC 2021）を横山が共同編集。</div>
+      </div>
+      <div class="timeline-item">
+        <div class="year">2023年</div>
+        <div class="desc">Gl&uuml;ck・横山が「Reversible computing from a programming language perspective」をTheoretical Computer Scienceに発表。可逆計算のプログラミング言語的視点からの包括的なサーベイ。</div>
+      </div>
+      <div class="timeline-item">
+        <div class="year">現在</div>
+        <div class="desc">横山研究室では、Janusを基盤として可逆アルゴリズム、暗号、量子計算、セルオートマトンなど幅広い研究を展開中。</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ブラウザで試す -->
+  <div class="card">
+    <h2>ブラウザで Janus を試してみよう</h2>
+    <p>インストール不要で、ブラウザ上でJanusプログラムを書いて実行できるオンライン環境を公開しています。
+    順方向だけでなく、<strong>逆方向の実行</strong>もボタンひとつで試せます。</p>
+
+    <div style="margin:16px 0;">
+      <a href="https://tetsuo.jp/janus-playground/" target="_blank" class="tool-btn">Janus Playground を開く</a>
+      <a href="https://tetsuo.jp/jana-playground-mult-eq/" target="_blank" class="tool-btn">Jana Playground（拡張版）を開く</a>
+      <a href="https://github.com/kirkedal/Jana-JanusInterp" target="_blank" class="tool-btn secondary">Jana インタプリタ（GitHub）</a>
+    </div>
+
+    <div class="info-box">
+      <strong>試してみよう</strong>：Janus Playgroundを開いたら、サンプルプログラムを選んで「Run Forward」で順方向実行、「Run Backward」で逆方向実行してみましょう。出力の値が入力に戻ることを確認できます。
+    </div>
+  </div>
+
+  <!-- 横山研究室のJanus関連研究 -->
+  <div class="card">
+    <h2>横山研究室の Janus 関連研究</h2>
+    <p>横山研究室では、Janusを出発点として「可逆計算」に関する幅広い研究を行っています。
+    以下は主な研究テーマとその概要です。</p>
+
+    <div class="research-grid">
+      <div class="research-item">
+        <h4>可逆アルゴリズム</h4>
+        <p>線形探索、深さ優先探索、文字列照合、ソートなど、基本的なアルゴリズムを可逆に設計し直す研究です。「どれだけ余分なデータが必要になるか」を理論的に解析しています。</p>
+        <a href="project-rabinkarp.html">Rabin-Karp可逆配列照合 &rarr;</a>
+      </div>
+      <div class="research-item">
+        <h4>可逆プログラミング言語の設計</h4>
+        <p>Janusの後継となる新しい可逆言語（R-WHILE, ROOPL++, R-COREなど）を設計し、その数学的性質（可逆性の証明）を研究しています。</p>
+        <a href="project-rcore.html">R-COREの可逆性の機械検証 &rarr;</a>
+      </div>
+      <div class="research-item">
+        <h4>暗号と可逆計算</h4>
+        <p>暗号化と復号は逆の操作なので、可逆言語と相性抜群です。IoT向け軽量暗号（SIMON, LEA）をJanusで実装し、暗号化プログラムから復号プログラムを自動生成する研究を行っています。</p>
+        <a href="research.html#crypto">暗号と可逆計算の研究テーマ &rarr;</a>
+      </div>
+      <div class="research-item">
+        <h4>量子計算への応用</h4>
+        <p>量子コンピュータの演算は本質的に可逆です。可逆計算の技術を量子回路設計に応用し、量子加算器の最適化やメモリ管理の研究を行っています。</p>
+        <a href="research.html#quantum">量子計算の研究テーマ &rarr;</a>
+      </div>
+      <div class="research-item">
+        <h4>可逆セルオートマトン</h4>
+        <p>格子上のセルが一斉に状態を変えるセルオートマトンの中で、時間を巻き戻せる「可逆」なものを研究しています。256種類のルールのうち、可逆なのはわずか6種類です。</p>
+        <a href="project-automata.html">可逆セルオートマトンの可視化 &rarr;</a>
+      </div>
+      <div class="research-item">
+        <h4>並行可逆計算（CJanus）</h4>
+        <p>Janusを並行処理（複数の処理を同時実行）に拡張したCJanusの性能を評価する研究です。デバッグが難しい並行プログラムに「巻き戻し」機能を持たせます。</p>
+        <a href="project-cjanus.html">CJanusの性能評価 &rarr;</a>
+      </div>
+    </div>
+
+    <p>すべての研究テーマは<a href="research.html" style="color:var(--primary-light)">研究テーマ紹介</a>、
+    現在進行中のプロジェクトは<a href="projects.html" style="color:var(--primary-light)">研究プロジェクト一覧</a>をご覧ください。</p>
+  </div>
+
+  <!-- 可逆言語ファミリー -->
+  <div class="card">
+    <h2>Janusから広がる可逆言語ファミリー</h2>
+    <p>Janusの研究から、さまざまな特徴を持つ可逆プログラミング言語が生まれています。</p>
+
+    <table class="lang-table">
+      <tr>
+        <th>言語名</th>
+        <th>特徴</th>
+        <th>関連プロジェクト</th>
+      </tr>
+      <tr>
+        <td><strong>Janus</strong></td>
+        <td>手続き型の可逆言語。世界初の可逆言語のひとつ。整数型変数、可逆な更新演算子、可逆if文・ループを持つ。</td>
+        <td><a href="project-rabinkarp.html" style="color:var(--primary-light)">Rabin-Karp照合</a></td>
+      </tr>
+      <tr>
+        <td><strong>R-WHILE</strong></td>
+        <td>最小限の機能を持つ可逆言語。木構造データを扱い、可逆チューリング完全（どんな可逆計算でも表現可能）。理論研究向け。</td>
+        <td><a href="rwhile.html" style="color:var(--primary-light)">R-WHILEインタプリタ</a></td>
+      </tr>
+      <tr>
+        <td><strong>R-CORE</strong></td>
+        <td>可逆計算の本質的構造を研究するための最小限の可逆命令型言語。証明支援系での形式検証の対象。</td>
+        <td><a href="project-rcore.html" style="color:var(--primary-light)">R-COREの機械検証</a></td>
+      </tr>
+      <tr>
+        <td><strong>ROOPL++</strong></td>
+        <td>可逆オブジェクト指向言語。クラス、継承、メソッド呼び出しなどを可逆に実現。</td>
+        <td><a href="https://github.com/yokoyama-lab/ROOPLPP-interpreter" target="_blank" style="color:var(--primary-light)">インタプリタ（GitHub）</a></td>
+      </tr>
+      <tr>
+        <td><strong>Hermes</strong></td>
+        <td>暗号アルゴリズム記述に特化した可逆言語。暗号化プログラムから復号プログラムを自動生成できる。</td>
+        <td>&mdash;</td>
+      </tr>
+      <tr>
+        <td><strong>CJanus</strong></td>
+        <td>Janusの並行拡張。複数のプロセスを同時に走らせながら、可逆性を保つ。Go言語で実装。</td>
+        <td><a href="project-cjanus.html" style="color:var(--primary-light)">CJanusの性能評価</a></td>
+      </tr>
+      <tr>
+        <td><strong>SyReC</strong></td>
+        <td>可逆回路の記述と合成のためのハードウェア記述言語。可逆論理ゲート（Toffoliゲートなど）で構成される回路をプログラムのように記述でき、自動的に回路を合成できる。</td>
+        <td><a href="https://doi.org/10.1016/j.vlsi.2015.10.001" target="_blank" style="color:var(--primary-light)">論文（Integration）</a></td>
+      </tr>
+    </table>
+  </div>
+
+  <!-- 主な論文 -->
+  <div class="card">
+    <h2>Janusに関する主な論文</h2>
+    <p>全業績は<a href="publications.html" style="color:var(--primary-light)">業績一覧ページ</a>をご覧ください。</p>
+    <ol>
+      <li>Christopher Lutz. <strong>Janus: a time-reversible language</strong>, 1986. <a href="https://tetsuo.jp/ref/janus.html" target="_blank">原文</a>
+      <br><span style="font-size:0.88rem;color:#555;">― Janusの最初の言語仕様書。</span></li>
+      <li><a href="https://dl.acm.org/profile/81100100963" target="_blank" style="color:var(--primary-light)">Tetsuo Yokoyama</a>, Robert Gl&uuml;ck. <strong>A Reversible Programming Language and its Invertible Self-Interpreter</strong>. <em>Proc. ACM SIGPLAN PEPM</em>, pp.144&ndash;153, 2007. DOI: <a href="https://doi.org/10.1145/1244381.1244404" target="_blank">10.1145/1244381.1244404</a>
+      <br><span style="font-size:0.88rem;color:#555;">― Janusの操作的意味論を形式化し、可逆自己インタプリタを発表した画期的な論文。</span></li>
+      <li>Tetsuo Yokoyama, Holger Bock Axelsen, Robert Gl&uuml;ck. <strong>Reversible Flowchart Languages and the Structured Reversible Program Theorem</strong>. <em>LNCS</em>, Vol. 5126, pp.258&ndash;270, 2008. DOI: <a href="https://doi.org/10.1007/978-3-540-70583-3_22" target="_blank">10.1007/978-3-540-70583-3_22</a>
+      <br><span style="font-size:0.88rem;color:#555;">― 可逆フローチャート言語の構造定理を証明。</span></li>
+      <li>Tetsuo Yokoyama, Akihiro Abe, Robert Gl&uuml;ck. <strong>Fundamentals of reversible flowchart languages</strong>. <em>Theoretical Computer Science</em>, Vol. 611, pp.87&ndash;115, 2016. DOI: <a href="https://doi.org/10.1016/j.tcs.2015.07.046" target="_blank">10.1016/j.tcs.2015.07.046</a>
+      <br><span style="font-size:0.88rem;color:#555;">― 可逆フローチャート言語の数学的基盤を確立した論文。</span></li>
+      <li>Robert Gl&uuml;ck, Tetsuo Yokoyama. <strong>Reversible computing from a programming language perspective</strong>. <em>Theoretical Computer Science</em>, Vol. 953, 113429, 2023. DOI: <a href="https://doi.org/10.1016/j.tcs.2022.06.010" target="_blank">10.1016/j.tcs.2022.06.010</a>
+      <br><span style="font-size:0.88rem;color:#555;">― プログラミング言語の視点から可逆計算を包括的に論じたサーベイ論文。</span></li>
+      <li>Robert Wille, Eleonora Sch&ouml;nborn, Mathias Soeken, Rolf Drechsler. <strong>SyReC: A hardware description language for the specification and synthesis of reversible circuits</strong>. <em>Integration</em>, Vol. 53, pp.39&ndash;53, 2016. DOI: <a href="https://doi.org/10.1016/j.vlsi.2015.10.001" target="_blank">10.1016/j.vlsi.2015.10.001</a>
+      <br><span style="font-size:0.88rem;color:#555;">― 可逆回路をプログラムのように記述・合成するためのハードウェア記述言語SyReCの論文。</span></li>
+    </ol>
+  </div>
+
+  <!-- キーワード -->
+  <div class="card">
+    <h2>キーワード</h2>
+    <ul class="keyword-list">
+      <li>Janus</li>
+      <li>可逆計算</li>
+      <li>可逆プログラミング言語</li>
+      <li>逆実行</li>
+      <li>プログラムインバータ</li>
+      <li>R-WHILE</li>
+      <li>R-CORE</li>
+      <li>ROOPL++</li>
+      <li>Hermes</li>
+      <li>CJanus</li>
+      <li>SyReC</li>
+      <li>ランダウアーの原理</li>
+      <li>量子計算</li>
+      <li>暗号</li>
+    </ul>
+  </div>
+
+</main>
+
+<footer>
+  &copy; 2026 <a href="index.html">横山研究室</a> &ndash; <a href="https://www.nanzan-u.ac.jp/">南山大学</a> <a href="https://www.st.nanzan-u.ac.jp/">理工学部</a> <a href="https://www.st.nanzan-u.ac.jp/elecomm/">電子情報工学科</a>
+</footer>
+
+</body>
+</html>

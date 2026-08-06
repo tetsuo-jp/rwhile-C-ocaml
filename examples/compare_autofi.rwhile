@@ -1,0 +1,44 @@
+(* COMPARE - rewritten using -autofi extension *)
+(* Original: compare.rwhile *)
+(*
+ * Change: every "if E then ... fi E" (where E is the same expression
+ *   on both sides) is replaced by "iff E then ... fi".
+ *   This removes the duplicated condition at the fi line.
+ *
+ * All four if/fi pairs in COMPARE2 qualify:
+ *   - "if =? X nil"   -- X is not touched inside the branch
+ *   - "if =? Y nil"   -- Y is not touched inside the branch
+ *)
+
+macro COMPARE2(X,Y,X',Y',F,R)
+  from  =? X' nil
+  do    iff =? X nil then
+          iff =? Y nil then
+            F ^= (nil.nil);
+            R ^= (nil.nil)       (* X = nil, Y = nil  ->  equal   *)
+          else
+            F ^= (nil.nil);
+            R ^= nil             (* X = nil, Y != nil ->  X < Y   *)
+          fi
+        else
+          iff =? Y nil then
+            F ^= (nil.nil);
+            R ^= (nil.(nil.nil)) (* X != nil, Y = nil ->  X > Y   *)
+          fi
+        fi
+  loop  cons T X <= X;
+        X' <= cons T X';
+        cons T Y <= Y;
+        Y' <= cons T Y'
+  until =? F (nil.nil)
+
+macro COMPARE(X,Y,R')
+  COMPARE2(X,Y,X',Y',F,R);
+  R' ^= R;
+  INV-COMPARE2(X,Y,X',Y',F,R)
+
+read X;
+  cons X Y <= X;
+  COMPARE(X,Y,R');
+  X <= cons (cons X Y) R';
+write X
