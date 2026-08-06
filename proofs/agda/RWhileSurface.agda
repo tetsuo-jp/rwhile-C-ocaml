@@ -282,3 +282,55 @@ incr-restores-scratch {x} {t} {σ} nxt ntx gt d
           (get-set-≡ (σ₂ σ x t) x (nil ∙ get σ x))
   , get-set-≡ (σ₃ σ x t) t nil
   , refl
+
+------------------------------------------------------------------------
+-- 9.  The loop inside a `for`.
+--
+--     src/Desugar.ml states two things about it in prose: "the body runs at
+--     least once (A = B runs it exactly once)" and "the counter is loop-LOCAL:
+--     it is nil before and after".  The first is immediate from the `e-loop`
+--     rule; the second was proved via the bracket, but WHY the counter ends nil
+--     -- because the loop leaves it equal to B, so the closing `X ^= B` clears
+--     it -- needed the induction below.
+
+private
+  -- `=? A B` holding means the two operands really are equal
+  eqTest-sound : ∀ σ a b → evalT σ (eqE a b) ≡ just true → evalO σ a ≡ evalO σ b
+  eqTest-sound σ a b p with eqV (evalO σ a) (evalO σ b) in q
+  ... | true  = eqV-sound (evalO σ a) (evalO σ b) q
+  ... | false with p
+  ...   | ()
+
+-- However many times it went round, a loop whose exit test is `=? X B` stops
+-- with X equal to B.  Induction on Rest; no assumption about the body at all.
+rest-exits-at : ∀ {x b e D L w z n}
+              → Rest e D L (eqE (var x) b) w z n
+              → get z x ≡ evalO z b
+rest-exits-at {x} {b} (r-exit p)         = eqTest-sound _ (var x) b p
+rest-exits-at         (r-iter _ _ _ _ r) = rest-exits-at r
+
+loop-exits-at : ∀ {x b e D L s u k}
+              → loop e D L (eqE (var x) b) ⊢ s ⇒ u ∣ k
+              → get u x ≡ evalO u b
+loop-exits-at (e-loop _ _ r) = rest-exits-at r
+
+-- The body runs at least once: `e-loop` runs D before consulting Rest, so even
+-- `for X = A to A` executes the body.
+loop-body-runs : ∀ {e D L f s u k}
+               → loop e D L f ⊢ s ⇒ u ∣ k
+               → Σ[ t ∈ Store ] Σ[ m ∈ ℕ ] (D ⊢ s ⇒ t ∣ m)
+loop-body-runs (e-loop _ d _) = _ , _ , d
+
+-- ONE trip round a for-loop, given that the body leaves the counter alone --
+-- which src/Desugar.ml now checks at desugar time, after measuring on
+-- 2026-08-06 that a body touching the counter silently changes the iteration
+-- count.  The counter grows by exactly one nil.
+for-iter-step : ∀ {x t body w y z k m}
+              → (∀ {σ σ' j} → body ⊢ σ ⇒ σ' ∣ j → get σ' x ≡ get σ x)
+              → ¬ (x ≡ t) → ¬ (t ≡ x) → get w t ≡ nil
+              → incr x t ⊢ w ⇒ y ∣ k
+              → body ⊢ y ⇒ z ∣ m
+              → (get z x ≡ (nil ∙ get w x)) × (get y t ≡ nil)
+for-iter-step {x} {t} keep nxt ntx gwt di db
+  with incr-restores-scratch nxt ntx gwt di
+... | gx , gt , _ = trans (keep db) gx , gt
