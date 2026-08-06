@@ -890,7 +890,36 @@ macro SPEC-STEP-AV(Cd, Cd', RCode)
       * different Tmps.  This needs a temp ALLOCATOR: TEMP-IDX returns one fixed
       * index, which SWAP-VIA-TEMP can use only because it consumes it
       * immediately.  Allocating reversibly inside spec_av (a reversible program)
-      * is the actual work, and it is not small. *)
+      * is the actual work, and it is not small.
+      *
+      * ROOT CAUSE, finally (2026-08-07, from reading PAT-READ-LEAF-AV2 and the
+      * 'ass path together).  `('D.('var.k))` names a MUTABLE SLOT, not a value.
+      * PAT-READ-LEAF-AV2 hands out that AV and leaves slot k as ('S.nil); the
+      * 'ass path later re-dynamicises the same slot back to ('D.('var.k)).  So:
+      *
+      *     read slot 4      -> AV1 = ('D.('var.4));  slot 4 := ('S.nil)
+      *     'ass  4 ^= 15    -> slot 4 := ('D.('var.4))   (re-dynamicised)
+      *     read slot 4      -> AV2 = ('D.('var.4))
+      *     ... both AVs delivered -> slot 4 consumed twice at run time
+      *
+      * AV1 went STALE the moment slot 4 was re-assigned: it still reads as "the
+      * value of variable 4", but that is no longer the value it was created for.
+      * The two AVs are equal as terms yet denote different run-time values.
+      *
+      * That is why no reordering helps, and why a capture is genuinely new
+      * content: the AV language cannot express "the value slot k held at read
+      * time".  The fix is to snapshot at read -- emit `Tmp <= ('var.k)` in
+      * PAT-READ-LEAF-AV2 and return ('D.('var.Tmp)) -- so an AV names a value
+      * that nothing can reassign.
+      *
+      * COST TO WEIGH BEFORE IMPLEMENTING.  Snapshotting at every dynamic var
+      * read is sound but adds one residual command and one store slot per read,
+      * enlarging EVERY residual -- against this project's own goal of getting
+      * comp2/|spec_av| below 1.  Snapshotting only when a live AV would go stale
+      * needs escape analysis over the AV store.  Choosing between them is a
+      * design decision, not a mechanical fix.  The rest of the work is threading
+      * RCode through PAT-READ-LEAF-AV2 / PAT-READ-AV / PAT-READ-ITER-STEP /
+      * PAT-READ-ITER, plus the reversible temp allocator. *)
      PAT-WRITE-ITER(RpQ, RpAV, RCode);
      Arg <= cons RpQ RpR
    else
