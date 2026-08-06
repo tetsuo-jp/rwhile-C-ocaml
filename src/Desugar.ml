@@ -232,8 +232,15 @@ let rec desugar_com (c : com) : com =
   (* sugar *)
   | CSkip                  -> CCond (vtrue, BThenNone, BElseNone, vtrue)
   | CAssert e              -> CCond (e, BThenNone, BElseNone, vtrue)
-  | CSwap (x, y)           -> CRep (PCons (PVar (Var x), PVar (Var y)),
-                                    PCons (PVar (Var y), PVar (Var x)))
+  | CSwap (x, y)           ->
+     (* Same condition as push/pop, and for the same reason: `cons X X <= cons
+        X X` reads X twice.  The interpreter already prints two linearity
+        warnings for it, so accepting it was an inconsistency -- push X X is
+        rejected outright. *)
+     if x = y then
+       raise (Desugar_error "<->: the two variables must differ")
+     else CRep (PCons (PVar (Var x), PVar (Var y)),
+                PCons (PVar (Var y), PVar (Var x)))
   | CLocalD (x, e, body, y, f) ->
      if x <> y then
        raise (Desugar_error "local/delocal: the two variable names must agree")
@@ -253,6 +260,14 @@ let rec desugar_com (c : com) : com =
      if List.mem x (vars_com body) then
        raise (Desugar_error
                 "for: the body must not mention the loop counter")
+     (* The bounds must not mention it either.  `for I = nil to I` has the exit
+        test `=? I I`, which is trivially true, so the loop silently runs the
+        body exactly ONCE however it is written -- measured 2026-08-06.  (The
+        mirror case `for I = I to B` errors instead, on the loop's
+        reversibility assertion, which is how the asymmetry was noticed.) *)
+     else if List.mem x (vars_exp a) || List.mem x (vars_exp b) then
+       raise (Desugar_error
+                "for: the bounds must not mention the loop counter")
      else
      bracket x a
        (CLoop (EEq (EVar (Var x), a),

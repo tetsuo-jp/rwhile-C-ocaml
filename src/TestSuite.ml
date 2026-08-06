@@ -2294,7 +2294,13 @@ let test_sugar_assert () =
 let test_sugar_swap () =
   Alcotest.(check valT_testable) "X <-> Y exchanges two variables"
     (VCons (atom "'a", atom "'c"))
-    (eval_string "read X; Y ^= 'a; X <-> Y; Z <= cons X Y; write Z" "'c")
+    (eval_string "read X; Y ^= 'a; X <-> Y; Z <= cons X Y; write Z" "'c");
+  (* Same condition as push/pop: `cons X X <= cons X X` reads X twice.  The
+     interpreter already warned about the non-linear pattern yet accepted it,
+     while `push X X` was rejected -- an inconsistency, closed 2026-08-06. *)
+  Alcotest.(check bool) "X <-> X is rejected" true
+    (try ignore (eval_string "read X; K <-> K; Out <= X; write Out" "'a"); false
+     with Desugar.Desugar_error _ -> true)
 
 let test_sugar_local () =
   (* T is set to 'b, mutated to 'c by the swap, and cleared by delocal T = 'c *)
@@ -2357,6 +2363,20 @@ let test_sugar_for () =
      counter leaks out.  Measured before the check existed: adding `I <-> K` to
      a two-iteration body made it run THREE times, left K holding the counter,
      and raised no error.  Rejected at desugar time now. *)
+  (* `for I = nil to I` has the exit test `=? I I`, trivially true, so the loop
+     silently ran the body exactly ONCE however it was written.  (The mirror
+     case `for I = I to B` errored on the loop's reversibility assertion, which
+     is how the asymmetry was noticed.)  Both are rejected now. *)
+  Alcotest.(check bool) "an upper bound mentioning the counter is rejected" true
+    (try ignore (eval_string
+       "read X; for I = nil to I do R <= cons 'q R end; Out <= cons X R; write Out" "'a");
+         false
+     with Desugar.Desugar_error _ -> true);
+  Alcotest.(check bool) "a lower bound mentioning the counter is rejected" true
+    (try ignore (eval_string
+       "read X; for I = I to (nil.nil) do R <= cons 'q R end; Out <= cons X R; write Out" "'a");
+         false
+     with Desugar.Desugar_error _ -> true);
   Alcotest.(check bool) "a body that mentions the counter is rejected" true
     (try ignore (eval_string
        "read X; for I = nil to (nil.nil) do I <-> K; R <= cons 'q R end; \
