@@ -806,7 +806,21 @@ macro SPEC-STEP-AV(Cd, Cd', RCode)
       *      routes it through SWAP-VIA-TEMP, and PAT-WRITE-ITER did not -- it
       *      rehomed the two leaves independently, emitting the broken in-place
       *      `Vi1 <= Vi2; Vi2 <= Vi1`.  The same detector is now in
-      *      PAT-WRITE-ITER-STEP's spine-split branch. *)
+      *      PAT-WRITE-ITER-STEP's spine-split branch.
+      *
+      * NOT DONE YET (2026-08-07): preserving the structural ops is not the whole
+      * fp1-via-ri_fp3 bug.  The residual for swap now contains them but still
+      * fails to run:
+      *
+      *     4 ^= 15;  15 ^= 4;      -- stage 15's value through working slot 4
+      *     4 ^= 16;  16 ^= 4;      -- stage 16's value through 4, still occupied
+      *                             --   -> error in update: var=4 cur='b new='a
+      *     6 <= 4;   5 <= 4;       -- and 4 is consumed twice as well
+      *
+      * Two rehomes stage through the SAME working slot without it being freed in
+      * between -- the same family as the transposition bug, but at the level of
+      * residual sequencing rather than of one cons split.  Pinned by
+      * TestSuite's "fp1-via-ri_fp3 KNOWN BUG: residual still fails to run". *)
      PAT-WRITE-ITER(RpQ, RpAV, RCode);
      Arg <= cons RpQ RpR
    else

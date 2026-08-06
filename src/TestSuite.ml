@@ -1573,15 +1573,44 @@ let fp1_ri_fp3_body src_name =
  * new='b`.  The blocker recorded in spec_av.rwhile until today -- that wiring
  * it makes full-ri_fp3 fp1 diverge -- was re-measured and does NOT happen. *)
 let test_fp1_ri_fp3_known_bug () =
-  (* FIXED 2026-08-07.  `swap` and `sx_splitjoin` differ only by the order of the
-     rebuilt cons, and their fp1-via-ri_fp3 residual bodies now differ too --
-     the dynamic structural ops survive.  They used to be BYTE-IDENTICAL, which
-     meant spec_av had folded ri_fp3's stack-based EVAL-PAT away and swap was
-     not actually performed. *)
+  (* PARTLY FIXED 2026-08-07.  `swap` and `sx_splitjoin` differ only by the order
+     of the rebuilt cons, and their fp1-via-ri_fp3 residual bodies now differ too
+     -- the dynamic structural ops survive.  They used to be BYTE-IDENTICAL,
+     which meant spec_av had folded ri_fp3's stack-based EVAL-PAT away and swap
+     was not actually performed. *)
   Alcotest.(check bool)
     "swap and splitjoin residual bodies now differ (structural ops preserved)"
     true
     (fp1_ri_fp3_body "sx_splitjoin" <> fp1_ri_fp3_body "swap")
+
+(* ...BUT THE RESIDUAL STILL DOES NOT RUN.  Preserving the structural ops is not
+ * the whole bug.  Traced 2026-08-07 on the swap residual:
+ *
+ *     4 ^= 15;  15 ^= 4;      -- stage 15's value ('b) through working slot 4
+ *     4 ^= 16;  16 ^= 4;      -- stage 16's value ('a) through 4 ... which still
+ *                             --   holds 'b  ->  error in update: var=4
+ *     6 <= 4;   5 <= 4;       -- and 4 is then consumed twice as well
+ *
+ * Two rehomes stage through the SAME working slot without it being freed in
+ * between.  Same family as the transposition bug fixed in PAT-WRITE-ITER (a
+ * move emitted without checking the target is available), but at the level of
+ * residual sequencing rather than of one cons split.  This test pins the
+ * remaining failure so "structural ops preserved" is not mistaken for "fp1 via
+ * ri_fp3 works". *)
+let test_fp1_ri_fp3_residual_still_fails () =
+  let spec_av = parse_file_program (examples_dir ^ "/spec_av.rwhile") in
+  let ri_fp3 = Program2DataRwhile.program2data
+      (parse_file_program (examples_dir ^ "/ri_fp3.rwhile")) in
+  let src = Program2DataRwhile.program2data
+      (parse_file_program (examples_dir ^ "/swap.rwhile")) in
+  let comp = EvalRwhile.evalProgram spec_av (spec_in ri_fp3 src) in
+  let d = VCons (atom "'a", atom "'b") in
+  Alcotest.(check bool)
+    "KNOWN BUG: the fp1-via-ri_fp3 residual still fails to run (shared work slot)"
+    true
+    (try ignore (EvalRwhile.evalProgram
+                   (Program2DataRwhile.data2program comp) d); false
+     with Failure _ -> true)
 
 (* Evaluate a program-as-data value (a spec residual / comp) DIRECTLY by
  * decoding it back to an AST -- the reliable alternative to run_via_ri, which
@@ -2780,7 +2809,8 @@ let () =
       Alcotest.test_case "fp1 cross-var move+clear (no-alias fix)" `Quick test_fp1_move_clear;
       Alcotest.test_case "ri_fp3 reversible-clear self-interp: id" `Quick test_ri_fp3_selfinterp_id;
       Alcotest.test_case "ri_fp3 reversible-clear self-interp: swap" `Quick test_ri_fp3_selfinterp_swap;
-      Alcotest.test_case "fp1-via-ri_fp3 FIXED: structural ops preserved" `Quick test_fp1_ri_fp3_known_bug;
+      Alcotest.test_case "fp1-via-ri_fp3: structural ops preserved (was a KNOWN BUG)" `Quick test_fp1_ri_fp3_known_bug;
+      Alcotest.test_case "fp1-via-ri_fp3 KNOWN BUG: residual still fails to run" `Quick test_fp1_ri_fp3_residual_still_fails;
       Alcotest.test_case "dyn-cond comp correct directly; KNOWN ri.rwhile 'cond bug via run_via_ri" `Quick test_fp1_dyncond_known_bug;
       Alcotest.test_case "depth-general nested read residualizes (PAT-READ-ITER)" `Quick test_fp1_nested_read;
       Alcotest.test_case "fp1-via-ri_fp3 KNOWN BUG: STEP leaves opaque Result" `Quick test_fp1_step_bug_opaque_result;
