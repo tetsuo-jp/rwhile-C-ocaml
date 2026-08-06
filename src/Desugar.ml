@@ -182,6 +182,50 @@ let incr_unary (x : rIdent) : com =
   CSeq (CAss (x, EVar (Var t)),
         CAss (t, EVar (Var x)))))
 
+(* The variables a command mentions.  Deliberately SHALLOW -- it reads the
+   sugar constructors directly instead of desugaring them -- because it is used
+   from inside desugar_com, and because Subst.varsCom already depends on this
+   module. *)
+let rec vars_com (c : com) : rIdent list =
+  match c with
+  | CSeq (a, b)            -> vars_com a @ vars_com b
+  | CMac (_, xs)           -> xs
+  | CAss (x, e)            -> x :: vars_exp e
+  | CRep (p, q)            -> vars_pat p @ vars_pat q
+  | CCond (e, t, el, f)    -> vars_exp e @ vars_exp f @ vars_then t @ vars_else el
+  | CLoop (e, d, l, f)     -> vars_exp e @ vars_exp f @ vars_do d @ vars_loop l
+  | CShow e                -> vars_exp e
+  | CLocal (x, b)          -> x :: vars_com b
+  | CAutoFi (e, t, el)     -> vars_exp e @ vars_then t @ vars_else el
+  | CArrAss (x, i, e)      -> x :: vars_exp i @ vars_exp e
+  | CCase (sc, r, arms)    -> sc :: r ::
+      List.concat_map (fun (ACase (p, b, q)) ->
+          vars_pat p @ vars_com b @ vars_pat q) arms
+  | CSkip                  -> []
+  | CAssert e              -> vars_exp e
+  | CSwap (a, b) | CPush (a, b) | CPop (a, b) -> [a; b]
+  | CLocalD (a, e, b, r, f) -> a :: r :: vars_exp e @ vars_exp f @ vars_com b
+  | CFor (r, a, b, body)   -> r :: vars_exp a @ vars_exp b @ vars_com body
+
+and vars_exp = function
+  | ECons (a, b) | EEq (a, b) -> vars_exp a @ vars_exp b
+  | EHd a | ETl a | EPair a   -> vars_exp a
+  | EArrGet (Var r, a)        -> r :: vars_exp a
+  | EVar (Var r)              -> [r]
+  | EVal _                    -> []
+  | EList es                  -> List.concat_map vars_exp es
+
+and vars_pat = function
+  | PCons (a, b) -> vars_pat a @ vars_pat b
+  | PVar (Var r) -> [r]
+  | PVal _       -> []
+  | PList ps     -> List.concat_map vars_pat ps
+
+and vars_then = function BThen c -> vars_com c | BThenNone -> []
+and vars_else = function BElse c -> vars_com c | BElseNone -> []
+and vars_do   = function BDo   c -> vars_com c | BDoNone   -> []
+and vars_loop = function BLoop c -> vars_com c | BLoopNone -> []
+
 let rec desugar_com (c : com) : com =
   match c with
   | CCase (scrut, result, arms) -> desugar_case scrut result arms
@@ -201,6 +245,15 @@ let rec desugar_com (c : com) : com =
      if x = s then raise (Desugar_error "pop: the two variables must differ")
      else CRep (PCons (PVar (Var x), PVar (Var s)), PVar (Var s))
   | CFor (x, a, b, body) ->
+     (* The body must not touch the counter.  Without this check the loop's own
+        tests see a value the body changed, so the body silently runs a
+        DIFFERENT number of times and the counter leaks out -- measured
+        2026-08-06: adding `I <-> K` to a two-iteration body made it run three
+        times and left K holding the counter, with no error at all. *)
+     if List.mem x (vars_com body) then
+       raise (Desugar_error
+                "for: the body must not mention the loop counter")
+     else
      bracket x a
        (CLoop (EEq (EVar (Var x), a),
                BDo (desugar_com body),

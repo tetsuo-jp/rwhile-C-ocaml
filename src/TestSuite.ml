@@ -2351,7 +2351,18 @@ let test_sugar_for () =
        "read X; for I = nil to (nil.(nil.nil)) do X <= cons 'a X end; write X" "nil");
   Alcotest.(check valT_testable) "for A to A runs the body exactly once"
     (parse_val "('a . nil)")
-    (eval_string "read X; for I = nil to nil do X <= cons 'a X end; write X" "nil")
+    (eval_string "read X; for I = nil to nil do X <= cons 'a X end; write X" "nil");
+  (* A body that touches the counter makes the loop's own tests see a value the
+     body changed, so it silently runs a DIFFERENT number of times and the
+     counter leaks out.  Measured before the check existed: adding `I <-> K` to
+     a two-iteration body made it run THREE times, left K holding the counter,
+     and raised no error.  Rejected at desugar time now. *)
+  Alcotest.(check bool) "a body that mentions the counter is rejected" true
+    (try ignore (eval_string
+       "read X; for I = nil to (nil.nil) do I <-> K; R <= cons 'q R end; \
+        Out <= cons I (cons K R); write Out" "nil");
+         false
+     with Desugar.Desugar_error _ -> true)
 
 (* `FOR-T-1` is a legal RIdent, so a program may already use it.  The scratch the
    for-counter increment needs must dodge whatever the program mentions rather

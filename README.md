@@ -117,7 +117,9 @@ invisible to macro expansion, evaluation, inversion and program-encoding:
 `push` and `pop` are exact inverses with no inversion rule of their own —
 inverting a replacement swaps its two patterns, which turns one into the other.
 Their two variables must differ. `local`/`delocal` must name the same variable
-(checked).
+(checked), and a `for` body must not mention the loop counter (also checked —
+otherwise the loop's own tests see a value the body changed and it silently runs
+a different number of times).
 
 The two `assert (=? X nil)` guards are load-bearing, not decoration: `X ^= E` is
 an XOR update, not a binding, so when `X` already holds `E`'s value it *clears*
