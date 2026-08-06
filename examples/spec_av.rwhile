@@ -752,12 +752,29 @@ macro SPEC-STEP-AV(Cd, Cd', RCode)
       * part, and a fully-dynamic value flows symbolically (lifted at output). *)
      cons RpQ RpR <= Arg;
      PAT-READ-ITER(RpR, RpAV);   (* depth-general read (was PAT-READ-AV, depth-1) *)
-     (* PAT-WRITE-ITER (below) handles arbitrary-depth patterns and, with the
-      * pair? guard, no longer crashes on ri_fp3's static-atom positions. But
-      * wiring it makes full-ri_fp3 fp1 DIVERGE (a static loop in ri_fp3's stack
-      * machine unrolls forever during specialization). It is correct for small
-      * fp1 programs (assemble-fp1 2/3/4 pass when wired). Until the divergence is
-      * fixed, keep PAT-WRITE-STRUCT here so the suite does not hang. *)
+     (* PAT-WRITE-ITER (below) handles arbitrary-depth patterns; PAT-WRITE-STRUCT
+      * only handles depth 1 and DROPS nested sub-patterns, which is why the
+      * fp1-via-ri_fp3 residual loses its structural ops.
+      *
+      * The note here used to say that wiring PAT-WRITE-ITER makes full-ri_fp3
+      * fp1 DIVERGE.  RE-MEASURED 2026-08-06: THAT NO LONGER HAPPENS.  With it
+      * wired, fp1 on ri_fp3 finishes in under a second and returns the same
+      * 827-node residual as PAT-WRITE-STRUCT, and the whole test suite runs to
+      * completion in 46 s.  Wiring it also FIXES the structural-ops bug: the
+      * residual bodies of `swap` and `sx_splitjoin` become different, where
+      * PAT-WRITE-STRUCT makes them byte-identical (which is the bug -- swap is
+      * not actually performed).
+      *
+      * The REAL remaining blocker is different, and smaller: with ITER wired,
+      * fp1 for ri_seq produces a residual that fails when run, with
+      *   error in update: var=Elem cur='a new='b
+      * (first-projection-min 4 and 6).  Everything else that fails is expected
+      * churn: the two KNOWN-BUG characterizations that assert the old broken
+      * behaviour, and refactor-gate, which byte-compares spec_av_clean against
+      * spec_av and so needs the same edit.
+      *
+      * So: do not chase divergence -- chase the ri_seq residual.  Keeping
+      * PAT-WRITE-STRUCT until that is fixed. *)
      PAT-WRITE-STRUCT(RpQ, RpAV, RCode);
      Arg <= cons RpQ RpR
    else

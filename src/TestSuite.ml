@@ -1560,7 +1560,14 @@ let fp1_ri_fp3_body src_name =
  * residual is pure data-routing -- swap is not actually performed.  Direct
  * specialization (test_fp1_main_swap) is correct, so the bug is specific to
  * ri_fp3's stack-machine indirection.  When the bug is fixed this test SHOULD
- * fail (bodies must then differ); update it to assert the correct residuals. *)
+ * fail (bodies must then differ); update it to assert the correct residuals.
+ *
+ * STATUS 2026-08-06: wiring PAT-WRITE-ITER into the 'rep path DOES fix this --
+ * the two bodies become different (1597 nodes each, distinct) instead of
+ * byte-identical (763 nodes, same).  It is not wired because fp1 for ri_seq
+ * then produces a residual that fails with `error in update: var=Elem cur='a
+ * new='b`.  The blocker recorded in spec_av.rwhile until today -- that wiring
+ * it makes full-ri_fp3 fp1 diverge -- was re-measured and does NOT happen. *)
 let test_fp1_ri_fp3_known_bug () =
   Alcotest.(check string)
     "KNOWN BUG: swap and splitjoin residual bodies identical (structural ops lost)"
