@@ -160,13 +160,18 @@ let () =
 
 let program2data (p : program) : valT =
   let p2 = MacroRwhile.expMacProgram p in
+  let statics = map (fun s -> RIdent s) !static_vars in
   let sub =
-    if !share_slots then Optimize.slot_alloc p2
+    if !share_slots then
+      (* pass 2 allocates slots; pass 3 then pushes the slots whose variables are
+         all static to the end.  (These were not composed at first -- static_vars
+         was simply ignored when share_slots was on.) *)
+      Optimize.slot_alloc_static_last statics p2
     else
       let vs0 = if !hot_vars then Optimize.var_order p2 else EvalRwhile.varProgram p2 in
-      let vs = match !static_vars with
+      let vs = match statics with
         | [] -> vs0
-        | ss -> Optimize.order_static_last (map (fun s -> RIdent s) ss) vs0 in
+        | ss -> Optimize.order_static_last ss vs0 in
       let rec incseq m n = if m = n then [m] else m :: incseq (m+1) n in
       let ws = map (fun n -> RIdent (string_of_int n)) (incseq 1 (length vs)) in
       combine vs ws in

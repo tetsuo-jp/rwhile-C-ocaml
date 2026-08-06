@@ -251,3 +251,25 @@ let slot_alloc (p : program) : (rIdent * rIdent) list =
       | m :: rest -> if m = n then i else idx (i + 1) rest in
     idx 1 ranked in
   List.map (fun (v, n) -> (v, RIdent (string_of_int (number n)))) raw
+
+(* Pass 2 then pass 3: allocate slots, then renumber so that any slot whose
+   variables are ALL static comes last.  A slot holding even one dynamic
+   variable stays in the hot region, since that variable survives into the
+   residual. *)
+let slot_alloc_static_last (statics : rIdent list) (p : program)
+    : (rIdent * rIdent) list =
+  let base = slot_alloc p in
+  if statics = [] then base
+  else
+    let slots = List.sort_uniq compare (List.map snd base) in
+    let all_static n =
+      List.for_all (fun (v, m) -> m <> n || List.mem v statics) base in
+    let dyn = List.filter (fun n -> not (all_static n)) slots in
+    let sta = List.filter all_static slots in
+    let ranked = dyn @ sta in
+    let number n =
+      let rec idx i = function
+        | [] -> i
+        | m :: rest -> if m = n then i else idx (i + 1) rest in
+      idx 1 ranked in
+    List.map (fun (v, n) -> (v, RIdent (string_of_int (number n)))) base
