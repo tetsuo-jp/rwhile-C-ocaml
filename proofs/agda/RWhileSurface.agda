@@ -32,13 +32,14 @@ open import Data.List using (List; []; _∷_)
 open import Data.Maybe using (Maybe; just; nothing)
 open import Data.Bool using (Bool; true; false)
 open import Data.Product using (_×_; _,_; Σ; Σ-syntax)
+open import Relation.Nullary using (¬_)
 open import Relation.Binary.PropositionalEquality
   using (_≡_; refl; sym; trans; cong; subst)
 
 open import RWhileTime
 open import RWhileTimeDet using (⇒-det)
 open import RWhileTimeInv using (eqV-sound)
-open import RWhileSIWf using (get-set-≡)
+open import RWhileSIWf using (get-set-≡; get-set-≢)
 open import RWhileSugar
   using (trueE; nilTest; assertNil; bracket;
          assertNil-nil; assertNil-id; nilTest-sound;
@@ -221,3 +222,63 @@ for-counter-local : ∀ {x t a b body s u k}
                   → forC x t a b body ⊢ s ⇒ u ∣ k
                   → (get s x ≡ nil) × (get u x ≡ nil)
 for-counter-local d = bracket-needs-nil d , bracket-clears d
+
+------------------------------------------------------------------------
+-- 8.  The counter step `<X++>` itself.
+--
+--     src/Desugar.ml claims that sharing ONE scratch variable across every
+--     expansion of a for-loop is safe, "because the scratch is set and cleared
+--     within the increment, so it is nil before and after and nothing can
+--     interleave".  That claim is what `incr-restores-scratch` below turns into
+--     a theorem: T comes back nil, X has grown by exactly one nil, and the
+--     whole step costs 7.
+--
+--     Route: build the run once (incr-run), then use determinism -- the same
+--     trick as compile-cost.
+
+private
+  -- the four stores the four assignments walk through
+  σ₁ σ₂ σ₃ σ₄ : Store → ℕ → ℕ → Store
+  σ₁ σ x t = set σ t (nil ∙ get σ x)
+  σ₂ σ x t = set (σ₁ σ x t) x nil
+  σ₃ σ x t = set (σ₂ σ x t) x (nil ∙ get σ x)
+  σ₄ σ x t = set (σ₃ σ x t) t nil
+
+incr-run : ∀ {x t} σ → ¬ (x ≡ t) → ¬ (t ≡ x) → get σ t ≡ nil
+         → incr x t ⊢ σ ⇒ σ₄ σ x t ∣ 7
+incr-run {x} {t} σ nxt ntx gt =
+  e-seq (e-ass refl (subst (λ z → rupd z (nil ∙ get σ x) ≡ just (nil ∙ get σ x))
+                           (sym gt) refl))
+ (e-seq (e-ass tl₁ (subst (λ z → rupd z (get σ x) ≡ just nil)
+                          (sym g₁x) (rupd-self (get σ x))))
+ (e-seq (e-ass (cong just g₂t)
+               (subst (λ z → rupd z (nil ∙ get σ x) ≡ just (nil ∙ get σ x))
+                      (sym (get-set-≡ (σ₁ σ x t) x nil)) refl))
+        (e-ass (cong just (get-set-≡ (σ₂ σ x t) x (nil ∙ get σ x)))
+               (subst (λ z → rupd z (nil ∙ get σ x) ≡ just nil)
+                      (sym g₃t) (rupd-self (nil ∙ get σ x))))))
+  where
+    g₁t : get (σ₁ σ x t) t ≡ nil ∙ get σ x
+    g₁t = get-set-≡ σ t (nil ∙ get σ x)
+    g₁x : get (σ₁ σ x t) x ≡ get σ x
+    g₁x = get-set-≢ σ t x (nil ∙ get σ x) ntx
+    tl₁ : evalE (σ₁ σ x t) (tlE (var t)) ≡ just (get σ x)
+    tl₁ rewrite g₁t = refl
+    g₂t : get (σ₂ σ x t) t ≡ nil ∙ get σ x
+    g₂t = trans (get-set-≢ (σ₁ σ x t) x t nil nxt) g₁t
+    g₃t : get (σ₃ σ x t) t ≡ nil ∙ get σ x
+    g₃t = trans (get-set-≢ (σ₂ σ x t) x t (nil ∙ get σ x) nxt) g₂t
+
+-- What the step does, for ANY run of it: the counter grows by one, the scratch
+-- comes back nil, and it costs 7.
+incr-restores-scratch : ∀ {x t σ σ' k}
+                      → ¬ (x ≡ t) → ¬ (t ≡ x) → get σ t ≡ nil
+                      → incr x t ⊢ σ ⇒ σ' ∣ k
+                      → (get σ' x ≡ (nil ∙ get σ x)) × (get σ' t ≡ nil) × (k ≡ 7)
+incr-restores-scratch {x} {t} {σ} nxt ntx gt d
+  with ⇒-det d (incr-run σ nxt ntx gt)
+... | refl , refl =
+    trans (get-set-≢ (σ₃ σ x t) t x nil ntx)
+          (get-set-≡ (σ₂ σ x t) x (nil ∙ get σ x))
+  , get-set-≡ (σ₃ σ x t) t nil
+  , refl
