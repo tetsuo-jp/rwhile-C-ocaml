@@ -1527,15 +1527,19 @@ let test_pat_write_nested_split () =
   let prog = parse_macro_harness (examples_dir ^ "/spec_av.rwhile")
     "read In; cons Vl Cmd <= In; SPEC-CMD-AV(Cmd); Out <= cons Vl RCode; write Out" in
   let out = EvalRwhile.evalProgram prog (pair (parse_val store) (parse_val cmd)) in
-  (* KNOWN BUG: nested cons sub-pattern's dynamic value is discarded, so V1e and
-   * V2e stay static-nil and nothing is residualized.  When PAT-WRITE handles
-   * nested patterns, V1e/V2e must become dynamic and a split must be emitted;
-   * this assertion will then fail (update it to the correct expectation). *)
+  (* FIXED 2026-08-07 by wiring PAT-WRITE-ITER into the 'rep path: the nested
+   * cons sub-pattern's dynamic value is no longer discarded.  V1e and V2e become
+   * dynamic references to themselves and the split is residualized -- exactly
+   * what the old KNOWN-BUG comment said should happen once PAT-WRITE handled
+   * nested patterns. *)
   match out with
   | VCons (vl, rcode) ->
      Alcotest.(check (list valT_testable))
-       "KNOWN BUG: nested split discards value (V1e,V2e stay static-nil, no residual)"
-       [parse_val "('S . nil)"; parse_val "('S . nil)"; VNil]
+       "nested split: V1e,V2e go dynamic and the split is residualized"
+       [parse_val "('D . ('var . (nil . nil)))";
+        parse_val "('D . ('var . (nil . (nil . nil))))";
+        parse_val ("(('rep . (('cons . (('var . (nil . nil)) . "
+                   ^ "('var . (nil . (nil . nil))))) . ('var . nil))) . nil)")]
        [nth_slot vl 1; nth_slot vl 2; rcode]
   | _ -> Alcotest.fail "unexpected output shape"
 
@@ -1569,9 +1573,15 @@ let fp1_ri_fp3_body src_name =
  * new='b`.  The blocker recorded in spec_av.rwhile until today -- that wiring
  * it makes full-ri_fp3 fp1 diverge -- was re-measured and does NOT happen. *)
 let test_fp1_ri_fp3_known_bug () =
-  Alcotest.(check string)
-    "KNOWN BUG: swap and splitjoin residual bodies identical (structural ops lost)"
-    (fp1_ri_fp3_body "sx_splitjoin") (fp1_ri_fp3_body "swap")
+  (* FIXED 2026-08-07.  `swap` and `sx_splitjoin` differ only by the order of the
+     rebuilt cons, and their fp1-via-ri_fp3 residual bodies now differ too --
+     the dynamic structural ops survive.  They used to be BYTE-IDENTICAL, which
+     meant spec_av had folded ri_fp3's stack-based EVAL-PAT away and swap was
+     not actually performed. *)
+  Alcotest.(check bool)
+    "swap and splitjoin residual bodies now differ (structural ops preserved)"
+    true
+    (fp1_ri_fp3_body "sx_splitjoin" <> fp1_ri_fp3_body "swap")
 
 (* Evaluate a program-as-data value (a spec residual / comp) DIRECTLY by
  * decoding it back to an AST -- the reliable alternative to run_via_ri, which
@@ -2770,11 +2780,11 @@ let () =
       Alcotest.test_case "fp1 cross-var move+clear (no-alias fix)" `Quick test_fp1_move_clear;
       Alcotest.test_case "ri_fp3 reversible-clear self-interp: id" `Quick test_ri_fp3_selfinterp_id;
       Alcotest.test_case "ri_fp3 reversible-clear self-interp: swap" `Quick test_ri_fp3_selfinterp_swap;
-      Alcotest.test_case "fp1-via-ri_fp3 KNOWN BUG: structural ops lost" `Quick test_fp1_ri_fp3_known_bug;
+      Alcotest.test_case "fp1-via-ri_fp3 FIXED: structural ops preserved" `Quick test_fp1_ri_fp3_known_bug;
       Alcotest.test_case "dyn-cond comp correct directly; KNOWN ri.rwhile 'cond bug via run_via_ri" `Quick test_fp1_dyncond_known_bug;
       Alcotest.test_case "depth-general nested read residualizes (PAT-READ-ITER)" `Quick test_fp1_nested_read;
       Alcotest.test_case "fp1-via-ri_fp3 KNOWN BUG: STEP leaves opaque Result" `Quick test_fp1_step_bug_opaque_result;
-      Alcotest.test_case "PAT-WRITE-STRUCT nested split (KNOWN BUG)" `Quick test_pat_write_nested_split;
+      Alcotest.test_case "PAT-WRITE-ITER nested split (was a KNOWN BUG)" `Quick test_pat_write_nested_split;
       Alcotest.test_case "PAT-WRITE-ITER handles nested split" `Quick test_pat_write_iter_nested;
       Alcotest.test_case "DYNAMICIZE-ALL materialises + marks dynamic" `Quick test_dynamicize_all;
     ];

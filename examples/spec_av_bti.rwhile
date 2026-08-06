@@ -849,7 +849,43 @@ macro PAT-WRITE-ITER-STEP(WW, WW', RCode)
         cons WiTg WiAg <= WiP; WiTg ^= WiTg;          (* drop the 'cons tag *)
         cons WiP1 WiP2 <= WiAg;
         AV-UNCONS(WiA, WiA1, WiA2);
-        WW <= cons (cons WiP1 WiA1) (cons (cons WiP2 WiA2) WW)
+        (* TRANSPOSITION, detected exactly as PAT-WRITE-STRUCT does: both leaves
+           are vars and each sub-AV is the dynamic reference to the OTHER leaf's
+           variable.  Rehoming them independently emits the broken in-place
+           `Vi1 <= Vi2; Vi2 <= Vi1` (both targets non-nil at runtime); realize it
+           as a swap through a temp instead.  Without this, wiring PAT-WRITE-ITER
+           into the 'rep path made fp1 for ri_seq produce a residual that failed
+           at run time (`Pattern write conflict: 5 is already non-nil`). *)
+        WiXp ^= nil;
+        if =? (hd WiP1) 'var then
+         if =? (hd WiP2) 'var then
+          if =? (hd WiA1) 'D then
+           if =? (hd (tl WiA1)) 'var then
+            if =? (hd WiA2) 'D then
+             if =? (hd (tl WiA2)) 'var then
+              if =? (tl (tl WiA1)) (tl WiP2) then
+               if =? (tl (tl WiA2)) (tl WiP1) then
+                if =? (tl WiP1) (tl WiP2) else WiXp ^= (nil.nil) fi =? (tl WiP1) (tl WiP2)
+               fi =? (tl (tl WiA2)) (tl WiP1)
+              fi =? (tl (tl WiA1)) (tl WiP2)
+             fi =? (hd (tl WiA2)) 'var
+            fi =? (hd WiA2) 'D
+           fi =? (hd (tl WiA1)) 'var
+          fi =? (hd WiA1) 'D
+         fi =? (hd WiP2) 'var
+        fi =? (hd WiP1) 'var;
+        if WiXp then
+          cons WiXt1 WiXi1 <= WiP1;
+          cons WiXt2 WiXi2 <= WiP2;
+          SWAP-VIA-TEMP(WiXi1, WiXi2, RCode);
+          WiP1 <= cons WiXt1 WiXi1;
+          WiP2 <= cons WiXt2 WiXi2;
+          WiA1 ^= WiA1; WiA2 ^= WiA2;
+          WiP1 ^= WiP1; WiP2 ^= WiP2
+        else
+          WW <= cons (cons WiP1 WiA1) (cons (cons WiP2 WiA2) WW)
+        fi WiXp;
+        WiXp ^= WiXp
       fi WiSnc;
       WiSnc ^= WiSnc
     fi WiIsD;
@@ -948,7 +984,7 @@ macro SPEC-STEP-AV(Cd, Cd', RCode)
       * machine unrolls forever during specialization). It is correct for small
       * fp1 programs (assemble-fp1 2/3/4 pass when wired). Until the divergence is
       * fixed, keep PAT-WRITE-STRUCT here so the suite does not hang. *)
-     PAT-WRITE-STRUCT(RpQ, RpAV, RCode);
+     PAT-WRITE-ITER(RpQ, RpAV, RCode);
      Arg <= cons RpQ RpR
    else
     if =? Tag 'cond then

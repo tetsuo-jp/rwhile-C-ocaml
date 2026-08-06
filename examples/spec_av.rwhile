@@ -659,7 +659,43 @@ macro PAT-WRITE-ITER-STEP(WW, WW', RCode)
         cons WiTg WiAg <= WiP; WiTg ^= WiTg;          (* drop the 'cons tag *)
         cons WiP1 WiP2 <= WiAg;
         AV-UNCONS(WiA, WiA1, WiA2);
-        WW <= cons (cons WiP1 WiA1) (cons (cons WiP2 WiA2) WW)
+        (* TRANSPOSITION, detected exactly as PAT-WRITE-STRUCT does: both leaves
+           are vars and each sub-AV is the dynamic reference to the OTHER leaf's
+           variable.  Rehoming them independently emits the broken in-place
+           `Vi1 <= Vi2; Vi2 <= Vi1` (both targets non-nil at runtime); realize it
+           as a swap through a temp instead.  Without this, wiring PAT-WRITE-ITER
+           into the 'rep path made fp1 for ri_seq produce a residual that failed
+           at run time (`Pattern write conflict: 5 is already non-nil`). *)
+        WiXp ^= nil;
+        if =? (hd WiP1) 'var then
+         if =? (hd WiP2) 'var then
+          if =? (hd WiA1) 'D then
+           if =? (hd (tl WiA1)) 'var then
+            if =? (hd WiA2) 'D then
+             if =? (hd (tl WiA2)) 'var then
+              if =? (tl (tl WiA1)) (tl WiP2) then
+               if =? (tl (tl WiA2)) (tl WiP1) then
+                if =? (tl WiP1) (tl WiP2) else WiXp ^= (nil.nil) fi =? (tl WiP1) (tl WiP2)
+               fi =? (tl (tl WiA2)) (tl WiP1)
+              fi =? (tl (tl WiA1)) (tl WiP2)
+             fi =? (hd (tl WiA2)) 'var
+            fi =? (hd WiA2) 'D
+           fi =? (hd (tl WiA1)) 'var
+          fi =? (hd WiA1) 'D
+         fi =? (hd WiP2) 'var
+        fi =? (hd WiP1) 'var;
+        if WiXp then
+          cons WiXt1 WiXi1 <= WiP1;
+          cons WiXt2 WiXi2 <= WiP2;
+          SWAP-VIA-TEMP(WiXi1, WiXi2, RCode);
+          WiP1 <= cons WiXt1 WiXi1;
+          WiP2 <= cons WiXt2 WiXi2;
+          WiA1 ^= WiA1; WiA2 ^= WiA2;
+          WiP1 ^= WiP1; WiP2 ^= WiP2
+        else
+          WW <= cons (cons WiP1 WiA1) (cons (cons WiP2 WiA2) WW)
+        fi WiXp;
+        WiXp ^= WiXp
       fi WiSnc;
       WiSnc ^= WiSnc
     fi WiIsD;
@@ -752,30 +788,26 @@ macro SPEC-STEP-AV(Cd, Cd', RCode)
       * part, and a fully-dynamic value flows symbolically (lifted at output). *)
      cons RpQ RpR <= Arg;
      PAT-READ-ITER(RpR, RpAV);   (* depth-general read (was PAT-READ-AV, depth-1) *)
-     (* PAT-WRITE-ITER (below) handles arbitrary-depth patterns; PAT-WRITE-STRUCT
-      * only handles depth 1 and DROPS nested sub-patterns, which is why the
-      * fp1-via-ri_fp3 residual loses its structural ops.
+     (* PAT-WRITE-ITER handles arbitrary-depth patterns.  PAT-WRITE-STRUCT, which
+      * used to be wired here, only handles depth 1 and DROPS the value of any
+      * nested cons sub-pattern -- which is exactly ri_fp3's stack split
+      * `cons (cons V1e V2e) St <= St`, and why the fp1-via-ri_fp3 residual used
+      * to lose its structural ops (swap and sx_splitjoin came out byte-identical,
+      * i.e. swap was not actually performed).
       *
-      * The note here used to say that wiring PAT-WRITE-ITER makes full-ri_fp3
-      * fp1 DIVERGE.  RE-MEASURED 2026-08-06: THAT NO LONGER HAPPENS.  With it
-      * wired, fp1 on ri_fp3 finishes in under a second and returns the same
-      * 827-node residual as PAT-WRITE-STRUCT, and the whole test suite runs to
-      * completion in 46 s.  Wiring it also FIXES the structural-ops bug: the
-      * residual bodies of `swap` and `sx_splitjoin` become different, where
-      * PAT-WRITE-STRUCT makes them byte-identical (which is the bug -- swap is
-      * not actually performed).
+      * Wiring PAT-WRITE-ITER was blocked twice, and both blockers are now gone
+      * (2026-08-06/07):
       *
-      * The REAL remaining blocker is different, and smaller: with ITER wired,
-      * fp1 for ri_seq produces a residual that fails when run, with
-      *   error in update: var=Elem cur='a new='b
-      * (first-projection-min 4 and 6).  Everything else that fails is expected
-      * churn: the two KNOWN-BUG characterizations that assert the old broken
-      * behaviour, and refactor-gate, which byte-compares spec_av_clean against
-      * spec_av and so needs the same edit.
-      *
-      * So: do not chase divergence -- chase the ri_seq residual.  Keeping
-      * PAT-WRITE-STRUCT until that is fixed. *)
-     PAT-WRITE-STRUCT(RpQ, RpAV, RCode);
+      *   1. The note here claimed it made full-ri_fp3 fp1 DIVERGE.  Re-measured:
+      *      it does not.  fp1 on ri_fp3 finishes in under a second.
+      *   2. The real blocker: fp1 for ri_seq produced a residual that failed at
+      *      run time with `Pattern write conflict: 5 is already non-nil`.  Cause:
+      *      PAT-WRITE-STRUCT detects a TRANSPOSITION of two leaf variables and
+      *      routes it through SWAP-VIA-TEMP, and PAT-WRITE-ITER did not -- it
+      *      rehomed the two leaves independently, emitting the broken in-place
+      *      `Vi1 <= Vi2; Vi2 <= Vi1`.  The same detector is now in
+      *      PAT-WRITE-ITER-STEP's spine-split branch. *)
+     PAT-WRITE-ITER(RpQ, RpAV, RCode);
      Arg <= cons RpQ RpR
    else
     if =? Tag 'cond then
