@@ -865,12 +865,32 @@ macro SPEC-STEP-AV(Cd, Cd', RCode)
       * (refill, deliver, refill, deliver); the emitter has no notion of the
       * dependency on the shared slot.
       *
-      * A design that removes the dependency instead of scheduling around it:
-      * capture the value into a FRESH temp at the moment the alias is created,
-      * and deliver from that temp at write time.  Each rehome then depends only
-      * on its own temp, so order stops mattering.  That needs a temp ALLOCATOR;
-      * TEMP-IDX currently returns one fixed index, which SWAP-VIA-TEMP can use
-      * precisely because it consumes it immediately. *)
+      * CORRECTED 2026-08-07, after checking MAKE-SEQ: program order IS emission
+      * order (MAKE-SEQ pops RCode and prepends, undoing the prepend-accumulation),
+      * and the 23 traced emissions match the 23 residual commands one for one.
+      * With that, the failure reads exactly:
+      *
+      *     4 ^= 15;  15 ^= 4;      -- stage 15's value into working slot 4
+      *     4 ^= 16;                -- stage 16's value into 4, still unconsumed
+      *     ...                     --   -> error in update: var=4
+      *     6 <= 4;   5 <= 4;       -- the consumptions, both here
+      *
+      * So it is NOT merely that the emitter schedules badly.  The pattern write
+      * holds TWO AVs that both reference slot 4, and a reversible language cannot
+      * consume one dynamic slot twice.  The specializer DUPLICATED a dynamic
+      * reference; no ordering of the emitted commands can repair that, and the
+      * earlier claim in this note that the content was already right (only the
+      * order wrong) was too optimistic -- the correct residual needs commands
+      * that are not emitted at all.
+      *
+      * What the fix has to do: capture at READ time, not at write time.  When
+      * PAT-READ produces the AV for a dynamic var leaf k, emit `Tmp <= ('var.k)`
+      * there and return ('D.('var.Tmp)); the later write then delivers from a
+      * private Tmp that nothing else can clobber, and two reads of k get two
+      * different Tmps.  This needs a temp ALLOCATOR: TEMP-IDX returns one fixed
+      * index, which SWAP-VIA-TEMP can use only because it consumes it
+      * immediately.  Allocating reversibly inside spec_av (a reversible program)
+      * is the actual work, and it is not small. *)
      PAT-WRITE-ITER(RpQ, RpAV, RCode);
      Arg <= cons RpQ RpR
    else
