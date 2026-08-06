@@ -308,20 +308,20 @@ data _⊩_⇒_∣_ : SCmd → Store → Store → ℕ → Set where
 | `for` | **カウンタの局所性を証明済み**。ループ本体の意味論は未 |
 | `assert` | **証明済み** |
 | `skip` | タイムド核の `skip` そのもの（コスト差は `cost-split` が説明） |
-| `push` / `pop` | **証明済み**（`RWhilePushPop.agda`、`RWhileCRep` 層） |
-| `X <-> Y` | **未**（`push`/`pop` と同じ層で同じ手口で書ける） |
+| `push` / `pop` / `X <-> Y` | **証明済み**（`RWhilePushPop.agda`、`RWhileCRep` 層） |
 | `case` | 反転については `RWhileCaseInv` で証明済み。コストは未 |
 
 `--safe`・postulate 0・hole 0。`check.sh --si` は PASS=30 FAIL=0（181 秒）。
 
-## スタック糖衣 push / pop（`RWhilePushPop.agda`、2026-08-06）
+## `<=` に展開される糖衣 push / pop / `<->`（`RWhilePushPop.agda`、2026-08-06）
 
 タイムド層に置けない 2 つの糖衣を、`<=` をモデル化している `RWhileCRep` 層で形式化
 した。
 
 ```agda
-pushC x s = crepC (pvar s) (pcons (pvar x) (pvar s))     -- S <= cons X S
-popC  x s = crepC (pcons (pvar x) (pvar s)) (pvar s)     -- cons X S <= S
+pushC x s = crepC (pvar s) (pcons (pvar x) (pvar s))                  -- S <= cons X S
+popC  x s = crepC (pcons (pvar x) (pvar s)) (pvar s)                  -- cons X S <= S
+swapC x y = crepC (pcons (pvar x) (pvar y)) (pcons (pvar y) (pvar x)) -- cons X Y <= cons Y X
 ```
 
 | 定理 | 主張 |
@@ -330,6 +330,9 @@ popC  x s = crepC (pcons (pvar x) (pvar s)) (pvar s)     -- cons X S <= S
 | `push-sem` | S は `(X . S)` になり、X は nil に残る |
 | `pop-sem` | pop は積みを**分解**する: `σ S ≡ cons (σ' X) (σ' S)` |
 | `pop-needs-nil` | pop が走るのは X が事前に nil のときだけ |
+| `swap-inv` | `X <-> Y` の逆は `Y <-> X`。これもパターン入れ替えそのもの |
+| `swap-sem` | X と Y は実際に値を交換する |
+| `swap-frame` | それ以外のストアは動かない |
 
 `push-pop` / `pop-push` は `crep-reversible` そのものである。R-WHILE は `q <= r` を
 **2 つのパターンの入れ替え**で反転し、push と pop はまさに互いの入れ替えなので、

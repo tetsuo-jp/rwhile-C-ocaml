@@ -1,11 +1,13 @@
 {-# OPTIONS --safe #-}
 ------------------------------------------------------------------------
--- THE STACK SUGAR `push` / `pop` (Rwhile.cf CPush/CPop, src/Desugar.ml).
+-- THE SUGAR THAT EXPANDS TO `<=`: `push` / `pop` / `<->`
+-- (Rwhile.cf CPush/CPop/CSwap, src/Desugar.ml).
 --
 --     push X S   ->   S <= cons X S        (X is left nil)
 --     pop  X S   ->   cons X S <= S        (fails if S is not a cons)
+--     X <-> Y    ->   cons X Y <= cons Y X
 --
--- These are the two sugars that CANNOT live in the timed layer: RWhileTime's
+-- These are the sugars that CANNOT live in the timed layer: RWhileTime's
 -- commands are skip / ^= / ; / if-fi / from-until, with no pattern replacement.
 -- They belong here, where RWhileCRep models `<=` as a Read followed by a Write.
 --
@@ -18,6 +20,11 @@
 --   pop-sem              popping SPLITS the stack: σ S ≡ cons (σ' X) (σ' S)
 --   pop-needs-nil        pop only runs when X was nil -- the mirror of push
 --                        leaving it nil, which is what makes them cancel
+--
+--   swap-inv             the inverse of `X <-> Y` is `Y <-> X` -- again just the
+--                        pattern swap, so again no rule of its own
+--   swap-sem             X and Y really do exchange values
+--   swap-frame           and nothing else in the store moves
 --
 -- The two variables must differ; `S <= cons S S` would read S twice, which
 -- src/Desugar.ml rejects and pattern linearity forbids here.
@@ -94,3 +101,31 @@ pop-needs-nil {x} {s} sx
   (e-atom (_ , _ , rd-var _ _ fr
                  , wr-cons (wr-var _ _ fr₂) (wr-var nl _ _))) =
     trans (fr x sx) (trans (fr₂ x sx) nl)
+
+------------------------------------------------------------------------
+-- 4.  `X <-> Y`  ->  `cons X Y <= cons Y X`.
+
+swapC : ℕ → ℕ → Cmd
+swapC x y = crepC (pcons (pvar x) (pvar y)) (pcons (pvar y) (pvar x))
+
+-- Inverting a replacement swaps its patterns, and for `<->` that is again a
+-- `<->` -- with the two names in the other order, which is the same exchange.
+swap-inv : ∀ {x y σ σ'} → swapC x y ⊢ σ ⇒ σ' → swapC y x ⊢ σ' ⇒ σ
+swap-inv = crep-reversible
+
+swap-sem : ∀ {x y σ σ'} → x ≢ℕ y → y ≢ℕ x
+         → swapC x y ⊢ σ ⇒ σ'
+         → (σ' x ≡ σ y) × (σ' y ≡ σ x)
+swap-sem {x} {y} {σ} {σ'} xy yx
+  (e-atom (_ , _ , rd-cons (rd-var ve₁ _ fr₁) (rd-var ve₂ _ _)
+                 , wr-cons (wr-var _ we₂ _) (wr-var _ we₁ wfr₁))) =
+    trans (sym we₁) ve₁
+  , trans (sym (wfr₁ y xy)) (trans (sym we₂) (trans ve₂ (sym (fr₁ x yx))))
+
+-- Everything the swap does not name is left alone.
+swap-frame : ∀ {x y σ σ'} → swapC x y ⊢ σ ⇒ σ'
+           → ∀ z → x ≢ℕ z → y ≢ℕ z → σ z ≡ σ' z
+swap-frame
+  (e-atom (_ , _ , rd-cons (rd-var _ _ fr₁) (rd-var _ _ fr₂)
+                 , wr-cons (wr-var _ _ wfr₂) (wr-var _ _ wfr₁))) z xz yz =
+    trans (fr₁ z yz) (trans (fr₂ z xz) (trans (wfr₂ z yz) (wfr₁ z xz)))
