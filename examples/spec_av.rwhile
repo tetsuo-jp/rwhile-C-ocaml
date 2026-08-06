@@ -946,7 +946,35 @@ macro SPEC-STEP-AV(Cd, Cd', RCode)
       * So this is not a matter of choosing a policy -- the representation has to
       * change first, e.g. so that a dynamic AV names a value cell that can be
       * re-pointed.  That is the real remaining work, and it is a redesign, not a
-      * patch. *)
+      * patch.
+      *
+      * RENAME-ON-WRITE WAS ALSO TRIED AND REJECTED (2026-08-07).  It looked like
+      * the cheap way out: instead of rewriting outstanding references, let the
+      * WRITER move.  When the 'ass path is about to re-dynamicise slot K whose
+      * AV is ('S.nil) -- the marker PAT-READ leaves after handing the slot's
+      * dynamic AV out -- give the new value a FRESH residual variable and point
+      * the slot at that.  The outstanding reference keeps naming K, which still
+      * holds what it was read for, and NO extra residual command is emitted.
+      *
+      * It does fix the inner conflict: `error in update: var=4` disappears.  But
+      * it breaks ri_fp3's move idiom, which is a PAIR of assignments
+      *
+      *     A ^= B;  B ^= A          -- move B into A, B ends nil
+      *
+      * whose second command clears B only because A and B hold equal values at
+      * run time.  The specializer sees the two assignments independently and
+      * renames on each write, so the pair comes apart:
+      *
+      *     60 ^= 37;  37 ^= 60;     -- a proper move
+      *     61 ^= 60;                -- no partner to clear 60: now BOTH hold it
+      *     14 ^= 61;                -- copied again
+      *     ... 14 ^= cons 5 6       -- error in update: var=14
+      *
+      * The AV domain cannot tell that two dynamic slots hold equal values, so it
+      * cannot know that renaming one of them turns a clear into a set.  Any
+      * scheme that moves where a dynamic value lives has to keep XOR-paired
+      * assignments together, which again means the representation must record
+      * the pairing -- back to the redesign. *)
      PAT-WRITE-ITER(RpQ, RpAV, RCode);
      Arg <= cons RpQ RpR
    else
