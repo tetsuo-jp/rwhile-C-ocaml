@@ -15,7 +15,8 @@ set -u
 cd "$(dirname "$0")"
 case "${1:-}" in
   --si) mods="RWhileTime.agda RWhileTimeDec.agda RWhileTimeDet.agda \
-RWhileTimeExec.agda RWhileTimeInv.agda $(ls RWhileSI*.agda)" ;;
+RWhileTimeExec.agda RWhileTimeInv.agda RWhileTimeSkip.agda \
+RWhileSugar.agda $(ls RWhileSI*.agda)" ;;
   "")   mods=$(ls RWhile*.agda) ;;
   *)    mods="$*" ;;
 esac

@@ -261,6 +261,48 @@ Glück–Yokoyama「R-WHILE の線形時間自己解釈系」を定理化する�
   `rupdate` は `EvalRwhile.ml` どおり。解釈系は対象プログラムのループ表明・条件文の出口表明を実際に検査する。
 - **全 90 モジュール `--safe` PASS**（`proofs/agda/check.sh`、postulate 0、穴 0）。
 
+## 糖衣のガード付きブラケット（`RWhileSugar.agda`、2026-08-06）
+
+`src/Desugar.ml` が `local`/`delocal` と `for` のカウンタを展開する形
+
+```
+assert (=? X nil) ;  X ^= E ;  C ;  X ^= F ;  assert (=? X nil)
+```
+
+を形式化し、**2 つの表明が飾りではないこと**を証明した。これまで糖衣には Agda の
+対応物が 1 つも無かったので、その最初の 1 つでもある。
+
+証明したもの:
+
+| 名前 | 主張 |
+|---|---|
+| `bracket-needs-nil` | 実行が存在するのは入口で X が nil のときだけ |
+| `bracket-clears` | 出口でも X は nil に戻っている |
+| `bracket-binds` | 本体は `set s x v`（v は E の値）から始まる＝ローカルは**束縛**されていて、トグルではない |
+| `no-dirty-run` | ガード付きの形は、X が既に束縛されたストアからは**実行が存在しない** |
+| `bracket-wf` | 本体が Wf で E・F が X を含まなければブラケットも Wf（`local X = E` の自然な条件） |
+| `bracket-inv-cost` | `inv-sound` の系。逆が同じコストで戻る |
+
+**バグを型検査器の中で走らせた。** X を変数 0、Y を変数 1、本体を `Y ^= X`（本体が
+何を見たかが答に残る）として:
+
+```agda
+ex-clean : exec 10 unguarded (nil ∷ nil ∷ []) ≡ just (nil ∷ atm 1 ∷ [] , 5)
+ex-dirty : exec 10 unguarded (atm 1 ∷ nil ∷ []) ≡ just (atm 1 ∷ nil ∷ [] , 5)
+```
+
+どちらも `refl`。**同じプログラム・同じコストで答が違う**（Y が `'a` か nil か）。
+X が既に `'a` を持っていると開き側の `X ^= 'a` が設定ではなく消去になり、本体は
+X = nil を見て、閉じ側が元の値を戻すためエラーも出ない。2026-08-05 に実機で見つけた
+誤りそのものである。ガード付きの `guarded` は同じ汚れたストアから**実行が存在しない**
+（`no-dirty-run`）。
+
+補助的に `assertNil-cost` で表明のコストがモデルでは 2 であることも示した。実装は
+1 しか課金しない（R-WHILE の文法は空枝を印字するが、モデルは `skip` を書かねば
+ならない）。これは既知の差で `RWhileTimeSkip.cost-split` が説明する。
+
+`--safe`・postulate 0・hole 0。`check.sh --si` は PASS=29 FAIL=0。
+
 ## `rupdate` の第 3 の場合（2026-08-05 に形式化へ追加）
 
 ### 何が抜けていたか
