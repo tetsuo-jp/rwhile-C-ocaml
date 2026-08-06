@@ -1596,7 +1596,14 @@ let test_fp1_ri_fp3_known_bug () =
  * move emitted without checking the target is available), but at the level of
  * residual sequencing rather than of one cons split.  This test pins the
  * remaining failure so "structural ops preserved" is not mistaken for "fp1 via
- * ri_fp3 works". *)
+ * ri_fp3 works".
+ *
+ * The remaining bug is SCHEDULING, not content (measured 2026-08-07): the
+ * residual holds exactly the right commands, and interleaving each staging with
+ * its consumption makes the fragment compute swap correctly --
+ *   V4^=V15; V15^=V4; V5<=V4; V4^=V16; V16^=V4; V6<=V4   ->  ('b . 'a)
+ * where the emitted order stages both before consuming either.  See the note in
+ * examples/spec_av.rwhile for the cause (rehomes deferred to pattern-write). *)
 (* NEW CAPABILITY, measured 2026-08-07 against 128802a~1 (before PAT-WRITE-ITER
  * was wired).  fp1 via ri_fp3 now produces residuals that RUN and agree with
  * direct evaluation, for every source that does not transpose:

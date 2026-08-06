@@ -829,7 +829,26 @@ macro SPEC-STEP-AV(Cd, Cd', RCode)
       * halves of a cons fail.  And what they used to do was worse than failing:
       * before PAT-WRITE-ITER was wired, swap's residual RAN and returned
       * ('a.'b) -- the input unchanged, where swap must give ('b.'a).  A silent
-      * wrong answer.  It is now either right or loud. *)
+      * wrong answer.  It is now either right or loud.
+      *
+      * AND THE REMAINING BUG IS SCHEDULING, NOT CONTENT (measured 2026-08-07).
+      * The swap residual contains exactly the right commands; only their order
+      * is wrong.  Taking the failing fragment and interleaving each staging with
+      * its consumption makes it compute swap correctly:
+      *
+      *   emitted (fails):   V4^=V15; V15^=V4;  V4^=V16; V16^=V4;  V6<=V4; V5<=V4
+      *   interleaved (ok):  V4^=V15; V15^=V4;  V5<=V4;  V4^=V16; V16^=V4; V6<=V4
+      *                                                   -> ('b . 'a), correct
+      *
+      * (The other interleaving, V6<=V4 before V5<=V4, runs but returns ('a.'b) --
+      * the identity -- so the PAIRING matters as much as the interleaving.)
+      *
+      * Cause of the bad order: the rehome moves that PAT-WRITE-LEAF-REHOME emits
+      * are deferred to pattern-WRITE time, while ri_fp3's own assignments were
+      * residualized earlier.  Both stagings therefore land before both
+      * consumptions, and the shared working slot is occupied twice.  The fix is
+      * to emit each rehome immediately after the staging that produced it, not
+      * at the end -- a scheduling change, with no new residual content. *)
      PAT-WRITE-ITER(RpQ, RpAV, RCode);
      Arg <= cons RpQ RpR
    else
