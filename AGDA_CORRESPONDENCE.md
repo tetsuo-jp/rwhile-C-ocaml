@@ -261,6 +261,58 @@ Glück–Yokoyama「R-WHILE の線形時間自己解釈系」を定理化する�
   `rupdate` は `EvalRwhile.ml` どおり。解釈系は対象プログラムのループ表明・条件文の出口表明を実際に検査する。
 - **全 90 モジュール `--safe` PASS**（`proofs/agda/check.sh`、postulate 0、穴 0）。
 
+## 表層言語 R-WHILE-S と compile-sound（`RWhileSurface.agda`、2026-08-06）
+
+`src/Desugar.ml` は糖衣を**展開によって定義**しているので、「脱糖は正しい」は
+そのままでは空虚な主張になる。そこで表層の各構文に**独立した意味論**を与えた —
+プログラマが述べるであろう規則、`if/fi` ではなくストアの言葉で書いたもの — その上で
+コンパイルがちょうどその規則を実現することを証明した。
+
+```agda
+data _⊩_⇒_∣_ : SCmd → Store → Store → ℕ → Set where
+  s-assert : evalT s e ≡ just true → assert e ⊩ s ⇒ s ∣ 2
+  s-local  : get s x ≡ nil            -- X は入口で空いている
+           → evalE s e ≡ just v       -- E の値が
+           → c ⊩ set s x v ⇒ u ∣ k    -- 本体が見るもの
+           → evalE u f ≡ just w
+           → get u x ≡ w              -- F は X が保持する値を名指す＝それが消去する
+           → localD x e c f ⊩ s ⇒ set u x nil ∣ bcost k
+```
+
+| 定理 | 主張 |
+|---|---|
+| `compile-sound` | 表層の実行はすべて、コンパイル結果の**同じコストの**実行である |
+| `compile-complete` | 逆も成り立つ。コンパイル結果には表層で説明できない実行が無い |
+| `compile-cost` | 両者と `⇒-det` から、ストアもコストも完全に一致する |
+| `bcost≡` | ブラケットのコストは本体 k に対して `10 + k` |
+| `for-counter-local` | `for` のカウンタが前後で nil であることは**ループ帰納を一切使わず**ブラケットの定理から出る |
+
+補助として `rupd-clear : ∀ q v → rupd q v ≡ just nil → q ≡ v`（消去できたのなら
+与えた値は変数自身の値だった）を証明した。これは `rupd` の第 3 分岐を入れた後の
+形でも成り立つ。
+
+### 範囲の限界（記録しておくべき事実）
+
+タイムド核 `RWhileTime` の命令は `skip` / `^=` / `;` / `if-fi` / `from-until` の
+5 つで、**パターン置換 `<=` が無い**。したがって `<=` に展開される糖衣
+（`X <-> Y`・`push`・`pop`）は**この層では時間つき意味論を与えられない**。それらは
+`RWhileCRep.agda` が `<=` をモデル化している別の層に属する。`case` も同様に
+`RWhileCaseInv.agda` が既に扱っている（脱糖後の入れ子条件分岐について「case の逆は
+また case」「腕の入れ替えが対合」）。
+
+つまり糖衣 7 形の形式化の現状は:
+
+| 糖衣 | 状態 |
+|---|---|
+| `local`/`delocal` | **証明済み**（`RWhileSugar` + `RWhileSurface`） |
+| `for` | **カウンタの局所性を証明済み**。ループ本体の意味論は未 |
+| `assert` | **証明済み** |
+| `skip` | タイムド核の `skip` そのもの（コスト差は `cost-split` が説明） |
+| `X <-> Y` / `push` / `pop` | **未**。タイムド核に `<=` が無いため、`RWhileCRep` 層で行う必要がある |
+| `case` | 反転については `RWhileCaseInv` で証明済み。コストは未 |
+
+`--safe`・postulate 0・hole 0。`check.sh --si` は PASS=30 FAIL=0（181 秒）。
+
 ## 糖衣のガード付きブラケット（`RWhileSugar.agda`、2026-08-06）
 
 `src/Desugar.ml` が `local`/`delocal` と `for` のカウンタを展開する形
