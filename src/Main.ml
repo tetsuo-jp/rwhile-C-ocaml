@@ -36,7 +36,8 @@ let () =
        (shortens the self-interpreter's store walks; see Optimize.ml)");
      ("-share-slots", Arg.Set Program2DataRwhile.share_slots,
       "p2d: give variables with disjoint live ranges the same store slot \
-       (shortens the self-interpreter's store; see Optimize.ml pass 2)");
+       (shortens the self-interpreter's store.  Sound for EXECUTION only -- \
+        do not feed the result to spec_av; see Optimize.ml pass 2)");
      ("-llm-errors", Arg.Set EvalRwhile.llm_errors,
       "emit structured, machine-/LLM-friendly error messages");
      ("-stats",   Arg.Set f_stats,

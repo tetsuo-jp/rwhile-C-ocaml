@@ -59,6 +59,22 @@ let () =
      let sub = Optimize.slot_alloc (MacroRwhile.expMacProgram p) in
      let slots = List.sort_uniq compare (List.map snd sub) in
      Printf.printf "%d\n" (List.length slots)
+  (* -share: size the store to the SLOT count instead of the variable count,
+     for a pipeline that encodes the subject with ./ri -p2d -share-slots *)
+  | _ :: "-share" :: spec :: subj :: rest ->
+     let margin = match rest with m :: _ -> int_of_string m | [] -> 8 in
+     let ch = open_in subj in
+     let p = ParRwhile.pProgram LexRwhile.token (Lexing.from_channel ch) in
+     close_in ch;
+     let sub = Optimize.slot_alloc (MacroRwhile.expMacProgram p) in
+     let n = List.length (List.sort_uniq compare (List.map snd sub)) in
+     let fpn = lit (n + margin) and tmp = lit (n + 2) in
+     List.iter (fun line ->
+       let t = String.trim line in
+       if starts_with t "FpN ^= " then print_endline ("  FpN ^= " ^ fpn ^ ";")
+       else if starts_with t "TmpT ^= " then print_endline ("  TmpT ^= " ^ tmp)
+       else print_endline line)
+       (read_lines spec)
   | _ :: spec :: subj :: rest ->
      let margin = match rest with m :: _ -> int_of_string m | [] -> 8 in
      let n = varcount subj in

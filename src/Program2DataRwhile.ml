@@ -140,6 +140,13 @@ let hot_vars : bool ref = ref false
    pass 2.  Subsumes -hot-vars (it renumbers too), so it wins if both are set. *)
 let share_slots : bool ref = ref false
 
+(* Also settable by environment variable, so the drivers that do not parse
+   command lines (test-suite, measure_proj, specsize) can be run both ways:
+     RWHILE_HOT_VARS=1 ./measure_proj      RWHILE_SHARE_SLOTS=1 ./measure_proj *)
+let () =
+  if Sys.getenv_opt "RWHILE_HOT_VARS" <> None then hot_vars := true;
+  if Sys.getenv_opt "RWHILE_SHARE_SLOTS" <> None then share_slots := true
+
 let program2data (p : program) : valT =
   let p2 = MacroRwhile.expMacProgram p in
   let sub =

@@ -20,6 +20,16 @@
  *   variables the run never touches.  Store traversal, not dispatch, is what
  *   the self-interpreter spends its time on.
  *
+ *   The BIGGER effect, found later: a variable's number is written as a UNARY
+ *   numeral in the p2d encoding, so an occurrence of variable i costs O(i)
+ *   nodes.  Ordering by descending occurrence count therefore minimises the
+ *   encoded program's size -- and since the fp2 compiler is a residual program
+ *   that carries that encoding, it shrinks with it.  Measured: |spec_av| as data
+ *   817701 -> 399565 nodes (-51%), and comp2 = [spec_av]((spec_av.ri_min))
+ *   812515 -> 386681 nodes (-52%), with [comp2](('S.swap)) == B still holding.
+ *   (Varying loop_weight over 1 / 10 / 100 gave the identical size here, so the
+ *   heuristic is not delicate.)
+ *
  *   The weight is the classic static heuristic: one point per occurrence,
  *   multiplied by `loop_weight` for every enclosing loop, since those are the
  *   occurrences that get executed repeatedly.  Conditionals do not scale the
@@ -105,7 +115,19 @@ let var_order (p : program) : rIdent list =
  *
  *   Disjoint intervals form an interval graph, where greedy colouring in order
  *   of interval start is optimal -- the colour count equals the largest number
- *   of simultaneously live variables. *)
+ *   of simultaneously live variables.
+ *
+ *   !! DO NOT FEED A SLOT-SHARED ENCODING TO THE SPECIALISER. !!
+ *
+ *   The soundness argument above is about EXECUTION: two variables that are
+ *   never simultaneously non-nil can share a cell.  spec_av does not execute the
+ *   subject, it propagates annotated values through it, and its AV store has one
+ *   binding-time entry per variable NUMBER.  Merging two variables merges their
+ *   annotations, which is not sound for specialisation.  Measured: fp1 still
+ *   works and even improves (residual 103 -> 91 nodes for swap, 63 -> 39 for
+ *   id, both still round-tripping), but fp2 dies with
+ *   `Pattern matching failed: '41 and 'error are not equal (in inv_evalPat)`.
+ *   Pass 1 alone is safe there and is where nearly all of the win is anyway. *)
 
 (* occurrence positions, and the extent of every loop, in pre-order *)
 let scan (Prog (_, rd, c, wr) : program)
