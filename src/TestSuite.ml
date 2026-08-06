@@ -2568,6 +2568,31 @@ let test_share_slots_loop_widening () =
       (List.sort_uniq compare (List.map snd (Optimize.slot_alloc prog))) in
   Alcotest.(check int) "a loop-dominated program shares nothing" nvars slots
 
+(* Slot sharing was once judged to have "essentially no realised benefit" -- a
+   judgement made from seven loop-dominated examples, where it correctly shares
+   nothing.  Measured across every example in the repository (2026-08-06) it
+   reduces slots on SIXTEEN of them, and examples/sugar.rwhile self-interprets
+   in 8102 steps instead of 9192 (-11%) with the same answer.  This pins the
+   reduction so the judgement cannot silently drift back. *)
+let test_share_slots_pays_off () =
+  let prog = MacroRwhile.expMacProgram
+      (parse_file_program (examples_dir ^ "/sugar.rwhile")) in
+  let nvars = List.length (EvalRwhile.varProgram prog) in
+  let slots = List.length
+      (List.sort_uniq compare (List.map snd (Optimize.slot_alloc prog))) in
+  Alcotest.(check bool)
+    (Printf.sprintf "sugar.rwhile: %d variables collapse onto fewer slots" nvars)
+    true (slots < nvars);
+  (* and the answer is unchanged through the self-interpreter *)
+  let input = parse_file_val (examples_dir ^ "/atom_c.val") in
+  let d = with_share_slots (fun () ->
+      Program2DataRwhile.program2data
+        (parse_file_program (examples_dir ^ "/sugar.rwhile"))) in
+  Alcotest.(check valT_testable) "and the answer is unchanged"
+    (EvalRwhile.evalProgram
+       (parse_file_program (examples_dir ^ "/sugar.rwhile")) input)
+    (run_via_ri d input)
+
 let test_share_slots_off_by_default () =
   Alcotest.(check bool) "share_slots defaults to off" false
     !Program2DataRwhile.share_slots
@@ -2890,6 +2915,7 @@ let () =
       Alcotest.test_case "share-slots: same answer" `Quick test_share_slots_same_answer;
       Alcotest.test_case "share-slots: branches merge" `Quick test_share_slots_branches;
       Alcotest.test_case "share-slots: loops do not merge" `Quick test_share_slots_loop_widening;
+      Alcotest.test_case "share-slots: pays off" `Quick test_share_slots_pays_off;
       Alcotest.test_case "share-slots: off by default" `Quick test_share_slots_off_by_default;
       Alcotest.test_case "static-vars: numbered last" `Quick test_static_vars_last;
       Alcotest.test_case "static-vars: same answer" `Quick test_static_vars_same_answer;
