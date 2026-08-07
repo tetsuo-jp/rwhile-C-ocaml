@@ -974,7 +974,43 @@ macro SPEC-STEP-AV(Cd, Cd', RCode)
       * cannot know that renaming one of them turns a clear into a set.  Any
       * scheme that moves where a dynamic value lives has to keep XOR-paired
       * assignments together, which again means the representation must record
-      * the pairing -- back to the redesign. *)
+      * the pairing -- back to the redesign.
+      *
+      * ===== CONSTRAINTS ANY SOLUTION MUST MEET =====
+      * (derived from the two measured failures plus what the residual language
+      * allows; write these down before trying a third design.)
+      *
+      * C1  NO ALIASES BETWEEN SLOTS.  A dynamic slot must stay self-referential
+      *     ('D.('var.k)) for its own k.  Rename-on-write violated this and broke
+      *     XOR-paired moves.  (The invariant is already documented at
+      *     PAT-WRITE-LEAF-REHOME; the news is that ESCAPED references -- dynamic
+      *     AVs sitting inside compound AVs, e.g. on ri_fp3's stack -- are not
+      *     covered by it, and that is where the staleness enters.)
+      * C2  A DYNAMIC REFERENCE MUST NOT OUTLIVE ITS SLOT'S NEXT ASSIGNMENT.
+      *     Either capture the value before the slot is reused, or prove the
+      *     reference is dead.  Capture-always satisfies this at 2.5-4x residual
+      *     size; capture-on-escape (only when a dynamic AV is embedded in a
+      *     compound by AV-CONS) would be cheaper and is UNTRIED.
+      * C3  EVERY CAPTURED TEMP MUST BE CONSUMED.  A 'rep consumes its RHS
+      *     pattern, so a temp delivered by PAT-WRITE-LEAF-REHOME is fine; but
+      *     the 'ass path uses `K ^= lift(RE)`, and an EXPRESSION reads without
+      *     consuming, so a temp that reaches an expression is stranded and the
+      *     residual stops being store-clean.  This is what killed
+      *     capture-always in practice.
+      * C4  NO SELF-CLEARS IN THE RESIDUAL.  The obvious way to discharge C3 --
+      *     emit `Tmp ^= Tmp` -- is not invertible (v -> nil and nil -> nil is not
+      *     injective), and ri.rwhile already cannot reverse-interpret X^=X (see
+      *     the KNOWN BUG test of that name).  So C3 has to be met by ROUTING the
+      *     value out, not by erasing it.
+      *
+      * Two directions are open.  (a) Meet C1-C4 in the specializer: the likely
+      * shape is capture-on-escape (C2) with the capture delivered through a 'rep
+      * rather than an expression (C3, C4).  (b) Change the SUBJECT instead:
+      * every non-transposing source already works, and the failure needs two
+      * live references to ri_fp3's single working register -- giving its stack
+      * machine two working slots would sidestep the whole thing.  (b) is much
+      * cheaper and reaches the project's stated goal (fp1 via ri_fp3), but it
+      * leaves the specializer's limitation in place. *)
      PAT-WRITE-ITER(RpQ, RpAV, RCode);
      Arg <= cons RpQ RpR
    else
