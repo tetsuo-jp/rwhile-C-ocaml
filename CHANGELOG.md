@@ -1,5 +1,23 @@
 # Changelog
 
+## [Unreleased] - 2026-08-09
+
+### 可逆版 Jones 最適性の測定（ロードマップ④「最適性」）
+
+- **`Simp.program_preserving`**：プログラム保存版 p⁺（`[p⁺](d) = (p2d p . [p](d))`）を作る変換。
+  可逆射影はプログラム保存インタプリタを要求するので、Jones 最適性の比較対象は p ではなく
+  **同じ義務を持つ最小のプログラム** p⁺ である、という基準の可逆版を実装したもの。
+- **`./measure_proj jones-self`**：自己インタプリタ `ri_fp3.rwhile` に対する fp1 残余を
+  直接実行・p⁺・自己解釈と、`-steps`／`-work` の両指標で比べる表。
+- **結果**：work では 7 被験すべてで `残余 ≤ p⁺`（可逆版 Jones 最適性が成立）、
+  steps では `id` を除き 1.4〜5.0× で不成立。解釈のオーバヘッド自体は自己解釈の 1/10〜1/30。
+  コピー伝播（`Simp.copyprop_program`）が効かせている。
+- **テスト群 `jones-self`（5 件）**：下敷きの妥当性（3 者一致＋p⁺ の可逆性）、work 側の最適性、
+  steps 側の非最適性（改善したら落ちる pin）、解釈層の除去、コピー伝播の必要性。
+  テスト総数 263 → 268 件。
+- ドキュメント：`RWHILE_S.md`「判明したこと 3」、`FINDINGS_reversible_projections.md`、
+  `RESEARCH_ROADMAP.md` ④。
+
 ## [Unreleased] - 2026-03-06
 
 ### リファクタリング

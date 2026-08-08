@@ -2086,6 +2086,168 @@ let test_fp1_ri_fp3_nested_pattern_runs () =
     (match EvalRwhile.evalProgram (Program2DataRwhile.data2program comp) d with
      | VCons (_, res) -> res | v -> v)
 
+(* ===== JONES OPTIMALITY, measured with the SELF-interpreter (2026-08-09) =====
+ *
+ * Jones's criterion (Jones 1988; JGS ch.6) is NOT "the residual beats the
+ * interpreter" -- that is only the specialisation gain, which any specialiser
+ * that unfolds a dispatch achieves.  It is:
+ *
+ *     spec is Jones-optimal  iff  [spec](sint, p)  is at least as good as p
+ *
+ * for a SELF-interpreter sint, i.e. specialising sint to p removes the whole
+ * interpretive layer rather than part of it.  It could not be evaluated on this
+ * artifact before, because ri_min/ri_seq/ri_perm interpret op-languages that are
+ * not R-WHILE, so "run p directly" is not defined for their sources.
+ * `ri_fp3.rwhile` IS an R-WHILE self-interpreter, and since 2026-08-08 its fp1
+ * residuals run correctly, so the criterion can now be measured.
+ *
+ * THE REVERSIBLE FORM OF THE CRITERION.  A reversible projection needs a
+ * PROGRAM-PRESERVING interpreter ([sint](p2d p, d) = (p2d p . [p](d))), so the
+ * residual must reproduce the source program as well as the answer -- work that
+ * p itself never does.  Comparing it with p therefore measures the projection's
+ * definition, not the specialiser.  The fair baseline is p+ =
+ * Simp.program_preserving p, the smallest program with the SAME obligation; the
+ * criterion becomes  residual <= p+.  That p+ is the right baseline is not
+ * assumed: the first test below checks that p+, the self-interpreter and the
+ * residual all return the SAME value.
+ *
+ * MEASURED (./measure_proj jones-self; steps = command nodes, work = value nodes
+ * examined by comparison; residual = after Simp.copyprop_program):
+ *
+ *   program       |resid| st_dir st_p+ st_si st_raw st_res  wk_p+ wk_si wk_res
+ *   id                53      1     5     89     11      3     23    64     23
+ *   id2               87      1     5     90     19      7     25    75     25
+ *   id3              139      1     5    184     27     11     38   150     37
+ *   rep               87      1     5     90     19      7     25    75     25
+ *   swap             379      3     7    260     41     25     57   234     57
+ *   sx_splitjoin     343      3     7    260     41     23     57   234     57
+ *   sx_three         543      3     7    354     51     35     72   311     71
+ *
+ * Three readings, each pinned by a test below:
+ *   (1) On the WORK meter the criterion HOLDS: wk_res <= wk_p+ in every case
+ *       (and strictly below on id3/sx_three).  The residual examines no more
+ *       value nodes than the program-preserving baseline.
+ *   (2) On the STEPS meter it FAILS: 1.4x-5.0x of p+ (only `id` is under, at
+ *       0.6x).  The residual pays extra COMMANDS -- the interpreter's data
+ *       staging, made explicit -- while touching the same amount of data.  This
+ *       is the same metric-dependence RWHILE_S.md already records for the
+ *       op-language interpreters, now at the self-interpreter.
+ *   (3) The interpretive layer is nevertheless mostly gone: 25-30x fewer steps
+ *       than self-interpretation.
+ * A negative is pinned as a test on purpose: if (2) flips, the specialiser got
+ * better and the claim in RWHILE_S.md must be re-measured, not silently kept. *)
+let jones_self_cases =
+  let ab = VCons (atom "'a", atom "'b") in
+  let ab_nil = VCons (atom "'a", VCons (atom "'b", VNil)) in
+  [ "id", ab; "id2", ab; "id3", ab; "rep", ab;
+    "swap", ab; "sx_splitjoin", ab; "sx_three", ab_nil ]
+
+type jones_row = {
+  jname : string;
+  st_dir : int; wk_dir : int;          (* p, run directly *)
+  st_pp : int;  wk_pp : int;           (* p+ : program-preserving p *)
+  st_si : int;  wk_si : int;           (* self-interpretation via ri_fp3 *)
+  st_raw : int;                        (* residual as spec_av emits it *)
+  st_res : int; wk_res : int;          (* residual after copy propagation *)
+  agree : bool;                        (* p+, sint and the residual agree *)
+}
+
+(* Specialising ri_fp3 seven times takes about a second, so the table is
+   computed once and shared by the tests in the group. *)
+let jones_self_table = lazy (
+  let spec_av = parse_file_program (examples_dir ^ "/spec_av.rwhile") in
+  let sint = parse_file_program (examples_dir ^ "/ri_fp3.rwhile") in
+  let pd_sint = Program2DataRwhile.program2data sint in
+  let meter f = EvalRwhile.reset_steps (); EvalRwhile.reset_work ();
+    let v = f () in (v, EvalRwhile.get_steps (), EvalRwhile.get_work ()) in
+  List.map (fun (name, d) ->
+      let srcp = parse_file_program (examples_dir ^ "/" ^ name ^ ".rwhile") in
+      let pd = Program2DataRwhile.program2data srcp in
+      let (dres, sd, wd) = meter (fun () -> EvalRwhile.evalProgram srcp d) in
+      let (ppres, sp, wp) =
+        meter (fun () -> EvalRwhile.evalProgram (Simp.program_preserving srcp) d) in
+      let (sires, ss, ws) =
+        meter (fun () -> EvalRwhile.evalProgram sint (VCons (pd, d))) in
+      let raw = Program2DataRwhile.data2program
+          (EvalRwhile.evalProgram spec_av (spec_in pd_sint pd)) in
+      let (_, sraw, _) = meter (fun () -> EvalRwhile.evalProgram raw d) in
+      let (rres, sr, wr) =
+        meter (fun () -> EvalRwhile.evalProgram (Simp.copyprop_program raw) d) in
+      { jname = name; st_dir = sd; wk_dir = wd; st_pp = sp; wk_pp = wp;
+        st_si = ss; wk_si = ws; st_raw = sraw; st_res = sr; wk_res = wr;
+        agree = (ppres = sires && ppres = rres
+                 && rres = VCons (pd, dres)) })
+    jones_self_cases)
+
+(* (0) THE BASELINE IS THE RIGHT ONE.  p+ , the self-interpreter and the fp1
+ * residual all compute (p2d p . [p](d)) -- so comparing their costs compares
+ * three ways of doing one and the same job.  Without this the ratios below
+ * would be meaningless. *)
+let test_jones_self_baseline_agrees () =
+  List.iter (fun r ->
+      Alcotest.(check bool)
+        (r.jname ^ ": [p+](d) = [ri_fp3](p2d p, d) = [residual](d) = (p2d p . [p](d))")
+        true r.agree)
+    (Lazy.force jones_self_table);
+  (* ...and p+ is a legitimate R-WHILE program: its syntactic inverse undoes it.
+     A baseline that were not reversible would not be one for this language. *)
+  List.iter (fun (name, d) ->
+      let pp = Simp.program_preserving
+          (parse_file_program (examples_dir ^ "/" ^ name ^ ".rwhile")) in
+      Alcotest.(check valT_testable)
+        (name ^ ": [inv p+]([p+](d)) = d (p+ is reversible)")
+        d (EvalRwhile.evalProgram (InvRwhile.invProgram pp)
+             (EvalRwhile.evalProgram pp d)))
+    jones_self_cases
+
+(* (1) THE RESULT.  On the work meter (value nodes examined by comparison) the
+ * fp1 residual of the SELF-interpreter is at least as good as p+: reversible
+ * Jones optimality holds. *)
+let test_jones_self_work_optimal () =
+  List.iter (fun r ->
+      Alcotest.(check bool)
+        (Printf.sprintf "%s: work(residual)=%d <= work(p+)=%d" r.jname r.wk_res r.wk_pp)
+        true (r.wk_res <= r.wk_pp))
+    (Lazy.force jones_self_table)
+
+(* (2) THE HONEST OTHER HALF.  On the steps meter (command nodes) it does NOT
+ * hold: every subject but `id` needs more commands than p+.  Pinned so that an
+ * improvement to the specialiser shows up as a failing test rather than as a
+ * stale claim in RWHILE_S.md. *)
+let test_jones_self_steps_not_optimal () =
+  List.iter (fun r ->
+      let expect_over = r.jname <> "id" in
+      Alcotest.(check bool)
+        (Printf.sprintf "%s: steps(residual)=%d vs steps(p+)=%d (over p+ expected: %b)"
+           r.jname r.st_res r.st_pp expect_over)
+        expect_over (r.st_res > r.st_pp))
+    (Lazy.force jones_self_table)
+
+(* (3) The interpretive layer is nevertheless removed almost entirely: the
+ * residual runs in under a fifth of the self-interpretation's steps (measured:
+ * a 10x-30x reduction) and examines fewer value nodes. *)
+let test_jones_self_removes_interpretation () =
+  List.iter (fun r ->
+      Alcotest.(check bool)
+        (Printf.sprintf "%s: steps(residual)=%d << steps(self-interp)=%d" r.jname r.st_res r.st_si)
+        true (r.st_res * 5 <= r.st_si);
+      Alcotest.(check bool)
+        (Printf.sprintf "%s: work(residual)=%d < work(self-interp)=%d" r.jname r.wk_res r.wk_si)
+        true (r.wk_res < r.wk_si))
+    (Lazy.force jones_self_table)
+
+(* (4) COPY PROPAGATION IS WHAT BUYS IT.  The residual as spec_av emits it costs
+ * strictly more steps than the copy-propagated one, on every subject -- the
+ * capture-on-escape temps introduced in spec_av 2026-08-08 are pure moves.  So
+ * the numbers above are a claim about the PAIR (spec_av, Simp.copyprop_program),
+ * which is what `./ri -copyprop` exposes. *)
+let test_jones_self_copyprop_needed () =
+  List.iter (fun r ->
+      Alcotest.(check bool)
+        (Printf.sprintf "%s: steps(raw)=%d > steps(copyprop)=%d" r.jname r.st_raw r.st_res)
+        true (r.st_raw > r.st_res))
+    (Lazy.force jones_self_table)
+
 (* Evaluate a program-as-data value (a spec residual / comp) DIRECTLY by
  * decoding it back to an AST -- the reliable alternative to run_via_ri, which
  * routes through the ri.rwhile self-interpreter (see the known bug below). *)
@@ -3311,6 +3473,16 @@ let () =
       Alcotest.test_case "preserves invertibility" `Quick test_opt_preserves_invertibility;
       Alcotest.test_case "never costs more steps" `Quick test_opt_preserves_cost_or_improves;
       Alcotest.test_case "identity when there is nothing to do" `Quick test_opt_is_identity_on_a_clean_program;
+    ];
+    (* Jones optimality measured against the SELF-interpreter ri_fp3, in its
+       reversible form (baseline p+ = the program-preserving version of p).
+       Table and reading: ./measure_proj jones-self, RWHILE_S.md. *)
+    "jones-self", [
+      Alcotest.test_case "p+, self-interpretation and the residual agree" `Quick test_jones_self_baseline_agrees;
+      Alcotest.test_case "work meter: residual <= p+ (optimal)" `Quick test_jones_self_work_optimal;
+      Alcotest.test_case "steps meter: residual > p+ (NOT optimal)" `Quick test_jones_self_steps_not_optimal;
+      Alcotest.test_case "the interpretive layer is removed (>=5x fewer steps)" `Quick test_jones_self_removes_interpretation;
+      Alcotest.test_case "copy propagation is what buys it" `Quick test_jones_self_copyprop_needed;
     ];
     "work-meter", [
       Alcotest.test_case "equal values cost their size" `Quick test_work_equal_values_cost_their_size;

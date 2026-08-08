@@ -184,7 +184,18 @@ program-as-data residual (`make d2p`):
 `rspec` (the `spec_av` annotated-value evaluator) is the *trivial* specializer
 in the sense of Jones — it embeds and freezes rather than optimising — so the
 self-application is near-trivial (comp2 ≈ 1×|rspec|). Building an *optimising*
-reversible specializer is open. See [FUTAMURA.md](FUTAMURA.md),
+reversible specializer is open.
+
+**Jones optimality** — how good the fp1 residual of the *self*-interpreter
+`ri_fp3` is — is measured by `./measure_proj jones-self` (test group
+`jones-self`). Since a reversible projection needs a program-preserving
+interpreter, the residual must also reproduce the source program, so the
+baseline is not `p` but `p+` (`Simp.program_preserving p`), the smallest program
+with the same obligation. Measured on seven subjects: the residual is within the
+baseline on the **work** meter (value nodes examined by comparison) in every
+case, and 1.4x–5.0x over it on the **steps** meter (command nodes) — the
+criterion's verdict depends on the metric. See
+[RWHILE_S.md](RWHILE_S.md) ("判明したこと 3"). See [FUTAMURA.md](FUTAMURA.md),
 [FINDINGS_reversible_projections.md](FINDINGS_reversible_projections.md) (garbage
 minimisation, −57%), and [HANDOFF_fp2.md](HANDOFF_fp2.md).
 

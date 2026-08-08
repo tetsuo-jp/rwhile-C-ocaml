@@ -6,6 +6,9 @@
  *
  *   ./measure_proj            fp1 residuals only (fast)
  *   ./measure_proj full       also comp2 = [spec_av]((spec_av.ri_min))  (SLOW, minutes)
+ *   ./measure_proj jones      fp1 residual vs the INTERPRETER it came from (gain)
+ *   ./measure_proj jones-self Jones optimality proper: fp1 residual of the
+ *                             SELF-interpreter ri_fp3 vs p+ (fast)
  *
  * Uses direct evaluation (Program2DataRwhile + EvalRwhile), matching the test
  * suite's judgement method. *)
@@ -201,6 +204,74 @@ let jones spec_av =
     (body_loops rimin) (body_loops riseq) (body_loops riperm);
   exit 0
 
+(* JONES OPTIMALITY, with a SELF-interpreter (2026-08-09).
+ *
+ * The `jones` battery above compares the fp1 residual against the INTERPRETER it
+ * came from.  That measures the specialisation GAIN (the interpretive layer is
+ * gone), which is not Jones's criterion.  Jones's criterion (Jones 1988; JGS
+ * §6.4) is about a SELF-interpreter sint of the language:
+ *
+ *     spec is Jones-optimal  iff  [spec](sint, p)  is at least as efficient as p
+ *
+ * -- specialising the self-interpreter to p must give back something no worse
+ * than p itself, i.e. the interpretive overhead is removed COMPLETELY, not just
+ * reduced.  It could not be measured here before, because the object languages
+ * of ri_min/ri_seq/ri_perm are not R-WHILE, so "running p directly" is not
+ * defined for them.  `ri_fp3.rwhile` IS an R-WHILE self-interpreter and its fp1
+ * residuals have run correctly since 2026-08-08, so the criterion can now be
+ * evaluated on the real artifact.
+ *
+ * ONE CAVEAT that is specific to the reversible setting, and must be stated with
+ * the numbers: R-WHILE's reversible projection needs a PROGRAM-PRESERVING
+ * interpreter, so the residual computes (p . [p](d)) -- it also rebuilds the
+ * source program as garbage.  The residual is therefore charged for work that p
+ * itself never does.  We report the ratio anyway (it is the honest cost of the
+ * compiled code) and separately report the self-interpretation cost, so the
+ * three-way picture direct / residual / self-interpretation is visible. *)
+(* p⁺ = Simp.program_preserving p is the fair baseline in a REVERSIBLE setting:
+ * the smallest program with the residual's obligation, [p⁺](d) = (p2d p . [p](d)).
+ * Any excess of the residual over p⁺ is the specialiser's own overhead. *)
+let jones_self spec_av =
+  let ab = VCons (atom "'a", atom "'b") in
+  let ab_nil = VCons (atom "'a", VCons (atom "'b", VNil)) in
+  let sint = parse_prog (dir ^ "/ri_fp3.rwhile") in
+  let pd_sint = Program2DataRwhile.program2data sint in
+  let cases = [ "id", ab; "id2", ab; "id3", ab; "rep", ab;
+                "swap", ab; "sx_splitjoin", ab; "sx_three", ab_nil ] in
+  let meter f = EvalRwhile.reset_steps (); EvalRwhile.reset_work ();
+    let v = f () in (v, EvalRwhile.get_steps (), EvalRwhile.get_work ()) in
+  Printf.printf "Jones optimality with the SELF-interpreter ri_fp3 (steps / work)\n";
+  Printf.printf "  resid = [spec_av]((ri_fp3.('S.p))) ; cp = after Simp.copyprop_program\n";
+  Printf.printf "  Jones criterion: resid <= direct (J).  Reversible criterion: resid <= p+ (Jr),\n";
+  Printf.printf "  where p+ = p made program-preserving ([p+](d) = (p2d p . [p](d))).\n";
+  Printf.printf "  raw = the residual as spec_av emits it; res = after copy propagation.\n";
+  Printf.printf "  %-13s %7s %6s %6s %6s %6s %6s %6s %6s %7s %7s %7s %7s %6s %5s\n"
+    "program" "|resid|" "st_dir" "st_p+" "st_si" "st_raw" "st_res" "J(st)" "Jr(st)"
+    "wk_dir" "wk_p+" "wk_si" "wk_res" "Jr(wk)" "ok";
+  List.iter (fun (name, d) ->
+      let srcp = parse_prog (dir ^ "/" ^ name ^ ".rwhile") in
+      let pd = Program2DataRwhile.program2data srcp in
+      let (dres, sd, wd) = meter (fun () -> EvalRwhile.evalProgram srcp d) in
+      let ppp = Simp.program_preserving srcp in
+      let (ppres, sp, wp) = meter (fun () -> EvalRwhile.evalProgram ppp d) in
+      let (sires, ss, ws) = meter (fun () -> EvalRwhile.evalProgram sint (VCons (pd, d))) in
+      let comp = EvalRwhile.evalProgram spec_av (spec_in pd_sint pd) in
+      let raw = Program2DataRwhile.data2program comp in
+      let (_, sraw, _) = meter (fun () -> EvalRwhile.evalProgram raw d) in
+      let rprog = Simp.copyprop_program raw in
+      let (rres, sr, wr) = meter (fun () -> EvalRwhile.evalProgram rprog d) in
+      let snd_of = function VCons (_, r) -> r | v -> v in
+      let ok = snd_of rres = dres && snd_of sires = dres
+               && ppres = rres && ppres = sires in
+      let ratio a b = float_of_int a /. float_of_int b in
+      Printf.printf "  %-13s %7d %6d %6d %6d %6d %6d %5.1fx %5.1fx %7d %7d %7d %7d %5.2fx %5b\n"
+        name (cn (Program2DataRwhile.program2data rprog)) sd sp ss sraw sr
+        (ratio sr sd) (ratio sr sp) wd wp ws wr (ratio wr wp) ok)
+    cases;
+  Printf.printf "  ok = residual, self-interpreter and p+ all produce the SAME value\n";
+  Printf.printf "       (so p+ is the right baseline: it is what the residual must compute).\n";
+  exit 0
+
 (* command-constructor histogram, to diagnose what dominates a residual *)
 type hist = { mutable seq:int; mutable ass:int; mutable rep:int;
               mutable cond:int; mutable loop:int; mutable other:int }
@@ -378,6 +449,8 @@ let () =
   if Array.length Sys.argv >= 3 && Sys.argv.(1) = "dyncond" then (dyncond Sys.argv.(2); exit 0);
   if Array.length Sys.argv >= 2 && Sys.argv.(1) = "jones" then
     jones (parse_prog (dir ^ "/spec_av.rwhile"));
+  if Array.length Sys.argv >= 2 && Sys.argv.(1) = "jones-self" then
+    jones_self (parse_prog (dir ^ "/spec_av.rwhile"));
   if Array.length Sys.argv >= 2 && Sys.argv.(1) = "garbage" then garbage ();
   let spec_av = parse_prog (dir ^ "/spec_av.rwhile") in
   if Array.length Sys.argv >= 4 && Sys.argv.(1) = "looptest" then begin
