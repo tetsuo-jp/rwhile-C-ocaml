@@ -574,6 +574,15 @@ variable other than the input is nil in the initialised store — false for
 `Q`, `S`, `R` and `K`. **A silent Agda run is not a passing one**: check the
 exit code, or check that the `.agdai` interface was written.
 
+An earlier, packed-tape rendering of Lemma 1 was dropped for the same
+reason. It stated the head-move case as `encT (movel b (l , x , r))`, and
+`encT` matches on a triple while `movel b (l , x , r)` is stuck on the
+variable `l` — so the type never reduces and every unification attempt tries
+to normalise it again. Those two clauses alone exceeded 22 GB. The unpacked
+rendering (`umvL-sound`, `umvR-sound`) states the result as an explicit
+triple and checks in seconds; it is the one the theorem uses, and it is the
+letter's Lemma 1.
+
 ## Honest scope (what is NOT yet proved)
 
 These are results about an Agda **model** of R-WHILE's core, hand-written to
