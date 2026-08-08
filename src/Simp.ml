@@ -200,8 +200,44 @@ let copyprop_com (whole : com) (c : com) : com =
   done;
   rebuild !kept
 
+(* Fuse on this spine, then recurse into every nested block.  comp2 keeps the
+ * overwhelming majority of its nodes inside loop bodies, so a spine-only pass
+ * cannot reach the part that matters.  Soundness is unchanged: the whole-program
+ * "exactly twice" test already forces both occurrences into the same block, and
+ * within one execution of that block the reasoning is the straight-line one --
+ * the use consumes t, so t is nil again when the block is re-entered.
+ *
+ * MEASURED 2026-08-08, AND IT CHANGES NOTHING YET.  comp2 stays at 400531 nodes
+ * and every fp1 residual is byte-identical with and without the recursion.  This
+ * is NOT the mis-sampling that once made -share-slots look worthless (see
+ * RWHILE_S.md): the sample here IS the loop-heavy target.  The reason is that
+ * comp2's loop-body temps do not satisfy the write-once/read-once test -- they
+ * are mentioned elsewhere as well, so the whole-program "exactly twice" gate
+ * rejects them.  Kept because it is sound, tested and free, and because it is a
+ * precondition for relaxing that gate; but the 363969 nodes inside comp2's loop
+ * bodies need a WEAKER condition (per-block liveness rather than a global
+ * occurrence count), not a wider traversal.  That is the actual next step. *)
+let rec copyprop_blocks whole c =
+  let c = copyprop_com whole c in
+  let rec go = function
+    | CSeq (a, b) -> CSeq (go a, go b)
+    | CCond (e, th, el, f) ->
+       CCond (e,
+              (match th with BThen x -> BThen (copyprop_blocks whole x) | b -> b),
+              (match el with BElse x -> BElse (copyprop_blocks whole x) | b -> b),
+              f)
+    | CLoop (e, d, l, f) ->
+       CLoop (e,
+              (match d with BDo x -> BDo (copyprop_blocks whole x) | b -> b),
+              (match l with BLoop x -> BLoop (copyprop_blocks whole x) | b -> b),
+              f)
+    | CLocal (x, b) -> CLocal (x, copyprop_blocks whole b)
+    | other -> other
+  in
+  go c
+
 let rec copyprop_fix whole c =
-  let c' = copyprop_com whole c in
+  let c' = copyprop_blocks whole c in
   if c' = c then c else copyprop_fix c' c'
 
 let copyprop_program (Prog (ms, i, body, o) : program) : program =

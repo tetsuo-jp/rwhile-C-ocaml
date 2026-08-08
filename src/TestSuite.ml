@@ -657,6 +657,33 @@ let test_copyprop_preserves_semantics () =
     (EvalRwhile.evalProgram (inv_of p) (EvalRwhile.evalProgram p d))
     (EvalRwhile.evalProgram (inv_of p') (EvalRwhile.evalProgram p' d))
 
+(* EXTENSION 2026-08-08: fuse inside nested blocks too.  comp2 (the fp2 compiler)
+ * keeps 363969 of its 400531 nodes INSIDE loop bodies, so a pass that only walks
+ * the top-level spine cannot reach the part that matters.  The soundness argument
+ * is unchanged: "t occurs exactly twice in the WHOLE program" already forces both
+ * occurrences into the same block, and within one execution of that block the
+ * per-iteration reasoning is the same as for straight-line code (t is consumed by
+ * its use, so it is nil again when the block re-enters). *)
+let test_copyprop_inside_conditional () =
+  let src = "read K; if =? K nil then T <= K; X <= T else X <= K fi =? X nil; write X" in
+  let out = cp src in
+  Alcotest.(check bool) "the move inside the then-branch is fused away"
+    true
+    (let rec count_sub s sub i n =
+       if i + String.length sub > String.length s then n
+       else count_sub s sub (i + 1)
+              (if String.sub s i (String.length sub) = sub then n + 1 else n) in
+     count_sub out "<=" 0 0 < count_sub (same src) "<=" 0 0)
+
+let test_copyprop_inside_loop_semantics () =
+  (* a real loop body, checked by RUNNING it rather than by comparing text *)
+  let src = "read K; X <= K; from =? Y nil do T <= X; X <= T; Y <= cons nil Y              loop Y <= cons nil Y until =? Y (nil.nil); cons Z Y <= Y;              Z ^= Z; W <= X; write W" in
+  let p = parse_program src in
+  let p' = Simp.copyprop_program p in
+  let d = atom "'a" in
+  Alcotest.(check valT_testable) "loop-body copyprop preserves the answer"
+    (EvalRwhile.evalProgram p d) (EvalRwhile.evalProgram p' d)
+
 let test_copyprop_is_identity_without_moves () =
   let src = "read K; X ^= K; K ^= X; write X" in
   Alcotest.(check string) "no single-use temp moves: unchanged"
@@ -3012,6 +3039,8 @@ let () =
       Alcotest.test_case "blocked when source is rewritten" `Quick test_copyprop_blocked_source_rewritten;
       Alcotest.test_case "expression read is not fused" `Quick test_copyprop_blocked_temp_read_twice;
       Alcotest.test_case "preserves semantics and inversion" `Quick test_copyprop_preserves_semantics;
+      Alcotest.test_case "fuses inside a conditional branch" `Quick test_copyprop_inside_conditional;
+      Alcotest.test_case "loop body: preserves semantics" `Quick test_copyprop_inside_loop_semantics;
       Alcotest.test_case "identity without single-use temps" `Quick test_copyprop_is_identity_without_moves;
     ];
     "stats", [
