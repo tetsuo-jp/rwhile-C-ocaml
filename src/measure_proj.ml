@@ -229,7 +229,7 @@ let jones spec_av =
  * compiled code) and separately report the self-interpretation cost, so the
  * three-way picture direct / residual / self-interpretation is visible. *)
 (* p⁺ = Simp.program_preserving p is the fair baseline in a REVERSIBLE setting:
- * the smallest program with the residual's obligation, [p⁺](d) = (p2d p . [p](d)).
+ * the smallest EXTENSION of p with the residual's obligation, [p⁺](d) = (p2d p . [p](d)).
  * Any excess of the residual over p⁺ is the specialiser's own overhead. *)
 let jones_self spec_av =
   let ab = VCons (atom "'a", atom "'b") in

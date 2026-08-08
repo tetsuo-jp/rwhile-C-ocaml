@@ -20,8 +20,8 @@
 -- criterion would be measuring the definition of the projection rather than
 -- the quality of the specialiser.
 --
--- The fix is to compare against the smallest program carrying the SAME
--- obligation,
+-- The fix is to compare against the smallest EXTENSION of p carrying the SAME
+-- obligation (the smallest PROGRAM with it is not p⁺ -- see RWhileJonesRevCE),
 --
 --     ⟦p⁺⟧ d = ⟨⌜p⌝ , ⟦p⟧ d⟩ ,
 --

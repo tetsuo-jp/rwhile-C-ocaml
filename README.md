@@ -190,8 +190,9 @@ reversible specializer is open.
 `ri_fp3` is — is measured by `./measure_proj jones-self` (test group
 `jones-self`). Since a reversible projection needs a program-preserving
 interpreter, the residual must also reproduce the source program, so the
-baseline is not `p` but `p+` (`Simp.program_preserving p`), the smallest program
-with the same obligation. Measured on seven subjects: the residual is within the
+baseline is not `p` but `p+` (`Simp.program_preserving p`), the smallest
+EXTENSION of p carrying that obligation (not the smallest program with it --
+that stronger claim is refuted in `proofs/agda/RWhileJonesRevCE.agda`). Measured on seven subjects: the residual is within the
 baseline on the **work** meter (value nodes examined by comparison) in every
 case, and 1.4x–5.0x over it on the **steps** meter (command nodes) — the
 criterion's verdict depends on the metric. See

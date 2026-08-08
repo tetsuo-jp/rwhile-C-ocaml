@@ -385,7 +385,7 @@ emit の 4 命令はすべて XOR 代入＝自己逆なので追加コストは�
 | `pp-rev` | **`inv(p⁺)` が p⁺ の出力を入力へ戻す。コストはちょうど同じ `k+8`** |
 | `pp-injective` | p⁺ は 2 つの入力を 1 つのストアへ潰さない（反転＋決定性から） |
 
-### 「最小の義務」はどこまで言えるか（`RWhileProgPresMin` / `RWhileJonesRevCE`）
+### p⁺ の「最小性」はどこまで言えるか（`RWhileProgPresMin` / `RWhileJonesRevCE`）
 
 依頼にあった「義務を果たす任意のプログラムのコストは p⁺ 以上」という下界は
 **一般には成り立たない。反例を機械検証してある**（`RWhileJonesRevCE.p⁺-not-minimal`）。

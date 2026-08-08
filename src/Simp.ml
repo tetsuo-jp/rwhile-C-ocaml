@@ -329,7 +329,8 @@ let copyprop_program (Prog (ms, i, body, o) : program) : program =
  * interpreter rint ([rint](p2d p, d) = (p2d p . [p](d))), so the fp1 residual
  * [spec](rint, p) is obliged to reproduce the program too.  Comparing that
  * residual with p -- the classical Jones-optimality criterion -- charges it for
- * work p never does.  p+ is the smallest program with the residual's OBLIGATION,
+ * work p never does.  p+ is the smallest EXTENSION of p carrying the residual's
+ * OBLIGATION (not the smallest program with it: see RWhileJonesRevCE.agda),
  * so `residual <= p+` is the criterion's reversible form.  (The three values
  * [p+](d), [rint](p2d p, d) and [residual](d) are equal, which is checked in the
  * `jones-self` test group and by `./measure_proj jones-self`.)

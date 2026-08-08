@@ -2106,7 +2106,7 @@ let test_fp1_ri_fp3_nested_pattern_runs () =
  * residual must reproduce the source program as well as the answer -- work that
  * p itself never does.  Comparing it with p therefore measures the projection's
  * definition, not the specialiser.  The fair baseline is p+ =
- * Simp.program_preserving p, the smallest program with the SAME obligation; the
+ * Simp.program_preserving p, the smallest EXTENSION of p with the SAME obligation; the
  * criterion becomes  residual <= p+.  That p+ is the right baseline is not
  * assumed: the first test below checks that p+, the self-interpreter and the
  * residual all return the SAME value.
