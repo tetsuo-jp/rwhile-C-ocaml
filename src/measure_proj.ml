@@ -369,12 +369,22 @@ let () =
       (cn comp2_simp_d)
       (100.0 *. float_of_int (cn comp2_simp_d) /. float_of_int (cn comp2))
       (float_of_int (cn comp2_simp_d) /. float_of_int nspec);
+    (* ...and with copy propagation on top of Simp: comp2 is itself a residual, so
+     * the same write-once/read-once move fusion applies to the COMPILER. *)
+    let comp2_cp = Simp.copyprop_program comp2_simp in
+    let comp2_cp_d = Program2DataRwhile.program2data comp2_cp in
+    Printf.printf "comp2 (+copyprop) = %d nodes  (%.1f%% of comp2, ratio %.3f x |spec_av|)\n"
+      (cn comp2_cp_d)
+      (100.0 *. float_of_int (cn comp2_cp_d) /. float_of_int (cn comp2))
+      (float_of_int (cn comp2_cp_d) /. float_of_int nspec);
     (* correctness: [comp2](('S.op)) and [comp2_simp](('S.op)) must equal the fp1
      * residual B (= [spec_av]((ri_min.op))). *)
     let inp op = VCons (VAtom (Atom "'S"), VAtom (Atom op)) in
     let r_orig = EvalRwhile.evalProgram comp2_prog (inp "'swap") in
     let r_simp = EvalRwhile.evalProgram comp2_simp (inp "'swap") in
     Printf.printf "[comp2](('S.swap)) == B : %b\n" (r_orig = b_swap);
+    Printf.printf "[comp2_cp](('S.swap)) == B : %b\n"
+      (EvalRwhile.evalProgram comp2_cp (inp "'swap") = b_swap);
     Printf.printf "[comp2_simp](('S.swap)) == B : %b   (preserves meaning)\n" (r_simp = b_swap);
     (* breakdown: what dominates comp2 (before/after Simp)? *)
     Printf.printf "breakdown (constructor histogram + nodes under loops):\n";
