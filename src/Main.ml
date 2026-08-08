@@ -17,6 +17,7 @@ let () =
   let f_exp = ref false in
   let f_stats = ref false in
   let f_steps = ref false in
+  let f_work = ref false in
   let f_core = ref false in
   let f_simp = ref false in
   Arg.parse
@@ -49,6 +50,8 @@ let () =
       "emit structured, machine-/LLM-friendly error messages");
      ("-stats",   Arg.Set f_stats,
       "after evaluation, print result size (node count / bytes) to stderr");
+     ("-work",    Arg.Set f_work,
+      "count value nodes examined by comparison (the cost -steps does not count)");
      ("-steps",   Arg.Set f_steps,
       "after evaluation, print the executed-command step count to stderr (unit-cost time)");
      ("-core",    Arg.Set f_core,
@@ -57,7 +60,7 @@ let () =
       "simplify the (residual) program: constant-fold and remove dead reversible branches")]
     (fun s -> files := !files @ [s])
     ("R-WHILE Interpreter (C) Tetsuo Yokoyama\n" ^
-       Printf.sprintf "usage: %s [-inverse] [-p2d] [-exp] [-local] [-autofi] [-array] [-hygienic-macros] [-first-occurrence-vars] [-share-slots] [-llm-errors] [-stats] [-steps] [-core] program [data]"
+       Printf.sprintf "usage: %s [-inverse] [-p2d] [-exp] [-local] [-autofi] [-array] [-hygienic-macros] [-first-occurrence-vars] [-share-slots] [-llm-errors] [-stats] [-steps] [-work] [-core] program [data]"
          Sys.argv.(0));
   match !files with
   | [prog_filename] ->
@@ -87,7 +90,9 @@ let () =
           Printf.eprintf "[RWHILE-STATS] nodes=%d bytes=%d\n%!"
             (EvalRwhile.count_nodes result) (String.length (showValT result));
         if !f_steps then
-          Printf.eprintf "[RWHILE-STEPS] steps=%d\n%!" (EvalRwhile.get_steps ())
+          Printf.eprintf "[RWHILE-STEPS] steps=%d\n%!" (EvalRwhile.get_steps ());
+        if !f_work then
+          Printf.eprintf "[RWHILE-WORK] work=%d\n%!" (EvalRwhile.get_work ())
       with
       | Failure str ->
          (* eval_error already produced the structured block in LLM mode. *)

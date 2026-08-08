@@ -27,6 +27,53 @@ let eval_steps = ref 0
 let reset_steps () = eval_steps := 0
 let get_steps () = !eval_steps
 
+(* ===== work meter: the cost -steps does not count (2026-08-08) =====
+ *
+ * `-steps` counts COMMAND nodes, and says nothing about the size of the values a
+ * command touches.  RWHILE_S.md has recorded the consequence for a while: a
+ * `for` loop over a unary numeral is linear in steps because `=? I B` is one
+ * node, while the real work is quadratic -- "二次の仕事は =? の中に隠れる".
+ * Any claim about a DATA REPRESENTATION (unary vs binary variable indices, a
+ * list store vs a tree store) is invisible to `-steps` and must be measured
+ * here instead.
+ *
+ * THE COST MODEL, stated so the number can be argued with: `-work` counts the
+ * value NODES EXAMINED BY STRUCTURAL COMPARISON.  Comparison is the only
+ * primitive of R-WHILE whose cost is not constant -- cons/hd/tl build or project
+ * one node, and reading or writing a store slot moves one pointer -- so it is
+ * the only place where the size of a value can show up in the running time.
+ * Three sites are charged:
+ *
+ *   - `=? E F`             (EEq)
+ *   - `X ^= E`'s clearing test (rupdate: is the new value equal to the current
+ *     one?), which is what the reversible increment pays every iteration
+ *   - a literal pattern    (inv_evalPat's PVal case)
+ *
+ * Deliberately NOT charged, because each is O(1): testing a value against nil,
+ * `is_true`, hd/tl/cons, and pattern-variable reads and writes.  The array
+ * extension's index walk (arr_get / arr_rupdate) is not charged either -- it is
+ * opt-in and none of the artifacts measured here use it.
+ *
+ * Short-circuiting is modelled: comparison stops at the first mismatch, so an
+ * early mismatch costs one unit however large the values are.  Without that the
+ * meter would just be count_nodes in disguise. *)
+let eval_work = ref 0
+let reset_work () = eval_work := 0
+let get_work () = !eval_work
+
+(* structural equality that charges one unit per pair of nodes examined *)
+let rec eq_work (a : valT) (b : valT) : bool =
+  incr eval_work;
+  match a, b with
+  | VNil, VNil -> true
+  | VAtom x, VAtom y -> x = y
+  | VCons (a1, a2), VCons (b1, b2) -> eq_work a1 b1 && eq_work a2 b2
+  (* VList is source-level sugar: desugar_val / desugar_pat eliminate it before
+     evaluation, so this case is unreachable at run time.  Fall back rather than
+     fail, and charge the one unit already taken. *)
+  | (VList _, _) | (_, VList _) -> a = b
+  | _ -> false
+
 (* Extension feature flags -- set by Main.ml command-line options *)
 let enable_local  = ref false
 let enable_autofi = ref false
@@ -198,7 +245,7 @@ let rupdate (x, vx) (s : store) : store =
       | Some vy ->
           Some (if vy = VNil
                 then vx
-                else if vx = vy
+                else if eq_work vx vy      (* charged: this is the clearing test *)
                 then VNil
                 else if vx = VNil
                 then vy
@@ -378,7 +425,7 @@ let rec evalExp s = function
                    ~hint:"tl requires a cons value (a.b); nil, an atom, or a list literal has no tail"
                    ("No tail. Expression " ^ printTree prtExp (ETl e) ^ " has value " ^ printTree prtValT v)
 	      | VCons (_,v) -> v)
-  | EEq (e1, e2) -> if evalExp s e1 = evalExp s e2 then vtrue else vfalse
+  | EEq (e1, e2) -> if eq_work (evalExp s e1) (evalExp s e2) then vtrue else vfalse
   | EPair e -> (match evalExp s e with VCons _ -> vtrue | _ -> vfalse)
   | EVar x -> evalVariable s x
   | EVal v -> desugar_val v
@@ -411,7 +458,7 @@ and inv_evalPat s = function
 				     ~hint:"a CRep target variable (p in 'p <= q') must be nil before it is written; it is already bound"
 				     ("Pattern write conflict: " ^ printTree prtPat p ^ " is already non-nil (in inv_evalPat.PVar)")
   | (PVal v', v) -> let dv' = desugar_val v' in
-		    if v = dv' then s
+		    if eq_work v dv' then s
 		    else eval_error ~category:"pattern-mismatch"
 			   ~expected:(printTree prtValT dv')
 			   ~actual:(printTree prtValT v)

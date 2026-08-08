@@ -93,6 +93,66 @@ let garbage () =
   Printf.printf "  NECESSARY exactly when maxfib>1, matching |garbage|>=|fiber| (RWhileGarbageBound).\n";
   exit 0
 
+(* storewalk: how does self-interpretation cost grow with the STORE LENGTH?
+ *
+ * Optimize.ml's pass 2 rests on a measurement in command nodes -- "self-
+ * interpretation costs 387 + 20*n steps in the number n of distinct variables"
+ * -- and that linear law is the whole justification for slot sharing.  But the
+ * store walk (ri.rwhile's AUX) compares a unary counter against a unary index
+ * every iteration, and `-steps` charges that comparison ONE node whatever the
+ * counter's size.  So the law may be linear only in the metric that cannot see
+ * the comparison.  This re-measures it on both meters.
+ *
+ * The subject is a family of programs identical except for the number of
+ * variables: the extra ones sit in a branch that is never taken, so they occupy
+ * store slots without being executed. *)
+let storewalk () =
+  let ri = parse_prog (dir ^ "/ri.rwhile") in
+  (* Two families, so the cause can be NAMED rather than guessed at.  Both add n
+   * unexecuted commands in a branch that is never taken; they differ only in
+   * whether those commands introduce n new VARIABLES or reuse one.
+   *   many-vars: n new variables -> the encoding carries unary indices up to n
+   *   one-var:   n commands on a single variable -> same command count, small indices
+   * If the growth follows many-vars only, the cost is the unary INDEX, not the
+   * program's size. *)
+  let subject fresh n =
+    let pad = String.concat "; "
+      (List.init n (fun i ->
+           let v = if fresh then Printf.sprintf "V%d" (i+1) else "V1" in
+           Printf.sprintf "%s ^= 'a; %s ^= 'a" v v)) in
+    let body = if n = 0 then "Y <= X"
+               else Printf.sprintf "if =? X 'zzz then %s else Y <= X fi =? X 'zzz" pad in
+    Printf.sprintf "read X; %s; write Y" body in
+  let run fresh label =
+    Printf.printf "  %s (subject: identity + n unexecuted commands, %s)\n" label
+      (if fresh then "each on a FRESH variable" else "all on ONE variable");
+    Printf.printf "  %5s %8s %9s %7s %10s %8s\n" "n" "|p2d|" "steps" "d(steps)" "work" "d(work)";
+    let prev = ref None in
+    List.iter (fun n ->
+        let src = ParRwhile.pProgram LexRwhile.token (Lexing.from_string (subject fresh n)) in
+        let pd = Program2DataRwhile.program2data src in
+        let inp = VCons (pd, atom "'a") in
+        EvalRwhile.reset_steps (); EvalRwhile.reset_work ();
+        let _ = EvalRwhile.evalProgram ri inp in
+        let s = EvalRwhile.get_steps () and w = EvalRwhile.get_work () in
+        (match !prev with
+         | None -> Printf.printf "  %5d %8d %9d %7s %10d %8s\n" n (cn pd) s "-" w "-"
+         | Some (s0, w0) ->
+            Printf.printf "  %5d %8d %9d %7d %10d %8d\n" n (cn pd) s (s - s0) w (w - w0));
+        prev := Some (s, w))
+      [0; 5; 10; 20; 40; 80] in
+  Printf.printf "self-interpretation cost vs the subject's size, on both meters\n";
+  run true  "many-vars";
+  run false "one-var  ";
+  Printf.printf "  READING: steps are FLAT in both families -- -steps sees nothing of the subject's\n";
+  Printf.printf "  size (both add only unexecuted commands).  Work grows in both, and tracks |p2d|:\n";
+  Printf.printf "  linearly for one-var, superlinearly for many-vars -- and many-vars' encoding is\n";
+  Printf.printf "  itself superlinear because a variable index is a UNARY numeral.  ri.rwhile's store\n";
+  Printf.printf "  is a fixed 300 slots, so neither family changes the store's length: what many-vars\n";
+  Printf.printf "  changes is the largest index.  So the encoding size is not merely a size -- on the\n";
+  Printf.printf "  meter that counts value nodes it is a RUN-TIME cost.\n";
+  exit 0
+
 let jones spec_av =
   let ab = VCons (atom "'a", atom "'b") in
   let abc = vlist [atom "'a"; atom "'b"; atom "'c"] in
@@ -114,19 +174,28 @@ let jones spec_av =
       ("ri_perm", riperm, vlist [opab; opbc], abc, "[ab;bc]");
       ("ri_perm", riperm, vlist [opab; opbc; opab], abc, "[ab;bc;ab]=rev") ]
   in
-  Printf.printf "Jones optimality: fp1 residual exec-steps vs interpreter exec-steps\n";
+  (* Both meters.  -steps counts command nodes; -work counts the value nodes
+   * examined by comparison (EvalRwhile's work meter).  A claim of Jones
+   * optimality that holds on one metric and not the other is a claim about the
+   * metric, so both ratios are printed and the residual must win on BOTH. *)
+  Printf.printf "Jones optimality: fp1 residual vs interpreter, on BOTH meters\n";
   Printf.printf "  (loops = CLoop nodes in residual: 0 = compiled/loop-free; interpreters loop)\n";
-  Printf.printf "  %-7s %-16s %8s %5s %7s %7s %7s\n" "interp" "program" "|resid|" "loops" "resid" "interp" "ratio";
+  Printf.printf "  %-7s %-16s %8s %5s %7s %7s %7s %8s %8s %7s\n"
+    "interp" "program" "|resid|" "loops" "steps_r" "steps_i" "ratio" "work_r" "work_i" "ratio";
   List.iter (fun (iname, iprog, src, d, label) ->
       let pd = Program2DataRwhile.program2data iprog in
       let b = EvalRwhile.evalProgram spec_av (spec_in pd src) in
       let bp = Program2DataRwhile.data2program b in
-      EvalRwhile.reset_steps (); let ro = EvalRwhile.evalProgram bp d in
-      let sr = EvalRwhile.get_steps () in
-      EvalRwhile.reset_steps (); let io = EvalRwhile.evalProgram iprog (VCons (src, d)) in
-      let si = EvalRwhile.get_steps () in
-      Printf.printf "  %-7s %-16s %8d %5d %7d %7d %6.2fx%s\n" iname label (cn b) (body_loops bp) sr si
-        (float_of_int sr /. float_of_int si) (if ro = io then "" else "  MISMATCH!"))
+      EvalRwhile.reset_steps (); EvalRwhile.reset_work ();
+      let ro = EvalRwhile.evalProgram bp d in
+      let sr = EvalRwhile.get_steps () and wr = EvalRwhile.get_work () in
+      EvalRwhile.reset_steps (); EvalRwhile.reset_work ();
+      let io = EvalRwhile.evalProgram iprog (VCons (src, d)) in
+      let si = EvalRwhile.get_steps () and wi = EvalRwhile.get_work () in
+      Printf.printf "  %-7s %-16s %8d %5d %7d %7d %6.2fx %8d %8d %6.2fx%s\n"
+        iname label (cn b) (body_loops bp) sr si
+        (float_of_int sr /. float_of_int si) wr wi
+        (float_of_int wr /. float_of_int wi) (if ro = io then "" else "  MISMATCH!"))
     cases;
   Printf.printf "interpreter loops: ri_min=%d ri_seq=%d ri_perm=%d (all unrolled to 0 in residuals)\n"
     (body_loops rimin) (body_loops riseq) (body_loops riperm);
@@ -304,6 +373,7 @@ let encoding () =
 
 let () =
   if Array.length Sys.argv >= 2 && Sys.argv.(1) = "encoding" then (encoding (); exit 0);
+  if Array.length Sys.argv >= 2 && Sys.argv.(1) = "storewalk" then storewalk ();
   if Array.length Sys.argv >= 3 && Sys.argv.(1) = "gate" then gate Sys.argv.(2);
   if Array.length Sys.argv >= 3 && Sys.argv.(1) = "dyncond" then (dyncond Sys.argv.(2); exit 0);
   if Array.length Sys.argv >= 2 && Sys.argv.(1) = "jones" then

@@ -689,6 +689,77 @@ let test_copyprop_is_identity_without_moves () =
   Alcotest.(check string) "no single-use temp moves: unchanged"
     (same src) (cp src)
 
+(* ===== -work: the cost -steps does not count =====
+ * RWHILE_S.md has said since 2026-08-06 that `-steps` counts command nodes and
+ * not the SIZE of the values touched, so "二次の仕事は =? の中に隠れる".  These
+ * tests pin the meter that makes that visible, and then EXHIBIT the hidden
+ * quadratic: a for-loop over a unary numeral is linear in steps and quadratic in
+ * work.  Without the second test the meter would be untested where it matters. *)
+
+let work_of_exp e =
+  EvalRwhile.reset_work ();
+  ignore (EvalRwhile.evalExp EvalRwhile.RIdentMap.empty e);
+  EvalRwhile.get_work ()
+
+let rec unary_val n = if n = 0 then VNil else VCons (VNil, unary_val (n - 1))
+let rec unary_src n = if n = 0 then "nil" else "(nil . " ^ unary_src (n - 1) ^ ")"
+
+let test_work_equal_values_cost_their_size () =
+  (* comparing two equal values examines every node of both: 2*count_nodes - ...
+   * precisely, one unit per node PAIR, so count_nodes of one side. *)
+  List.iter (fun n ->
+      let v = unary_val n in
+      Alcotest.(check int) (Printf.sprintf "=? on equal unary %d" n)
+        (EvalRwhile.count_nodes v)
+        (work_of_exp (EEq (EVal v, EVal v))))
+    [0; 1; 5; 20]
+
+let test_work_mismatch_stops_early () =
+  (* an early mismatch costs O(1), however big the values are -- the meter must
+   * model short-circuiting, or it would just be count_nodes in disguise *)
+  Alcotest.(check int) "atom vs cons: one unit"
+    1 (work_of_exp (EEq (EVal (atom "'a"), EVal (unary_val 100))));
+  Alcotest.(check bool) "a late mismatch costs more than an early one"
+    true (work_of_exp (EEq (EVal (unary_val 100), EVal (VCons (unary_val 99, atom "'x"))))
+          > work_of_exp (EEq (EVal (atom "'a"), EVal (unary_val 100))))
+
+let test_work_charges_the_reversible_update () =
+  (* `X ^= E` clears X by comparing its current value with E's -- the same hidden
+   * comparison, and the one the for-counter's increment pays every iteration *)
+  let p = parse_program "read X; Y ^= X; Y ^= X; write X" in
+  let d = unary_val 30 in
+  EvalRwhile.reset_work ();
+  ignore (EvalRwhile.evalProgram p d);
+  Alcotest.(check bool) "the clearing assignment is charged for the value's size"
+    true (EvalRwhile.get_work () >= EvalRwhile.count_nodes d)
+
+let test_work_exposes_the_hidden_quadratic () =
+  (* THE point of the meter.  `for I = nil to N` tests `=? I N` every iteration
+   * against a unary numeral, so the loop is linear in commands and quadratic in
+   * nodes examined.  Doubling N must roughly double the steps and roughly
+   * QUADRUPLE the work. *)
+  let run n =
+    let src = Printf.sprintf
+      "read X; for I = nil to %s do Y ^= 'a; Y ^= 'a end; write X" (unary_src n) in
+    let p = parse_program src in
+    EvalRwhile.reset_steps (); EvalRwhile.reset_work ();
+    ignore (EvalRwhile.evalProgram p VNil);
+    (EvalRwhile.get_steps (), EvalRwhile.get_work ()) in
+  let (s1, w1) = run 20 and (s2, w2) = run 40 in
+  Alcotest.(check bool)
+    (Printf.sprintf "steps grow linearly: %d -> %d (< 2.5x)" s1 s2)
+    true (float_of_int s2 < 2.5 *. float_of_int s1);
+  Alcotest.(check bool)
+    (Printf.sprintf "work grows quadratically: %d -> %d (> 3x)" w1 w2)
+    true (float_of_int w2 > 3.0 *. float_of_int w1)
+
+let test_work_counter_resets () =
+  EvalRwhile.reset_work ();
+  Alcotest.(check int) "reset zeroes the meter" 0 (EvalRwhile.get_work ());
+  ignore (work_of_exp (EEq (EVal (unary_val 3), EVal (unary_val 3))));
+  EvalRwhile.reset_work ();
+  Alcotest.(check int) "and again after use" 0 (EvalRwhile.get_work ())
+
 (* ===== Encoding: where the nodes of a p2d-encoded program go =====
  * Motivation (2026-08-08).  comp2 cannot be shrunk by fusing moves (21 candidates
  * in 400531 nodes -- see the note at the end of Simp.ml), so the bulk is what the
@@ -3155,6 +3226,13 @@ let () =
       Alcotest.test_case "fuses inside a conditional branch" `Quick test_copyprop_inside_conditional;
       Alcotest.test_case "loop body: preserves semantics" `Quick test_copyprop_inside_loop_semantics;
       Alcotest.test_case "identity without single-use temps" `Quick test_copyprop_is_identity_without_moves;
+    ];
+    "work-meter", [
+      Alcotest.test_case "equal values cost their size" `Quick test_work_equal_values_cost_their_size;
+      Alcotest.test_case "a mismatch stops early" `Quick test_work_mismatch_stops_early;
+      Alcotest.test_case "the reversible update is charged" `Quick test_work_charges_the_reversible_update;
+      Alcotest.test_case "exposes the quadratic -steps misses" `Quick test_work_exposes_the_hidden_quadratic;
+      Alcotest.test_case "the meter resets" `Quick test_work_counter_resets;
     ];
     "encoding-breakdown", [
       Alcotest.test_case "categories add up to count_nodes" `Quick test_encoding_adds_up;
