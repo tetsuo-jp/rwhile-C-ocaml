@@ -330,9 +330,43 @@ data _⊩_⇒_∣_ : SCmd → Store → Store → ℕ → Set where
 | `assert` | **証明済み** |
 | `skip` | タイムド核の `skip` そのもの（コスト差は `cost-split` が説明） |
 | `push` / `pop` / `X <-> Y` | **証明済み**（`RWhilePushPop.agda`、`RWhileCRep` 層） |
-| `case` | 反転は `RWhileCaseInv`、**選択コストと出口表明の役割は `RWhileSurface.caseNest-cost` / `caseNest-exits-false`**（腕本体は不透明な `Cmd` として抽象化。本体が含む `<=` はタイムド核に無いため） |
+| `case` | 反転は `RWhileCaseInv`、選択コストと出口表明の役割は `RWhileSurface.caseNest-cost` / `caseNest-exits-false`、**腕本体まで含めたコストは `RWhileCaseCost.agda`**（2026-08-09。下記） |
 
 `--safe`・postulate 0・hole 0。`check.sh --si` は PASS=30 FAIL=0（181 秒）。
+
+## `case` のコストを腕本体まで（`RWhileCaseCost.agda`、2026-08-09）
+
+上の表で `case` だけが「腕本体は不透明」と残っていた。理由は「腕本体は `<=` を
+含み、タイムド核には `<=` が無い」——**層をまたぐ必要があると思われていた**。
+実際には、またぐ必要はなかった。**平坦なパターンの置換はタイムド核で定義できる**:
+
+```
+Y <= X          ==  Y ^= X ; X ^= Y                        コスト 3
+cons A B <= X   ==  A ^= hd X ; B ^= tl X ; X ^= cons A B  コスト 5
+X <= cons A B   ==  X ^= cons A B ; A ^= hd X ; B ^= tl X  コスト 5
+```
+
+いずれも R-WHILE 自身の常用イディオムであり、新しい意味論を足していない。
+
+| 定理 | 内容 |
+|---|---|
+| `movePat-run` / `splitPat-run` / `joinPat-run` | 各置換がストアを所定の位置へ移し、コストがちょうど 3 / 5 / 5 |
+| `split-join-restores` | 分解して組み直すと**全変数が元の値に戻る**（コスト 11）。R-WHILE が `<=` を「パターンを入れ替えて」反転することの意味論版。**等式ではなく各点で述べている**のは `set` が短いストアを nil で伸ばすため（`s = []`・`a = 0` で propositional 等式は偽） |
+| `caseNest-cost-taken` | **腕 i が選ばれたとき**の選択コストがちょうど i（既存の `caseNest-cost` は素通り側のみ） |
+| `swapArm-run` / `caseSwap-run` | `examples/case_swap.rwhile` の cons 腕が実際に入れ替え、`case` 全体でコスト 12 |
+| `ex-swap` / `ex-arm` / `ex-split-join` | 上を**型検査器の中で実行**して確認（`exec`） |
+
+**範囲**: 平坦なパターン（変数、または変数 2 つの cons）。**入れ子パターンは一時変数
+なしにはこの形へコンパイルできない**——特殊化器が `cons (cons V1 V2) St <= St` で
+ぶつかったのと同じ壁（`examples/spec_av.rwhile` のノート）。意図的な境界である。
+
+**コストの約束**: ここの数はコンパイル後の形の費用で、`./ri -steps` の数（`case_swap`
+は 6）とは違う。解釈器は `<=` 1 つを 1 ノードで数え、モデルは 3 か 5 使う。表層と核の
+いつもの差（`RWhileSugar.assertNil-cost` はモデル 2・解釈器 1）で、隠さず明記してある。
+一致するのは**法則の形**——選択＋腕、飛ばした腕 1 つにつき 1 ノード。
+
+変異注入で確認済み（コストを 12→13 にすると `11 != 12`、線形性条件 `a ≠ b` を落とすと
+3 か所が落ちる）。
 
 ## `<=` に展開される糖衣 push / pop / `<->`（`RWhilePushPop.agda`、2026-08-06）
 
