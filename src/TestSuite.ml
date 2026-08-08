@@ -889,6 +889,85 @@ let parse_file_val filename =
 
 let examples_dir = "../examples"
 
+(* ===== The optimisations as a CLI pass, swept over the real examples =====
+ * Simp.simpProgram and Simp.copyprop_program were written for residuals and are
+ * exercised on hand-written fragments and on the fp1/fp2 residuals.  Exposing
+ * them as `./ri -simp -copyprop` means they now run on programs nobody had them
+ * in mind for -- macros, sugar, loops, the self-interpreters -- so the property
+ * that matters is swept over the examples the suite already runs: the optimised
+ * program must give the SAME answer, and must still be invertible.
+ *
+ * `-copyprop` expands macros first (Main.ml does the same), because the
+ * whole-program "occurs exactly twice" gate cannot see through a macro call. *)
+
+let opt_expand p = MacroRwhile.expMacProgram p
+let opt_simp p = Simp.simpProgram (opt_expand p)
+let opt_full p = Simp.copyprop_program (Simp.simpProgram (opt_expand p))
+
+(* (program file, data file) pairs -- the ones the file-integration group runs,
+ * plus the sugar and case examples, which exercise the desugaring paths. *)
+let opt_examples =
+  [ "rep.rwhile", "list123.val";
+    "length.rwhile", "list123.val";
+    "minus.rwhile", "minus.val";
+    "compare.rwhile", "compare0.val";
+    "rle.rwhile", "rle2.val";
+    "reverse.rwhile", "list123.val";
+    "case_swap.rwhile", "list123.val";
+    "case_tag.rwhile", "case_tag.val";
+    "stack_reverse.rwhile", "list123.val";
+    "lookup.rwhile", "nil.val" ]
+
+let test_opt_preserves_answers () =
+  List.iter (fun (pf, df) ->
+      let p = parse_file_program (examples_dir ^ "/" ^ pf) in
+      let d = parse_file_val (examples_dir ^ "/" ^ df) in
+      let base = EvalRwhile.evalProgram p d in
+      Alcotest.(check valT_testable) ("-simp preserves the answer: " ^ pf)
+        base (EvalRwhile.evalProgram (opt_simp p) d);
+      Alcotest.(check valT_testable) ("-simp -copyprop preserves the answer: " ^ pf)
+        base (EvalRwhile.evalProgram (opt_full p) d))
+    opt_examples
+
+let test_opt_preserves_invertibility () =
+  (* the reversible-language half: the optimised program's syntactic inverse
+   * still undoes it.  A transformation can preserve the forward answer and
+   * still break this -- copy propagation moves where a value is consumed. *)
+  List.iter (fun (pf, df) ->
+      let p = parse_file_program (examples_dir ^ "/" ^ pf) in
+      let d = parse_file_val (examples_dir ^ "/" ^ df) in
+      let q = opt_full p in
+      let out = EvalRwhile.evalProgram q d in
+      Alcotest.(check valT_testable) ("inverse round-trips: " ^ pf)
+        d (EvalRwhile.evalProgram (InvRwhile.invProgram q) out))
+    opt_examples
+
+let test_opt_preserves_cost_or_improves () =
+  (* the optimisations must never make a program cost MORE steps: they only
+   * delete commands (dead branches, fused moves) *)
+  List.iter (fun (pf, df) ->
+      let p = parse_file_program (examples_dir ^ "/" ^ pf) in
+      let d = parse_file_val (examples_dir ^ "/" ^ df) in
+      EvalRwhile.reset_steps ();
+      ignore (EvalRwhile.evalProgram (opt_expand p) d);
+      let base = EvalRwhile.get_steps () in
+      EvalRwhile.reset_steps ();
+      ignore (EvalRwhile.evalProgram (opt_full p) d);
+      let opt = EvalRwhile.get_steps () in
+      Alcotest.(check bool)
+        (Printf.sprintf "%s: %d steps -> %d, never worse" pf base opt)
+        true (opt <= base))
+    opt_examples
+
+let test_opt_is_identity_on_a_clean_program () =
+  (* nothing to fold and no single-use temp moves: the pass must be the identity,
+   * so `-simp -copyprop` is safe to leave on *)
+  let src = "read X; Y ^= X; X ^= Y; write Y" in
+  Alcotest.(check string) "no opportunities: unchanged"
+    (show_program (parse_program src))
+    (show_program (Simp.copyprop_program (Simp.simpProgram (parse_program src))))
+
+
 let test_file_rep () =
   let prog = parse_file_program (examples_dir ^ "/rep.rwhile") in
   let data = parse_file_val (examples_dir ^ "/list123.val") in
@@ -3226,6 +3305,12 @@ let () =
       Alcotest.test_case "fuses inside a conditional branch" `Quick test_copyprop_inside_conditional;
       Alcotest.test_case "loop body: preserves semantics" `Quick test_copyprop_inside_loop_semantics;
       Alcotest.test_case "identity without single-use temps" `Quick test_copyprop_is_identity_without_moves;
+    ];
+    "simp-cli", [
+      Alcotest.test_case "preserves answers on the examples" `Quick test_opt_preserves_answers;
+      Alcotest.test_case "preserves invertibility" `Quick test_opt_preserves_invertibility;
+      Alcotest.test_case "never costs more steps" `Quick test_opt_preserves_cost_or_improves;
+      Alcotest.test_case "identity when there is nothing to do" `Quick test_opt_is_identity_on_a_clean_program;
     ];
     "work-meter", [
       Alcotest.test_case "equal values cost their size" `Quick test_work_equal_values_cost_their_size;

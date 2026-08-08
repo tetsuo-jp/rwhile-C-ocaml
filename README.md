@@ -49,6 +49,12 @@ make install         # copy ri into ../web/
 ./ri -core <program> <data>          # evaluate via the Core IR (src/Core.ml)
 ./ri -hygienic-macros <program> <data>   # alpha-rename macro-internal locals
 ./ri -llm-errors <program> <data>        # structured, machine-friendly errors
+./ri -simp -copyprop <program> [data]    # optimise: fold constants, drop dead
+                                         #   reversible branches, fuse
+                                         #   write-once/read-once moves
+./ri -steps -work <program> <data>       # cost meters: command nodes executed,
+                                         #   and value nodes examined by
+                                         #   comparison (the cost -steps misses)
 ```
 
 Helper tools (also from `src/`):

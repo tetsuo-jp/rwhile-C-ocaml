@@ -10,6 +10,16 @@ let showTree (t : AbsRwhile.program) : string =
 let showValT (t : AbsRwhile.valT) : string =
     PrintRwhile.printTree PrintRwhile.prtValT t
 
+(* The optimisation pipeline, shared by the two modes so that `./ri -simp
+   -copyprop p.rwhile d.val` RUNS what `./ri -simp -copyprop p.rwhile` PRINTS.
+   Copy propagation gates on "this variable occurs exactly twice in the whole
+   program", which cannot see through a macro call, so it expands macros first
+   -- evalProgram would expand them anyway, so nothing changes but the reach. *)
+let optimise ~simp ~cprop (p : AbsRwhile.program) : AbsRwhile.program =
+  let p = if cprop then MacroRwhile.expMacProgram p else p in
+  let p = if simp then Simp.simpProgram p else p in
+  if cprop then Simp.copyprop_program p else p
+
 let () =
   let files = ref [] in
   let f_inv = ref false in
@@ -20,6 +30,7 @@ let () =
   let f_work = ref false in
   let f_core = ref false in
   let f_simp = ref false in
+  let f_cprop = ref false in
   Arg.parse
     [("-inverse", Arg.Set f_inv,  "inversion");
      ("-p2d",     Arg.Set f_p2d,  "translation from programs to data");
@@ -57,10 +68,12 @@ let () =
      ("-core",    Arg.Set f_core,
       "evaluate via the Core IR abstraction layer (Core.ml; mirrors the Agda-verified core)");
      ("-simp",    Arg.Set f_simp,
-      "simplify the (residual) program: constant-fold and remove dead reversible branches")]
+      "simplify the (residual) program: constant-fold and remove dead reversible branches");
+     ("-copyprop", Arg.Set f_cprop,
+      "fuse write-once/read-once variable moves (expands macros first; combine with -simp)")]
     (fun s -> files := !files @ [s])
     ("R-WHILE Interpreter (C) Tetsuo Yokoyama\n" ^
-       Printf.sprintf "usage: %s [-inverse] [-p2d] [-exp] [-local] [-autofi] [-array] [-hygienic-macros] [-first-occurrence-vars] [-share-slots] [-llm-errors] [-stats] [-steps] [-work] [-core] program [data]"
+       Printf.sprintf "usage: %s [-inverse] [-p2d] [-exp] [-local] [-autofi] [-array] [-hygienic-macros] [-first-occurrence-vars] [-share-slots] [-llm-errors] [-stats] [-steps] [-work] [-simp] [-copyprop] [-core] program [data]"
          Sys.argv.(0));
   match !files with
   | [prog_filename] ->
@@ -69,7 +82,7 @@ let () =
      let _ = close_in channel in
      let prog2 = if !f_exp then MacroRwhile.expMacProgram prog1 else prog1 in
      let prog3 = if !f_inv then InvRwhile.invProgram prog2 else prog2 in
-     let prog4 = if !f_simp then Simp.simpProgram prog3 else prog3 in
+     let prog4 = optimise ~simp:!f_simp ~cprop:!f_cprop prog3 in
      print_endline (if !f_p2d
 		   then showValT (Program2DataRwhile.program2data prog4)
 		   else showTree prog4)
@@ -82,9 +95,10 @@ let () =
      let _ = close_in channel in
      (try
         EvalRwhile.reset_steps ();
+        let prog' = optimise ~simp:!f_simp ~cprop:!f_cprop prog in
         let result =
-          if !f_core then Core.eval_program_core prog data
-          else EvalRwhile.evalProgram prog data in
+          if !f_core then Core.eval_program_core prog' data
+          else EvalRwhile.evalProgram prog' data in
         print_endline (showValT result);
         if !f_stats then
           Printf.eprintf "[RWHILE-STATS] nodes=%d bytes=%d\n%!"
