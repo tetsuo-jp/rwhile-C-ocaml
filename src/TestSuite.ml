@@ -2429,6 +2429,89 @@ let test_jones_self_open_direct_fp1_too () =
     "control: ...and takes the other branch on the other input ('two)"
     (atom "'two") (EvalRwhile.evalProgram comp VNil)
 
+(* ===== dyn-control: SPECULATIVE UNROLLING + ROLLBACK (2026-08-09) =====
+ *
+ * The POSITIVE form of what jones-self-open pinned as an expected failure.
+ * spec_av's 'loop handler now takes a CHECKPOINT (the abstract store Vl, the
+ * residual code RCode, the fresh-temp counter) before it starts unrolling and
+ * carries it inside the 'lcheck continuation.  When 'lcheck finds the exit test
+ * is no longer static -- the state that used to be `'error <= '41` -- the
+ * checkpoint is restored and the loop is residualised from its ENTRY instead.
+ * The entry is the only point at which a REVERSIBLE loop can be emitted: such a
+ * loop demands a true entry test on first entry and a false one on every
+ * loop-back, so it cannot be re-entered half way through.
+ *
+ * The three subjects are exactly the three that pinned the wall:
+ *   - dyncond3 : dynamic control, NO loop, through ri_fp3
+ *   - reverse  : a data-dependent loop, specialised DIRECTLY
+ *   - reverse  : the same, through the ri_fp3 self-interpreter
+ * Each demand is not "does not raise" but "the residual computes the right
+ * thing", on several inputs, so a residual baked to one input cannot pass. *)
+
+let dc_spec_av = lazy (parse_file_program (examples_dir ^ "/spec_av.rwhile"))
+let dc_ri_fp3  = lazy (parse_file_program (examples_dir ^ "/ri_fp3.rwhile"))
+
+(* comp = [spec_av]((ri_fp3 . ('S . p2d p))), so [comp](d) = (p2d p . [p](d)). *)
+let dc_fp1_via_ri_fp3 name =
+  let pd_sint = Program2DataRwhile.program2data (Lazy.force dc_ri_fp3) in
+  let src = parse_file_program (examples_dir ^ "/" ^ name ^ ".rwhile") in
+  let pd = Program2DataRwhile.program2data src in
+  let comp = Program2DataRwhile.data2program
+      (EvalRwhile.evalProgram (Lazy.force dc_spec_av) (spec_in pd_sint pd)) in
+  (src, pd, comp)
+
+let dc_check_via_ri_fp3 name inputs =
+  let (src, pd, comp) = dc_fp1_via_ri_fp3 name in
+  List.iter (fun d ->
+      Alcotest.(check valT_testable)
+        ("fp1-via-ri_fp3 " ^ name ^ ": [comp](d) = (p2d p . [p](d))")
+        (VCons (pd, EvalRwhile.evalProgram src d))
+        (EvalRwhile.evalProgram comp d))
+    inputs
+
+let test_dyncontrol_dyncond3_via_ri_fp3 () =
+  dc_check_via_ri_fp3 "dyncond3" [ atom "'q"; VNil; parse_val "('a . 'b)" ]
+
+let test_dyncontrol_reverse_via_ri_fp3 () =
+  dc_check_via_ri_fp3 "reverse"
+    [ parse_val "('a . ('b . nil))"; parse_val "('a . nil)"; VNil ]
+
+let test_dyncontrol_reverse_direct () =
+  let rev = parse_file_program (examples_dir ^ "/reverse.rwhile") in
+  let pd_rev = Program2DataRwhile.program2data rev in
+  let src = atom "'c" in
+  let comp = Program2DataRwhile.data2program
+      (EvalRwhile.evalProgram (Lazy.force dc_spec_av) (spec_in pd_rev src)) in
+  (* [comp](d) = [reverse]((Src . d)) for the dynamic input half d *)
+  List.iter (fun d ->
+      Alcotest.(check valT_testable)
+        "direct fp1 reverse: [comp](d) = [reverse](('c . d))"
+        (EvalRwhile.evalProgram rev (VCons (src, d)))
+        (EvalRwhile.evalProgram comp d))
+    [ parse_val "('a . ('b . nil))"; parse_val "('a . nil)"; VNil ];
+  (* ...and the residual is a legitimate R-WHILE program: its syntactic inverse
+     undoes it.  Residualising the loop from its ENTRY -- rather than folding the
+     entry test to a constant -- is exactly what keeps this true. *)
+  let d = parse_val "('a . ('b . nil))" in
+  Alcotest.(check valT_testable)
+    "direct fp1 reverse: [inv comp]([comp](d)) = d (the residual is reversible)"
+    d (EvalRwhile.evalProgram (InvRwhile.invProgram comp)
+         (EvalRwhile.evalProgram comp d))
+
+(* A data-dependent loop must leave a loop IN the residual -- unlike the
+   static-control subjects (loop_static2/3), whose loops are unrolled away.  If
+   this ever reads 0, the specialiser baked the measuring input in. *)
+let test_dyncontrol_residual_keeps_the_loop () =
+  let (_, _, comp) = dc_fp1_via_ri_fp3 "reverse" in
+  Alcotest.(check bool) "fp1-via-ri_fp3 reverse: the residual still has a loop"
+    true (js_body_loops comp > 0);
+  let rev = parse_file_program (examples_dir ^ "/reverse.rwhile") in
+  let direct = Program2DataRwhile.data2program
+      (EvalRwhile.evalProgram (Lazy.force dc_spec_av)
+         (spec_in (Program2DataRwhile.program2data rev) (atom "'c"))) in
+  Alcotest.(check bool) "direct fp1 reverse: the residual still has a loop"
+    true (js_body_loops direct > 0)
+
 (* Evaluate a program-as-data value (a spec residual / comp) DIRECTLY by
  * decoding it back to an AST -- the reliable alternative to run_via_ri, which
  * routes through the ri.rwhile self-interpreter (see the known bug below). *)
@@ -3673,6 +3756,14 @@ let () =
       Alcotest.test_case "ri_fp3 self-interprets reverse (the interpreter is fine)" `Quick test_jones_self_open_interpreter_is_fine;
       Alcotest.test_case "OPEN: dynamic control via ri_fp3 dies at 'lcheck ('error <= '41)" `Quick test_jones_self_open_dynamic_control_via_ri_fp3;
       Alcotest.test_case "OPEN: direct fp1 of reverse dies the same way" `Quick test_jones_self_open_direct_fp1_too;
+    ];
+    (* Speculative unrolling + rollback: the wall the group above used to pin.
+       See the note above dc_spec_av. *)
+    "dyn-control", [
+      Alcotest.test_case "dyncond3 (no loop, dynamic cond) via ri_fp3 residualises correctly" `Quick test_dyncontrol_dyncond3_via_ri_fp3;
+      Alcotest.test_case "reverse (data-dependent loop) via ri_fp3 residualises correctly" `Quick test_dyncontrol_reverse_via_ri_fp3;
+      Alcotest.test_case "reverse specialised directly: residual correct and reversible" `Quick test_dyncontrol_reverse_direct;
+      Alcotest.test_case "a data-dependent loop stays a loop in the residual" `Quick test_dyncontrol_residual_keeps_the_loop;
     ];
     "work-meter", [
       Alcotest.test_case "equal values cost their size" `Quick test_work_equal_values_cost_their_size;
