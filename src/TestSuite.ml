@@ -1488,26 +1488,29 @@ let fp1_store_out_slot src_name =
   | VCons (vl, VCons (fpj, _)) -> nth_slot vl (unary_to_int fpj)
   | _ -> VNil
 
-(* CHARACTERIZATION: the bug is in STEP, not in lift/assemble.  After STEP, the
- * output slot V[FpJ] for swap is a partial-static cons whose Result half (tl) is
- * a PLAIN opaque dynamic ('D.('var.0)) -- NOT the swapped structure
- * ('C.((D tl).(D hd))).  ri_fp3's stack machine lets the dynamic value flow
- * through opaquely; the hd/tl/cons are never tracked symbolically during STEP.
- * When the STEP bug is fixed this assertion SHOULD fail (Result must become a
- * structural cons); update it then. *)
-let test_fp1_step_bug_opaque_result () =
+(* WAS A KNOWN BUG, FIXED 2026-08-08.  The bug was in STEP, not in lift/assemble:
+ * after STEP, the output slot V[FpJ] for swap was a partial-static cons whose
+ * Result half (tl) was a PLAIN opaque dynamic ('D.('var.N)) -- NOT the swapped
+ * structure ('C.((D tl).(D hd))).  ri_fp3's stack machine let the dynamic value
+ * flow through opaquely, so the hd/tl/cons were never tracked symbolically.
+ *
+ * Giving EVAL-PAT-STEP-FP3 a second working register (so the two leaves of a
+ * flat cons no longer share one slot, hence no stale AV) and moving values
+ * through PAT-MOVE-FP3 replacements rather than XOR pairs (so a compound AV is
+ * consumed, not lifted into an expression) makes STEP track the structure: the
+ * Result half is now a structural 'C cons.  Assert that. *)
+let test_fp1_step_structural_result () =
   let slot = fp1_store_out_slot "swap" in
   let result = (match slot with VCons (_, VCons (_, tl)) -> tl | _ -> slot) in
-  (* Assert the SHAPE, not the variable number: the bug is that Result stays a
-     dynamic variable reference instead of becoming a structural cons.  Pinning
-     the numeral would make this test track Optimize's numbering instead of the
-     bug (it did: the same opaque result moved from index 0 to index 36 when
-     access-weight numbering became the default). *)
+  (* Assert the SHAPE, not the variable numbers: pinning the numerals would make
+     this test track Optimize's numbering instead of the property (it did once:
+     the old opaque result moved from index 0 to 36 when access-weight numbering
+     became the default). *)
   Alcotest.(check bool)
-    "KNOWN BUG (STEP): swap Result half is opaque ('D.('var.N)), not structural"
+    "STEP now tracks swap's Result as a structural cons ('C.(_._))"
     true
     (match result with
-     | VCons (VAtom (Atom "'D"), VCons (VAtom (Atom "'var"), _)) -> true
+     | VCons (VAtom (Atom "'C"), VCons (_, _)) -> true
      | _ -> false)
 
 (* ROOT-CAUSE test: PAT-WRITE-STRUCT must handle a NESTED cons pattern.
@@ -1639,16 +1642,74 @@ let test_fp1_ri_fp3_nontransposing_ok () =
       (EvalRwhile.evalProgram srcp d) got in
   check "id2"; check "id3"; check "rep"
 
-let test_fp1_ri_fp3_residual_still_fails () =
+(* FIXED 2026-08-08 by giving ri_fp3's pattern stack machine a SECOND working
+ * register, selected by the stack depth at which the value is pushed (`Dp`).
+ * The two leaves of a flat `cons` pattern are pushed at different depths, so
+ * they stage through different slots and neither AV goes stale.  Note the
+ * trigger was never transposition: `sx_splitjoin` (uncons-then-rejoin = the
+ * identity) failed too.  It is TWO LEAVES IN ONE BUILT PATTERN. *)
+let test_fp1_ri_fp3_two_leaf_patterns_run () =
   let spec_av = parse_file_program (examples_dir ^ "/spec_av.rwhile") in
   let ri_fp3 = Program2DataRwhile.program2data
       (parse_file_program (examples_dir ^ "/ri_fp3.rwhile")) in
-  let src = Program2DataRwhile.program2data
-      (parse_file_program (examples_dir ^ "/swap.rwhile")) in
-  let comp = EvalRwhile.evalProgram spec_av (spec_in ri_fp3 src) in
   let d = VCons (atom "'a", atom "'b") in
+  let check name =
+    let srcp = parse_file_program (examples_dir ^ "/" ^ name ^ ".rwhile") in
+    let comp = EvalRwhile.evalProgram spec_av
+        (spec_in ri_fp3 (Program2DataRwhile.program2data srcp)) in
+    let got = (match EvalRwhile.evalProgram
+                       (Program2DataRwhile.data2program comp) d with
+               | VCons (_, res) -> res | v -> v) in
+    Alcotest.(check valT_testable)
+      (name ^ ": fp1-via-ri_fp3 residual runs and agrees with direct evaluation")
+      (EvalRwhile.evalProgram srcp d) got in
+  check "swap"; check "sx_splitjoin"
+
+(* ri_fp3 IS AN INTERPRETER FIRST.  Every other ri_fp3 test runs it only through
+ * spec_av, so a change to it could pass them all while breaking the thing it is
+ * for.  This pins direct self-interpretation, including a program with a loop
+ * (`reverse`), which is what actually exercises STEP-FP3's control flow. *)
+let test_ri_fp3_self_interprets () =
+  let interp = parse_file_program (examples_dir ^ "/ri_fp3.rwhile") in
+  let check name d =
+    let srcp = parse_file_program (examples_dir ^ "/" ^ name ^ ".rwhile") in
+    let src = Program2DataRwhile.program2data srcp in
+    let got = (match EvalRwhile.evalProgram interp (VCons (src, d)) with
+               | VCons (_, res) -> res | v -> v) in
+    Alcotest.(check valT_testable)
+      (name ^ ": [ri_fp3](p2d(p), d) agrees with [p](d)")
+      (EvalRwhile.evalProgram srcp d) got in
+  let ab = VCons (atom "'a", atom "'b") in
+  let ab_nil = VCons (atom "'a", VCons (atom "'b", VNil)) in
+  let abc = VCons (atom "'a", VCons (atom "'b", VCons (atom "'c", VNil))) in
+  check "id" ab; check "id2" ab; check "rep" ab;
+  check "swap" ab; check "sx_splitjoin" ab; check "sx_three" ab_nil;
+  check "reverse" abc
+
+(* THE BOUND OF THE 2026-08-08 FIX (open).  Two working registers separate the
+ * two leaves of a FLAT cons pattern.  With a NESTED one (`cons V1 (cons V2 nil)`,
+ * examples/sx_three.rwhile) ri_fp3's 'consE step routes every split through the
+ * same two slots V1e/V2e, so the compound AV built at one nesting level goes
+ * stale when the next level reuses those slots.  The residual comes out
+ * NON-LINEAR (`cons 5 (cons 5 nil)` -- the interpreter even warns) and then
+ * fails with a pattern write conflict.  This is a SECOND, independent sharing,
+ * of the same kind the leaf-register fix removed.
+ *
+ * ri_fp3 interprets sx_three correctly (see the test above); only the fp1
+ * residual is broken.  Keep sx_three to THREE variables: ri_fp3 dispatches over
+ * exactly V0/V1/V2, so a four-variable subject would fail for that unrelated
+ * reason and this test would pin nothing.
+ * If this test fails, the bound has moved: check what now works and re-pin. *)
+let test_fp1_ri_fp3_nested_pattern_known_bug () =
+  let spec_av = parse_file_program (examples_dir ^ "/spec_av.rwhile") in
+  let ri_fp3 = Program2DataRwhile.program2data
+      (parse_file_program (examples_dir ^ "/ri_fp3.rwhile")) in
+  let srcp = parse_file_program (examples_dir ^ "/sx_three.rwhile") in
+  let comp = EvalRwhile.evalProgram spec_av
+      (spec_in ri_fp3 (Program2DataRwhile.program2data srcp)) in
+  let d = VCons (atom "'a", VCons (atom "'b", VNil)) in
   Alcotest.(check bool)
-    "KNOWN BUG: the fp1-via-ri_fp3 residual still fails to run (shared work slot)"
+    "KNOWN BUG: a NESTED pattern's fp1-via-ri_fp3 residual still fails to run"
     true
     (try ignore (EvalRwhile.evalProgram
                    (Program2DataRwhile.data2program comp) d); false
@@ -2853,10 +2914,12 @@ let () =
       Alcotest.test_case "ri_fp3 reversible-clear self-interp: swap" `Quick test_ri_fp3_selfinterp_swap;
       Alcotest.test_case "fp1-via-ri_fp3: structural ops preserved (was a KNOWN BUG)" `Quick test_fp1_ri_fp3_known_bug;
       Alcotest.test_case "fp1-via-ri_fp3: non-transposing sources now run correctly" `Quick test_fp1_ri_fp3_nontransposing_ok;
-      Alcotest.test_case "fp1-via-ri_fp3 KNOWN BUG: residual still fails to run" `Quick test_fp1_ri_fp3_residual_still_fails;
+      Alcotest.test_case "fp1-via-ri_fp3: two-leaf patterns run (was a KNOWN BUG)" `Quick test_fp1_ri_fp3_two_leaf_patterns_run;
+      Alcotest.test_case "ri_fp3 self-interprets (incl. a loop) correctly" `Quick test_ri_fp3_self_interprets;
+      Alcotest.test_case "fp1-via-ri_fp3 KNOWN BUG: nested pattern residual fails" `Quick test_fp1_ri_fp3_nested_pattern_known_bug;
       Alcotest.test_case "dyn-cond comp correct directly; KNOWN ri.rwhile 'cond bug via run_via_ri" `Quick test_fp1_dyncond_known_bug;
       Alcotest.test_case "depth-general nested read residualizes (PAT-READ-ITER)" `Quick test_fp1_nested_read;
-      Alcotest.test_case "fp1-via-ri_fp3 KNOWN BUG: STEP leaves opaque Result" `Quick test_fp1_step_bug_opaque_result;
+      Alcotest.test_case "fp1-via-ri_fp3: STEP tracks Result structurally (was a KNOWN BUG)" `Quick test_fp1_step_structural_result;
       Alcotest.test_case "PAT-WRITE-ITER nested split (was a KNOWN BUG)" `Quick test_pat_write_nested_split;
       Alcotest.test_case "PAT-WRITE-ITER handles nested split" `Quick test_pat_write_iter_nested;
       Alcotest.test_case "DYNAMICIZE-ALL materialises + marks dynamic" `Quick test_dynamicize_all;

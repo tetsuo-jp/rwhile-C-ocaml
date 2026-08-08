@@ -16,6 +16,18 @@
  *   V0 = program variable 0 (read var, e.g. Y in reverse)
  *   V1 = program variable 1 (intermediate, e.g. Z in reverse)
  *   V2 = program variable 2 (write var, e.g. X in reverse)
+ *
+ * SPECIALIZATION-DRIVEN DESIGN (2026-08-08).  Two things here exist only so
+ * that fp1 -- [spec_av]((ri_fp3 . src)) -- yields a residual that RUNS:
+ *   - EVAL-PAT-STEP-FP3 has TWO working registers (V, VB), picked by the stack
+ *     depth Dp, so the leaves of a flat cons pattern do not share a slot;
+ *   - store moves in the pattern path and in main go through PAT-MOVE-FP3, a
+ *     REPLACEMENT rather than the XOR pair LOOKUP;UPDATE, so a compound
+ *     annotated value is consumed instead of lifted into an expression.
+ * Both are explained where they are defined.  Keep them: without either, swap
+ * and sx_splitjoin specialize into residuals that fail (and, before the
+ * PAT-WRITE-ITER work, silently returned the WRONG answer).  Nested patterns
+ * are still open -- see examples/sx_three.rwhile and the note in spec_av.rwhile.
  *)
 
 (* ===== Store access: named variable dispatch ===== *)
@@ -41,6 +53,32 @@ macro UPDATE-FP3(J, X)
       V1 ^= X
     else
       V2 ^= X
+    fi =? J (nil.nil)
+  fi =? J nil
+
+(* PAT-MOVE-FP3(J, X): X <= V[J], a MOVE by replacement rather than by the XOR
+ * pair `LOOKUP-FP3(J,X); UPDATE-FP3(J,X)`.  Semantically identical (both leave
+ * V[J] nil and X holding its value), but it requires X to be nil going in --
+ * which holds, X is a fresh working register -- and its inverse `V[J] <= X`
+ * requires V[J] to be nil, which is exactly what R-WHILE's pattern-write
+ * semantics guarantee for the variables of a `<=` left-hand side.
+ *
+ * WHY IT MATTERS UNDER SPECIALIZATION (2026-08-08): the XOR pair residualizes
+ * as two 'ass commands, and the delivering one is `V[J] ^= lift(AV)`.  When the
+ * AV is a COMPOUND with dynamic leaves, lifting it makes an EXPRESSION, and an
+ * expression READS its variables without consuming them -- so the leaves are
+ * stranded and the residual is no longer store-clean ("Some variables are not
+ * nil").  A replacement residualizes as a 'rep, whose right-hand side is a
+ * PATTERN, and a pattern read consumes.  This is constraint C3 in
+ * spec_av.rwhile's note, met by ROUTING the value out rather than erasing it. *)
+macro PAT-MOVE-FP3(J, X)
+  if =? J nil then
+    X <= V0
+  else
+    if =? J (nil.nil) then
+      X <= V1
+    else
+      X <= V2
     fi =? J (nil.nil)
   fi =? J nil
 
@@ -103,13 +141,43 @@ until =? E  nil;
 cons E nil <= E';
 cons V nil <= St
 
+(* TWO WORKING REGISTERS, selected by the stack depth Dp (2026-08-08).
+ *
+ * Every value pushed onto St first passes through a working register.  With a
+ * SINGLE register the two leaves of a flat `cons` pattern stage through the
+ * same slot, and under specialization that slot's annotated value ('D.('var.k))
+ * is handed out twice: the first reference goes STALE the moment the slot is
+ * re-assigned for the second leaf, and the residual then consumes one dynamic
+ * slot twice (`error in update: var=4`).  See the long note in spec_av.rwhile.
+ *
+ * Dp is a unary counter mirroring St's depth *during pattern evaluation*: the
+ * leaf arms push onto both, the 'consE arm pops one (it consumes two stack
+ * items and produces one).  It is therefore self-restoring — 'rep runs
+ * EVAL-PAT then INV-EVAL-PAT, which empties St and Dp together — and, because
+ * the pattern is static at specialization time, so is Dp, so the register
+ * choice is resolved statically and costs nothing in the residual.
+ *
+ * BOUND: two registers separate values at depth 0 and depth >= 1, which covers
+ * a flat two-leaf pattern (`cons X Y`).  Deeper patterns keep more values live
+ * at once and would need more registers; they are blocked by a *second* shared
+ * slot anyway (V1e/V2e below, shared across nested 'consE steps). *)
 macro EVAL-PAT-STEP-FP3(R,R',St)
 cons (cons RTag RArg) R <= R;
 if =? RTag 'var then
- LOOKUP-FP3(RArg,V); UPDATE-FP3(RArg,V); St <= cons V St
+ if =? Dp nil then
+  PAT-MOVE-FP3(RArg,V);  St <= cons V St
+ else
+  PAT-MOVE-FP3(RArg,VB); St <= cons VB St
+ fi =? Dp nil;
+ Dp <= cons nil Dp
 else
  if =? RTag 'val then
-  V ^= RArg; St <= cons V St
+  if =? Dp nil then
+   V ^= RArg;  St <= cons V St
+  else
+   VB ^= RArg; St <= cons VB St
+  fi =? Dp nil;
+  Dp <= cons nil Dp
  else
   if =? RTag 'cons then
    RTag ^= 'cons; RTag ^= 'consB;
@@ -118,7 +186,8 @@ else
    if =? RTag 'consE then
     RTag ^= 'consE; RTag ^= 'cons;
     cons E2 (cons E1 (cons (cons 'consB nil) R')) <= R'; cons V2e (cons V1e St) <= St;
-    RArg <= cons E1 E2; St <= cons (cons V1e V2e) St
+    RArg <= cons E1 E2; St <= cons (cons V1e V2e) St;
+    cons nil Dp <= Dp
    else
     'error <= '1
    fi =? RTag 'cons
@@ -274,9 +343,10 @@ read V0;
   cons AtVarJ J' <= PWrite;
   AtVarJ ^= 'var;
 
-  (* Initialize read variable to Data *)
-  UPDATE-FP3(I', Data);
-  LOOKUP-FP3(I', Data);    (* Data ^= V[I'] to clear Data *)
+  (* Initialize read variable to Data.  A replacement, not the XOR pair: V[I']
+   * is nil here (every variable starts nil), and under specialization a
+   * replacement CONSUMES its source instead of reading it as an expression. *)
+  INV-PAT-MOVE-FP3(I', Data);   (* V[I'] <= Data *)
 
   (* Run the program *)
   Cd <= cons Cd nil;
@@ -285,9 +355,8 @@ read V0;
   until (=? Cd nil);
   cons Cd' nil <= Cd';
 
-  (* Extract result from write variable *)
-  LOOKUP-FP3(J', Result);
-  UPDATE-FP3(J', Result);  (* clear V[J'] *)
+  (* Extract result from write variable (same reasoning: Result is nil here) *)
+  PAT-MOVE-FP3(J', Result);     (* Result <= V[J'] *)
 
   (* Reconstruct Prog from parts using Cd' (= processed/original program body) *)
   AtVarJ ^= 'var;

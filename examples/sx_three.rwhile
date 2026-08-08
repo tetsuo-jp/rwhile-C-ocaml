@@ -1,0 +1,16 @@
+(* sx_three.rwhile -- a NESTED pattern, kept to three variables so ri_fp3 (which
+ * dispatches over exactly V0/V1/V2) can interpret it.
+ *
+ * Companion to sx_splitjoin.rwhile / swap.rwhile, which are flat.  It exists to
+ * PIN THE BOUND of the two-working-register fix in ri_fp3.rwhile (2026-08-08):
+ * that fix separates the two leaves of a FLAT cons pattern, so swap and
+ * sx_splitjoin now specialize via ri_fp3 into residuals that run.  A nested
+ * pattern keeps more than two values live at once, and ri_fp3's 'consE step
+ * additionally routes every split through the same two slots V1e/V2e, so a
+ * second independent sharing remains.  See the KNOWN BUG test in TestSuite.ml.
+ *
+ * [sx_three](('a.('b.nil))) = ('b.('a.nil)) -- a swap under one more cons. *)
+read V0;
+  cons V1 (cons V2 nil) <= V0;
+  V0 <= cons V2 (cons V1 nil);
+write V0
