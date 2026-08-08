@@ -22,6 +22,7 @@
 | `spec_av` の lift イディオム（`ASSEMBLE-FP1`） | `RWhileRevProj2Lift`：`idiom-ok`/`idiom-drift`/`fix-roundtrips`/`selfClear-masks` | **設計仕様を証明**（lift が operand 保存 ⇔ 成立） |
 | 可逆化ゴミ（`spec_av_rev`） | `RWhileRevProjGen`：`garbage-necessary`/`input-preserving-inj` | **抽象は証明**。実装は −57% を実測（`FINDINGS §6`） |
 | 反復ワークリスト（`PAT-READ-ITER`） | `RWhileIL`（flat-IL→R-WHILE 翻訳の意味保存・IL 可逆性） | **方法論は証明**（IL で証明し検証翻訳で移送）。`PAT-READ-ITER` 自体は未モデル |
+| `Simp.program_preserving`（p⁺ の構成）／`measure_proj jones-self` の判定基準 | `RWhileProgPres`(`pp-sem`/`pp-cost`/`pp-cost-exact`)・`RWhileProgPresRev`(`pp-rev`/`pp-injective`)・`RWhileProgPresMin`(`ext-not-classical`/`ext-lb`)・`RWhileJonesRev`(`residual-pp`/`pp-unique`)・`RWhileJonesRevCE`(`p⁺-not-minimal`) | **定義の側は証明**（p⁺ の意味論・定数オーバヘッド・可逆性・単射性、基準の含意関係）。**測定（7 被験の成否）は実機のまま**。下界は「p の拡張の中で」の形に限る（一般の最小性は**反証済み**） |
 | `spec_av` の過剰静的化解消＝オフライン BTA 設計図（`MKAV`／`SPEC-CMD-AV` の 'cond 動的経路／agenda `Cd`） | `RWhileOfflineBTA1`–`9`（9 段、`RWhileMain` 再エクスポート）：`over-commit-unsound`/`mkAV-dyn-nonstatic`/`fp2-eq`/`fp3-eq`/`fix-agrees-on-fp1`/`compbug-wrong`/`seq-flatten-ok`/`specOff-keeps-branches`/`specBug-wrong`/`specOff-injective`/`specBug-not-injective` | **設計図を証明**（修正の形・fp1 安全性・ディスパッチ保存・agenda 設計規則・可逆性=単射性）。実機 comp2 の live-trace 根本原因（`TRACE_comp2_root_cause.md`）に対応。実機改造は未着手 |
 
 ## 2. ギャップ（埋めるべき順）
@@ -333,6 +334,100 @@ data _⊩_⇒_∣_ : SCmd → Store → Store → ℕ → Set where
 | `case` | 反転は `RWhileCaseInv`、選択コストと出口表明の役割は `RWhileSurface.caseNest-cost` / `caseNest-exits-false`、**腕本体まで含めたコストは `RWhileCaseCost.agda`**（2026-08-09。下記） |
 
 `--safe`・postulate 0・hole 0。`check.sh --si` は PASS=30 FAIL=0（181 秒）。
+
+## 可逆版 Jones 最適性と p⁺（`RWhileJonesRev*` / `RWhileProgPres*` 5 モジュール、2026-08-09）
+
+`./measure_proj jones-self` が使う判定基準そのものを機械検証した。**測定（work で
+7/7 成立・steps で不成立）は実機のままで、ここで検証したのは「定義の側」**である。
+
+### なぜ基準を動かすのか（`RWhileJonesRev`）
+
+可逆 Futamura 射影は**プログラム保存**インタプリタ
+`⟦rint⟧ ⟨⌜p⌝,d⟩ = ⟨⌜p⌝, ⟦p⟧ d⟩` を要求する。だから fp1 残余
+`⟦spec⟧(rint, ⌜p⌝)` にも「元プログラムを出力する」義務が伝播する。素の `p` は
+その仕事をしないので、古典的な `残余 ≤ p` は**射影の定義を測っているだけ**になる。
+
+抽象層（データ・プログラム・意味・コスト・符号化・対をすべてパラメタ化した
+`Criterion` モジュール）で証明したのはこの伝播そのものである。
+
+| 定理 | 内容 |
+|---|---|
+| `Fp1.residual-pp` | 射影の 2 本の定義式（`def-rint`/`def-spec`、`RWhileRevProjPaper` と同じ形）だけから、**fp1 残余が義務 `PP` を継承する**。基準側も同じ義務を負わねばならない理由 |
+| `pp-unique` | 義務は**関数を一意に決める**（`PP q₁ p → PP q₂ p → ⟦q₁⟧ ≗ ⟦q₂⟧`）。したがって義務を負う 2 本を比べる作業に残る自由度は**コストだけ**＝Jones 流の比較が成立する |
+| `Fp1.basis-adequate` | 残余と任意の `PP` 基準は同じ関数を計算する。`残余 ≤ p⁺` は**同じ仕様の 2 実装**の比較、`残余 ≤ p` は**違う仕様**の比較 |
+| `pp-injective` / `Fp1.residual-injective` | `p` が単射なら p⁺ も残余も単射（可逆性の側） |
+| `classical⇒rev` / `rev-mono` | 基準が `p` 以上なら古典版は可逆版を含意する |
+
+### p⁺ の構成・意味論・コスト（`RWhileProgPres`）
+
+`src/Simp.ml: program_preserving` を**タイムド核**（`RWhileTime`、`./ri -steps` と
+同じ「実行した命令ノード 1 個 = 1」）の上で構成した。スロット添字 `y`（p の出力）・
+`self`（`P-SELF`）・`out`（`OUT-PP`）と `pd = ⌜p⌝` でパラメタ化してある。
+
+| 定理 | 内容 |
+|---|---|
+| `pp-sem` | p の本体が σ→τ（答えは `y`、`self`/`out` は nil）なら、p⁺ は `out = (⌜p⌝ . 答え)`・`self = nil`・`y = nil` に至る。**`all_cleared` のストア不変条件が生き残る**（＝R-WHILE のプログラムとして合法） |
+| `pp-cost` | そのコストが `cost(p) + 8`。**入力に依らない定数**オーバヘッド |
+| `pp-cost-exact` / `pp-store-exact` | 決定性より、それが唯一の走り方（上界ではなく等式） |
+| `final-frame` | emit は他のスロットを一切触らない（ゴミを増やさない） |
+| `Examples.run-pp-exec` | 具体例（1 命令の p）を**型検査器の中で `exec` に流し** 9 = 1+8 歩を確認 |
+
+### p⁺ は可逆（`RWhileProgPresRev`）
+
+`RWhileTimeInv` のコスト保存反転を使う。`inv (body ⨾ emit) = inv emit ⨾ inv body`
+なので、emit を先に巻き戻して p の答えを `y` に戻し、次に p 自身を巻き戻す。
+emit の 4 命令はすべて XOR 代入＝自己逆なので追加コストはない。
+
+| 定理 | 内容 |
+|---|---|
+| `emit-Wf` / `pp-Wf` | `X ^= E` が X を含まない（R-WHILE の整形式条件）。**p が整形式なら p⁺ も整形式** |
+| `InR-emit` / `InR-pp` | 2 つの新スロットが確保されていれば p⁺ もストア内に収まる |
+| `pp-rev` | **`inv(p⁺)` が p⁺ の出力を入力へ戻す。コストはちょうど同じ `k+8`** |
+| `pp-injective` | p⁺ は 2 つの入力を 1 つのストアへ潰さない（反転＋決定性から） |
+
+### 「最小の義務」はどこまで言えるか（`RWhileProgPresMin` / `RWhileJonesRevCE`）
+
+依頼にあった「義務を果たす任意のプログラムのコストは p⁺ 以上」という下界は
+**一般には成り立たない。反例を機械検証してある**（`RWhileJonesRevCE.p⁺-not-minimal`）。
+
+理由は構造的である。義務 `PP q p` は**外延的**（計算する関数を固定する、`pp-unique`）
+のに対しコストは関数から決まらない。`p` が無駄をしていれば、同じ関数をもっと安く
+計算する `q` が存在しうる。p⁺ の最小性を主張することは、**任意の計算可能関数
+`⟨⌜p⌝, ⟦p⟧ ·⟩` に対する計算量の下界**を主張することであり、射影の定義からは出ない。
+
+代わりに成り立つのは「**p の拡張の中での**最小性」で、こちらは証明した。
+
+| 定理 | 内容 |
+|---|---|
+| `ext-cost` | `p ; e` の走りは必ず `cost(p) + 2` 以上（`⨾` ノード 1 ＋ 空でない後続 1） |
+| `ext-not-classical` | ゆえに **p を走らせてから何かする残余は、古典的基準 `残余 ≤ p` を原理的に満たせない**。基準を動かさざるを得ない形式的理由 |
+| `cost1-one-slot` | コスト 1 の走りが書き換えるスロットは高々 1 個 |
+| `two-slots-cost` | ゆえに 2 スロットを書き換える走りはコスト 2 以上 |
+| `ext-lb` | 出力スロットを埋め、かつ p の答えスロットを消す義務を負う後続をもつ拡張は `cost(p) + 3` 以上 |
+| `gap` / `+8-not-≤` | p⁺ が払う `+8` はその下界から**加法的に 5 以内**。そして常に定数であって係数ではない |
+| `RWhileJonesRevCE.resid-not-classical` | 可逆版が古典版を**含意しない**（逆向きは `classical⇒rev` で成立）。両基準とも空虚でないことも確認 |
+
+### 正直な範囲（この形式化が言っていないこと）
+
+- **定数 8 は最適とは主張しない**。厳密な最適値は 4 命令形にわたる小さな合成問題で、
+  そもそも下のモデル差に飲まれる。
+- **`CRep` のモデル差**。OCaml の emit は `CAss` 1 本＋置換 `CRep (OUT-PP, cons P-SELF Y)`
+  1 本だが、タイムド核に `<=` は無いので**平坦な `^=` 4 本**で同じ効果を出している
+  （`self` を置く → 対を `out` に組む → `self` を XOR で消す → `y` を `tl out` で消す）。
+  どちらもストアを綺麗に戻し、どちらも定数を足す。**違うのは定数の値だけ**（モデル 8、
+  実機 `-steps` は 4）。定理が主張しているのは**定数性**であって 8 ではない。
+  `RWhileCaseCost` が置換をタイムド核へ翻訳した路線を使えばこの差は詰められるが、
+  そこは未着手。
+- **抽象層と具象層は橋渡ししていない**。`Criterion` は全域の `⟦_⟧ : P → D → D` を
+  要求するのに対し、タイムド意味論は関係（部分的）である。Maybe 持ち上げは未。
+  したがって「R-WHILE の p⁺ が `Criterion` の `PP` を満たす」は**両層で別々に
+  述べてあるだけ**で、1 本の定理にはなっていない。
+- **測定は形式化していない**。work 指標で 7/7、steps 指標で `id` 以外不成立という
+  実測は `./measure_proj jones-self` のまま。`-work` 指標に対応するコストモデルは
+  Agda 側にまだ無い（`RWhileTime` の ℕ は `-steps` の側）。
+
+`--safe`・**postulate 0・hole 0**。`check.sh` は **PASS=108 FAIL=0**（5 分 00 秒、
+最大 532 MB）。
 
 ## `case` のコストを腕本体まで（`RWhileCaseCost.agda`、2026-08-09）
 
