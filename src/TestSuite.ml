@@ -2333,42 +2333,41 @@ let test_jones_self_copyprop_needed () =
         true (r.st_raw > r.st_res))
     (Lazy.force jones_self_table)
 
-(* ===== jones-self-open: WHERE THE BATTERY STOPS, AND WHY (2026-08-09) =====
+(* ===== jones-self-open: WHERE THE BATTERY USED TO STOP (2026-08-09) =====
  *
- * The jones-self table has loop subjects now (loop_static2/3), but they have
+ * HISTORY, kept because the diagnosis is the reason the fix is what it is.
+ * The jones-self table gained loop subjects (loop_static2/3), but they have
  * STATIC loop control.  examples/reverse.rwhile -- the obvious loop subject --
- * still cannot be specialised, and the handover note that came with it said the
- * cause was "fp1-via-ri_fp3 does not handle loops yet".  Measured here, that is
- * NOT the cause; these three tests pin what is:
+ * could not be specialised, and the handover note said the cause was
+ * "fp1-via-ri_fp3 does not handle loops yet".  Measured, that was NOT the cause:
  *
- *   (a) ri_fp3 self-interprets reverse CORRECTLY.  The interpreter is fine.
- *   (b) [spec_av]((ri_fp3 . reverse)) dies with spec_av's own `'error <= '41`,
- *       which is raised at exactly ONE place in examples/spec_av.rwhile: the
- *       'lcheck handler, when a loop's EXIT test is dynamic.  'lcheck is the
- *       continuation that static unrolling pushes, so the message means "I
- *       started unrolling a loop and its exit test then stopped being static",
- *       for which spec_av has no residualisation path.
- *   (c) the SAME failure appears for examples/dyncond3.rwhile, which has NO
+ *   (a) ri_fp3 self-interprets reverse CORRECTLY.  The interpreter was fine.
+ *   (b) [spec_av]((ri_fp3 . reverse)) died with spec_av's own `'error <= '41`,
+ *       raised at exactly ONE place in examples/spec_av.rwhile: the 'lcheck
+ *       handler, when a loop's EXIT test is dynamic.  'lcheck is the
+ *       continuation that static unrolling pushes, so the message meant "I
+ *       started unrolling a loop and its exit test then stopped being static".
+ *   (c) the SAME failure appeared for examples/dyncond3.rwhile, which has NO
  *       loop at all -- just a conditional on the dynamic input.  So the
- *       boundary is DYNAMIC CONTROL, not loops: a dynamic branch inside the
+ *       boundary was DYNAMIC CONTROL, not loops: a dynamic branch inside the
  *       interpreted program makes spec_av dynamicize the store, ri_fp3's code
  *       stack Cd is part of that store, and ri_fp3's own main loop
  *       (`from =? Cd' nil loop STEP-FP3 until =? Cd nil`) is the loop whose
  *       exit test goes dynamic mid-unroll.
- *   (d) and it is not an ri_fp3 artefact either: specialising reverse DIRECTLY
- *       (no interpreter in the picture) fails with the same '41, because
- *       reverse's own `until =? Y nil` goes dynamic after the static head of
- *       the partial-static input is consumed.
+ *   (d) and it was not an ri_fp3 artefact either: specialising reverse DIRECTLY
+ *       fails the same way, because reverse's own `until =? Y nil` goes dynamic
+ *       once the static head of the partial-static input has been consumed.
  *
- * Contrast: a dynamic conditional in a subject specialised DIRECTLY is handled
- * (test_fp1_dyncond_direct_ok below, and ./measure_proj dyncond) -- spec_av's
- * dynamic-'cond path residualises fine.  What has no path is a dynamic exit
- * test reached AFTER unrolling began.  See FINDINGS_reversible_projections.md
- * for the analysis and the size estimate of a fix.
- *
- * These are pinned as EXPECTED FAILURES.  If one of them stops raising, the
- * specialiser gained a loop/dynamic-control path and the tables in RWHILE_S.md
- * must be re-measured rather than left standing. *)
+ * ===== CROSSED (2026-08-09, speculative unrolling + rollback) =====
+ * spec_av's 'loop handler now CHECKPOINTS (Vl, RCode, TmpCtr) into the 'lcheck
+ * continuation before it starts unrolling, and the branch that was `'error <=
+ * '41` restores the checkpoint and residualises the loop from its entry.  So
+ * (b), (c) and (d) no longer raise; what these tests pin now is the OTHER
+ * direction -- that the '41 state is UNREACHABLE, i.e. no path was left that
+ * silently returns a wrong residual instead.  The positive claims (the
+ * residuals compute the right thing, on several inputs, and round-trip under
+ * inversion) live in the `dyn-control` group.  (a) is unchanged and still
+ * pinned: the interpreter was never the wall. *)
 let spec_av_error_41 =
   Failure "Pattern matching failed: '41 and 'error are not equal (in inv_evalPat)"
 
@@ -2384,6 +2383,10 @@ let test_jones_self_open_interpreter_is_fine () =
     (VCons (pd, EvalRwhile.evalProgram rev d))
     (EvalRwhile.evalProgram sint (VCons (pd, d)))
 
+(* CROSSED: the two subjects that used to raise '41 now specialise.  This test
+   keeps the '41 STATE pinned from the other side -- it must be unreachable, and
+   in particular the fix must not have turned a loud failure into a quiet wrong
+   answer.  The residual's correctness is checked in the `dyn-control` group. *)
 let test_jones_self_open_dynamic_control_via_ri_fp3 () =
   let spec_av = parse_file_program (examples_dir ^ "/spec_av.rwhile") in
   let pd_sint = Program2DataRwhile.program2data
@@ -2391,16 +2394,17 @@ let test_jones_self_open_dynamic_control_via_ri_fp3 () =
   let fp1 name =
     let pd = Program2DataRwhile.program2data
         (parse_file_program (examples_dir ^ "/" ^ name ^ ".rwhile")) in
-    fun () -> ignore (EvalRwhile.evalProgram spec_av (spec_in pd_sint pd)) in
-  (* a DATA-DEPENDENT loop ... *)
-  Alcotest.check_raises
-    "OPEN: fp1-via-ri_fp3 of reverse dies at spec_av's 'lcheck ('error <= '41)"
-    spec_av_error_41 (fp1 "reverse");
-  (* ... and a program with NO loop but a dynamic conditional dies identically,
-     which is what identifies the boundary as dynamic control rather than loops *)
-  Alcotest.check_raises
-    "OPEN: fp1-via-ri_fp3 of dyncond3 (loop-free!) dies the same way"
-    spec_av_error_41 (fp1 "dyncond3")
+    (pd, EvalRwhile.evalProgram spec_av (spec_in pd_sint pd)) in
+  (* a DATA-DEPENDENT loop: specialises, and the result is a PROGRAM ... *)
+  List.iter (fun name ->
+      let (_, out) = fp1 name in
+      Alcotest.(check bool)
+        ("CROSSED: fp1-via-ri_fp3 of " ^ name ^ " yields a residual program")
+        true (match out with VCons (VCons (_, _), VCons (_, _)) -> true | _ -> false);
+      ignore (Program2DataRwhile.data2program out))
+    (* ... and so does the loop-free dynamic-conditional subject, which is what
+       identified the boundary as dynamic control rather than loops *)
+    [ "reverse"; "dyncond3" ]
 
 let test_jones_self_open_direct_fp1_too () =
   let spec_av = parse_file_program (examples_dir ^ "/spec_av.rwhile") in
@@ -2408,11 +2412,11 @@ let test_jones_self_open_direct_fp1_too () =
       (parse_file_program (examples_dir ^ "/reverse.rwhile")) in
   (* No interpreter in the picture: reverse is the SUBJECT.  Its exit test
      `=? Y nil` is static (false) while Y is the partial-static input cons, and
-     dynamic once the static head has been consumed -> the same '41. *)
-  Alcotest.check_raises
-    "OPEN: direct fp1 of reverse dies at 'lcheck too (not an ri_fp3 artefact)"
-    spec_av_error_41
-    (fun () -> ignore (EvalRwhile.evalProgram spec_av (spec_in pd_rev (atom "'c"))));
+     dynamic once the static head has been consumed.  That used to be the '41;
+     it is now the rollback path, so the residual exists and keeps its loop. *)
+  let out = EvalRwhile.evalProgram spec_av (spec_in pd_rev (atom "'c")) in
+  Alcotest.(check bool) "CROSSED: direct fp1 of reverse yields a residual program"
+    true (js_body_loops (Program2DataRwhile.data2program out) > 0);
   (* ...whereas a genuinely dynamic CONDITIONAL in a direct subject IS handled:
      fp_dyncond_bug's `if D` tests the dynamic half of the input, and spec_av
      residualises it into a correct two-way residual.  This control case keeps
@@ -2469,8 +2473,38 @@ let dc_check_via_ri_fp3 name inputs =
         (EvalRwhile.evalProgram comp d))
     inputs
 
+(* Both branches of the dynamic conditional, so the residual cannot be one that
+   baked a branch in.  The inputs are the CANONICAL booleans (nil.nil) and nil
+   because ri_fp3 itself cannot interpret dyncond3 on any other truthy value --
+   see test_dyncontrol_ri_fp3_truthiness_gap, which pins that this is the
+   INTERPRETER's limit and that the residual reproduces it faithfully. *)
 let test_dyncontrol_dyncond3_via_ri_fp3 () =
-  dc_check_via_ri_fp3 "dyncond3" [ atom "'q"; VNil; parse_val "('a . 'b)" ]
+  dc_check_via_ri_fp3 "dyncond3" [ parse_val "(nil . nil)"; VNil ]
+
+(* ri.rwhile BUG 1 (truthiness vs bit-equality in the 'cond exit assertion) was
+ * fixed there via the CANON macro; ri_fp3.rwhile still has the unfixed form
+ * `Arg ^= Ve`, so a conditional whose entry test evaluates to a truthy value
+ * that is not the canonical (nil.nil) cannot be self-interpreted at all.
+ * dyncond3's test is the bare input variable, so 'q trips it.
+ *
+ * This is pinned for two reasons.  (1) It is NOT a specialiser bug: it is the
+ * subject-level interpreter's.  (2) The RESIDUAL fails in exactly the same way
+ * on exactly the same input, which is evidence that the residual is faithful --
+ * a residual that "worked" here would be computing something the interpreter
+ * does not.  When ri_fp3 gets its CANON, both halves flip together. *)
+let test_dyncontrol_ri_fp3_truthiness_gap () =
+  let (_, _, comp) = dc_fp1_via_ri_fp3 "dyncond3" in
+  let sint = Lazy.force dc_ri_fp3 in
+  let pd = Program2DataRwhile.program2data
+      (parse_file_program (examples_dir ^ "/dyncond3.rwhile")) in
+  let bad = atom "'q" in
+  let err = Failure "error in update" in
+  Alcotest.check_raises
+    "OPEN (ri_fp3, not spec_av): a non-canonical truthy test value breaks 'cond"
+    err (fun () -> ignore (EvalRwhile.evalProgram sint (VCons (pd, bad))));
+  Alcotest.check_raises
+    "...and the residual reproduces the interpreter's failure exactly"
+    err (fun () -> ignore (EvalRwhile.evalProgram comp bad))
 
 let test_dyncontrol_reverse_via_ri_fp3 () =
   dc_check_via_ri_fp3 "reverse"
@@ -3750,12 +3784,12 @@ let () =
       Alcotest.test_case "loop subjects: p loops, residual does not, and it wins on both meters" `Quick test_jones_self_loop_subjects_unrolled;
       Alcotest.test_case "loop subjects: the residual is general, not input-specific" `Quick test_jones_self_loop_residual_is_general;
     ];
-    (* The boundary of the battery, pinned as expected failures.  See the note
-       above test_jones_self_open_interpreter_is_fine. *)
+    (* The boundary the battery used to stop at, and the record that it has been
+       crossed.  See the note above test_jones_self_open_interpreter_is_fine. *)
     "jones-self-open", [
-      Alcotest.test_case "ri_fp3 self-interprets reverse (the interpreter is fine)" `Quick test_jones_self_open_interpreter_is_fine;
-      Alcotest.test_case "OPEN: dynamic control via ri_fp3 dies at 'lcheck ('error <= '41)" `Quick test_jones_self_open_dynamic_control_via_ri_fp3;
-      Alcotest.test_case "OPEN: direct fp1 of reverse dies the same way" `Quick test_jones_self_open_direct_fp1_too;
+      Alcotest.test_case "ri_fp3 self-interprets reverse (the interpreter was never the wall)" `Quick test_jones_self_open_interpreter_is_fine;
+      Alcotest.test_case "CROSSED: dynamic control via ri_fp3 specialises ('41 unreachable)" `Quick test_jones_self_open_dynamic_control_via_ri_fp3;
+      Alcotest.test_case "CROSSED: direct fp1 of reverse specialises, residual keeps its loop" `Quick test_jones_self_open_direct_fp1_too;
     ];
     (* Speculative unrolling + rollback: the wall the group above used to pin.
        See the note above dc_spec_av. *)
@@ -3764,6 +3798,7 @@ let () =
       Alcotest.test_case "reverse (data-dependent loop) via ri_fp3 residualises correctly" `Quick test_dyncontrol_reverse_via_ri_fp3;
       Alcotest.test_case "reverse specialised directly: residual correct and reversible" `Quick test_dyncontrol_reverse_direct;
       Alcotest.test_case "a data-dependent loop stays a loop in the residual" `Quick test_dyncontrol_residual_keeps_the_loop;
+      Alcotest.test_case "OPEN (ri_fp3, not spec_av): non-canonical truthy test values" `Quick test_dyncontrol_ri_fp3_truthiness_gap;
     ];
     "work-meter", [
       Alcotest.test_case "equal values cost their size" `Quick test_work_equal_values_cost_their_size;

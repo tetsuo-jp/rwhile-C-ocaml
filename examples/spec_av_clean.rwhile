@@ -919,17 +919,48 @@ macro SPEC-STEP-AV(Cd, Cd', RCode)
     else
      if =? Tag 'loop then
        (* loop = ('loop . (E . (D . (L . (F . nil))))).  Static control unrolls
-        * via an 'lcheck continuation; dynamic control residualizes the loop. *)
+        * SPECULATIVELY via an 'lcheck continuation; dynamic control
+        * residualizes the loop.
+        *
+        * ===== SPECULATIVE UNROLLING (2026-08-09) =====
+        * Whether unrolling is legal cannot be decided here.  A loop is
+        * unrollable only if BOTH its tests stay static, and the exit test F is
+        * first evaluated one body-run LATER (in 'lcheck) -- by which time the
+        * body may have dynamicized the store.  This is a binding-time FIXPOINT
+        * and it cannot be read off the loop entry; the previous code simply
+        * died there (`'error <= '41`).
+        *
+        * So: unroll on speculation, and keep what is needed to undo it.  The
+        * CHECKPOINT below is the specializer state the speculation will dirty
+        * -- the abstract store Vl, the residual code RCode and the fresh-temp
+        * counter TmpCtr -- copied into the 'lcheck continuation.  (The work
+        * stack Cd needs no checkpoint: specializing the body is stack-balanced,
+        * so by the time 'lcheck is popped Cd is back at its entry value.)
+        *
+        * The undo has to reach back to the loop ENTRY rather than keep the k
+        * iterations already unrolled: a REVERSIBLE loop asserts its entry test
+        * TRUE on first entry and FALSE on every loop-back, so it cannot be
+        * re-entered half way through.  Cf. proofs/agda/RWhileLoopBTA*.agda.
+        *
+        * Running the specializer BACKWARDS instead (INV-SPEC-STEP-AV over the
+        * Cd' history) does not work: spec_av is not injective -- it drops
+        * garbage with `X ^= X`, whose inverse maps nil to nil -- so an inverse
+        * 'lcheck step rebuilds its Arg as (nil.(nil.(nil.(nil.nil)))).  The
+        * checkpoint is that embedding, taken only where it is needed.  See
+        * FINDINGS_reversible_projections.md section 10. *)
        cons LpE (cons LpD (cons LpL (cons LpF nil))) <= Arg;
        SPEC-EXP-AV(LpE, LpRE);
        cons LpTE LpVE <= LpRE;
        LpCEs ^= =? LpTE 'S;
        if LpCEs then
          if LpVE then
-           (* static entry true: run D, then check exit via 'lcheck *)
+           (* static entry true: CHECKPOINT, then run D and check exit via
+            * 'lcheck.  Frame: ('lcheck.(E.(D.(L.(F.(Vl.(RCode.(TmpCtr.nil))))))))
+            * -- SpcVl/SpcRc/SpcTc are copies and the frame consumes them. *)
            LpEc ^= LpE; LpDc ^= LpD; LpLc ^= LpL; LpFc ^= LpF;
            LpDp ^= LpD;
-           Cd <= cons LpDp (cons (cons 'lcheck (cons LpEc (cons LpDc (cons LpLc (cons LpFc nil))))) Cd);
+           SpcVl ^= Vl; SpcRc ^= RCode; SpcTc ^= TmpCtr;
+           Cd <= cons LpDp (cons (cons 'lcheck (cons LpEc (cons LpDc (cons LpLc (cons LpFc (cons SpcVl (cons SpcRc (cons SpcTc nil)))))))) Cd);
            CLEAR(LpE); CLEAR(LpD); CLEAR(LpL); CLEAR(LpF)
          else
            'error <= '40
@@ -953,25 +984,54 @@ macro SPEC-STEP-AV(Cd, Cd', RCode)
        CLEAR(LpCEs)
      else
       if =? Tag 'lcheck then
-        cons LpE (cons LpD (cons LpL (cons LpF nil))) <= Arg;
+        (* The continuation left by a SPECULATIVE unroll; it carries the
+         * checkpoint taken at the loop's entry (see the 'loop handler). *)
+        cons LpE (cons LpD (cons LpL (cons LpF (cons SpcVl (cons SpcRc (cons SpcTc nil)))))) <= Arg;
         SPEC-EXP-AV(LpF, LpRF);
         cons LpTF LpVF <= LpRF;
         LpCFs ^= =? LpTF 'S;
         if LpCFs then
           if LpVF then
-            (* exit test true: loop finished *)
+            (* exit test true: loop finished, the speculation paid off and the
+             * checkpoint is dead -- drop it. *)
+            CLEAR(SpcVl); CLEAR(SpcRc); CLEAR(SpcTc);
             CLEAR(LpE); CLEAR(LpD); CLEAR(LpL); CLEAR(LpF)
           else
-            (* exit test false: run L, then D, then re-check via 'lcheck *)
+            (* exit test false: run L, then D, then re-check via 'lcheck.  The
+             * checkpoint is carried into the new frame unchanged (still the
+             * state at the loop's ENTRY, not at this iteration). *)
             LpEc ^= LpE; LpDc ^= LpD; LpLc ^= LpL; LpFc ^= LpF;
             LpLp ^= LpL; LpDp ^= LpD;
-            Cd <= cons LpLp (cons LpDp (cons (cons 'lcheck (cons LpEc (cons LpDc (cons LpLc (cons LpFc nil))))) Cd));
+            Cd <= cons LpLp (cons LpDp (cons (cons 'lcheck (cons LpEc (cons LpDc (cons LpLc (cons LpFc (cons SpcVl (cons SpcRc (cons SpcTc nil)))))))) Cd));
             CLEAR(LpE); CLEAR(LpD); CLEAR(LpL); CLEAR(LpF)
           fi LpVF;
           CLEAR(LpVF);
           LpTF ^= 'S
         else
-          'error <= '41
+          (* ===== THE SPECULATION FAILED (this used to be `'error <= '41`) ====
+           * The exit test stopped being static while the loop was being
+           * unrolled.  Everything done since the loop was entered is worthless
+           * -- ROLL BACK to the checkpoint and residualize the loop from its
+           * entry instead. *)
+          CLEAR(LpTF); CLEAR(LpVF);                 (* drop the dynamic exit AV *)
+          CLEAR(Vl);     Vl ^= SpcVl;      CLEAR(SpcVl);
+          CLEAR(RCode);  RCode ^= SpcRc;   CLEAR(SpcRc);
+          CLEAR(TmpCtr); TmpCtr ^= SpcTc;  CLEAR(SpcTc);
+          (* Now residualize, in the order the residual must RUN: materialise
+           * the store first, and only then re-specialize the ENTRY test in the
+           * dynamicized store.  Re-specializing is the point: the entry test
+           * was static-true here, and emitting it as the constant true would
+           * give a loop that can never take its back edge -- a non-iterable,
+           * hence non-reversible, residual.  Cf. `constEntry-no-iter`. *)
+          DYNAMICIZE-ALL(Vl, RCode);
+          SPEC-EXP-AV(LpE, LpRE);
+          AV-LIFT(LpRE, LpLEe);
+          CLEAR(LpRE);
+          CLEAR(LpE);
+          Arg <= cons LpLEe (cons LpD (cons LpL (cons LpF nil)));
+          LpCl ^= Arg;
+          RCode <= cons (cons 'loop LpCl) RCode;
+          CLEAR(Arg)
         fi LpCFs;
         CLEAR(LpCFs)
       else
