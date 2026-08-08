@@ -2510,27 +2510,40 @@ let test_dyncontrol_reverse_via_ri_fp3 () =
   dc_check_via_ri_fp3 "reverse"
     [ parse_val "('a . ('b . nil))"; parse_val "('a . nil)"; VNil ]
 
-let test_dyncontrol_reverse_direct () =
-  let rev = parse_file_program (examples_dir ^ "/reverse.rwhile") in
-  let pd_rev = Program2DataRwhile.program2data rev in
+(* DIRECT specialisation (no interpreter): the honest place to read the gain.
+   Every one of these subjects has a DATA-DEPENDENT loop and every one of them
+   raised '41 before speculative unrolling.  Sizes and Jones ratios:
+   ./measure_proj dyncontrol. *)
+let dc_direct_subjects = [ "reverse"; "length"; "length2" ]
+
+let test_dyncontrol_direct () =
   let src = atom "'c" in
-  let comp = Program2DataRwhile.data2program
-      (EvalRwhile.evalProgram (Lazy.force dc_spec_av) (spec_in pd_rev src)) in
-  (* [comp](d) = [reverse]((Src . d)) for the dynamic input half d *)
-  List.iter (fun d ->
+  let inputs = [ parse_val "('a . ('b . nil))"; parse_val "('a . nil)"; VNil ] in
+  List.iter (fun name ->
+      let p = parse_file_program (examples_dir ^ "/" ^ name ^ ".rwhile") in
+      let pd = Program2DataRwhile.program2data p in
+      let comp = Program2DataRwhile.data2program
+          (EvalRwhile.evalProgram (Lazy.force dc_spec_av) (spec_in pd src)) in
+      (* [comp](d) = [p]((Src . d)) for the dynamic input half d *)
+      List.iter (fun d ->
+          Alcotest.(check valT_testable)
+            ("direct fp1 " ^ name ^ ": [comp](d) = [p](('c . d))")
+            (EvalRwhile.evalProgram p (VCons (src, d)))
+            (EvalRwhile.evalProgram comp d))
+        inputs;
+      (* ...and the residual is a legitimate R-WHILE program: its syntactic
+         inverse undoes it.  Residualising the loop from its ENTRY -- rather
+         than folding the entry test to a constant -- is what keeps this true;
+         a constant-true entry test cannot take the loop's back edge. *)
+      let d = List.hd inputs in
       Alcotest.(check valT_testable)
-        "direct fp1 reverse: [comp](d) = [reverse](('c . d))"
-        (EvalRwhile.evalProgram rev (VCons (src, d)))
-        (EvalRwhile.evalProgram comp d))
-    [ parse_val "('a . ('b . nil))"; parse_val "('a . nil)"; VNil ];
-  (* ...and the residual is a legitimate R-WHILE program: its syntactic inverse
-     undoes it.  Residualising the loop from its ENTRY -- rather than folding the
-     entry test to a constant -- is exactly what keeps this true. *)
-  let d = parse_val "('a . ('b . nil))" in
-  Alcotest.(check valT_testable)
-    "direct fp1 reverse: [inv comp]([comp](d)) = d (the residual is reversible)"
-    d (EvalRwhile.evalProgram (InvRwhile.invProgram comp)
-         (EvalRwhile.evalProgram comp d))
+        ("direct fp1 " ^ name ^ ": [inv comp]([comp](d)) = d (residual reversible)")
+        d (EvalRwhile.evalProgram (InvRwhile.invProgram comp)
+             (EvalRwhile.evalProgram comp d));
+      (* ...and the loop survives: there is nothing static left to unroll away *)
+      Alcotest.(check bool) ("direct fp1 " ^ name ^ ": the residual keeps a loop")
+        true (js_body_loops comp > 0))
+    dc_direct_subjects
 
 (* A data-dependent loop must leave a loop IN the residual -- unlike the
    static-control subjects (loop_static2/3), whose loops are unrolled away.  If
@@ -2538,13 +2551,7 @@ let test_dyncontrol_reverse_direct () =
 let test_dyncontrol_residual_keeps_the_loop () =
   let (_, _, comp) = dc_fp1_via_ri_fp3 "reverse" in
   Alcotest.(check bool) "fp1-via-ri_fp3 reverse: the residual still has a loop"
-    true (js_body_loops comp > 0);
-  let rev = parse_file_program (examples_dir ^ "/reverse.rwhile") in
-  let direct = Program2DataRwhile.data2program
-      (EvalRwhile.evalProgram (Lazy.force dc_spec_av)
-         (spec_in (Program2DataRwhile.program2data rev) (atom "'c"))) in
-  Alcotest.(check bool) "direct fp1 reverse: the residual still has a loop"
-    true (js_body_loops direct > 0)
+    true (js_body_loops comp > 0)
 
 (* Evaluate a program-as-data value (a spec residual / comp) DIRECTLY by
  * decoding it back to an AST -- the reliable alternative to run_via_ri, which
@@ -3796,7 +3803,7 @@ let () =
     "dyn-control", [
       Alcotest.test_case "dyncond3 (no loop, dynamic cond) via ri_fp3 residualises correctly" `Quick test_dyncontrol_dyncond3_via_ri_fp3;
       Alcotest.test_case "reverse (data-dependent loop) via ri_fp3 residualises correctly" `Quick test_dyncontrol_reverse_via_ri_fp3;
-      Alcotest.test_case "reverse specialised directly: residual correct and reversible" `Quick test_dyncontrol_reverse_direct;
+      Alcotest.test_case "reverse/length/length2 specialised directly: correct, reversible, loop kept" `Quick test_dyncontrol_direct;
       Alcotest.test_case "a data-dependent loop stays a loop in the residual" `Quick test_dyncontrol_residual_keeps_the_loop;
       Alcotest.test_case "OPEN (ri_fp3, not spec_av): non-canonical truthy test values" `Quick test_dyncontrol_ri_fp3_truthiness_gap;
     ];
