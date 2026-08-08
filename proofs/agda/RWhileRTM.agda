@@ -317,7 +317,7 @@ encT (l , s , r) = encL l ∙ (atm s ∙ encL r)
 ------------------------------------------------------------------------
 -- 4.  Variables of the generated program.
 
-vQ vT vL vS vR vTmp vW vIn vOut : ℕ
+vQ vT vL vS vR vTmp vW vIn vOut vK : ℕ
 vQ   = 0        -- current state
 vT   = 1        -- the tape triple
 vL   = 2        -- scratch: left half-tape
@@ -327,6 +327,7 @@ vTmp = 5        -- scratch: the suffix (s̄ . r̄), used while splitting T
 vW   = 6        -- scratch: PUSH/POP's working cell
 vIn  = 7        -- the program's input  R
 vOut = 8        -- the program's output R'
+vK   = 9        -- the dispatch key (Q . S), maintained by the loop
 
 ------------------------------------------------------------------------
 -- 4b.  What it means for a store to hold a configuration.
@@ -1123,6 +1124,81 @@ mover-sound b σ l x r ntr hT (hL , hS , hR , hTmp , hW)
         (trans (f2 y yS yL yW) (f1 y yT yL yS yR yTmp))))
 
 ------------------------------------------------------------------------
+-- 7c.  THE HEAD MOVES ON AN UNPACKED TAPE.
+--
+-- From here on the tape is kept UNPACKED, in L, S and R, for the whole run
+-- of the main loop.  The letter keeps it packed in T and dispatches by
+-- matching patterns over the PAIR (Q,T); the core has neither pattern
+-- matching nor a conjunction in its tests, and `Exp` carries one operator
+-- over variable-or-constant operands, so `Q = q̄ ∧ hd (tl T) = s̄` is not one
+-- test.  Keeping the tape unpacked makes the symbol under the head a
+-- variable, and the pair (Q,S) is then held in a key variable K, so the
+-- guard becomes ONE equality against a CONSTANT PAIR.  Same information,
+-- expressible in the core.
+--
+-- With the tape unpacked, a head move is just the two stack operations of
+-- Fig. 2c, with no packing around them.
+
+moveLC : ℕ → Cmd
+moveLC b = pushC b vS vR vW ⨾ popC b vS vL vW
+
+moveRC : ℕ → Cmd
+moveRC b = pushC b vS vL vW ⨾ popC b vS vR vW
+
+-- and the right move is still literally the inverse of the left one
+moveRC-inv : ∀ b → moveRC b ≡ inv (moveLC b)
+moveRC-inv b = refl
+
+wf-moveLC : ∀ b → Wf (moveLC b)
+wf-moveLC b = wf-seq (Push.wf-pushC b vS vR vW (λ ()) (λ ()) (λ ()))
+                     (Push.wf-popC  b vS vL vW (λ ()) (λ ()) (λ ()))
+wf-moveRC : ∀ b → Wf (moveRC b)
+wf-moveRC b = wf-seq (Push.wf-pushC b vS vL vW (λ ()) (λ ()) (λ ()))
+                     (Push.wf-popC  b vS vR vW (λ ()) (λ ()) (λ ()))
+
+moveL-sound : ∀ b σ l x r
+  → NoTrailB b l
+  → get σ vS ≡ atm x → get σ vL ≡ encL l → get σ vR ≡ encL r → get σ vW ≡ nil
+  → Σ[ σ′ ∈ Store ] Σ[ k ∈ ℕ ]
+      ( (moveLC b ⊢ σ ⇒ σ′ ∣ k)
+      × (get σ′ vS ≡ atm (popHead b l))
+      × (get σ′ vL ≡ encL (popTail l))
+      × (get σ′ vR ≡ encL (consNB b x r))
+      × (get σ′ vW ≡ nil)
+      × (∀ y → ¬ (y ≡ vS) → ¬ (y ≡ vL) → ¬ (y ≡ vR) → ¬ (y ≡ vW)
+             → get σ′ y ≡ get σ y) )
+moveL-sound b σ l x r ntl hS hL hR hW
+  with Push.push-sound b vS vR vW (λ ()) (λ ()) (λ ()) σ x r hS hR hW
+... | σ₁ , _ , dPush , p1S , p1R , p1W , f1
+  with Push.pop-sound b vS vL vW (λ ()) (λ ()) (λ ())
+         σ₁ l ntl p1S (trans (f1 vL (λ ()) (λ ()) (λ ())) hL) p1W
+... | σ₂ , _ , dPop , p2S , p2L , p2W , f2 =
+    σ₂ , _ , e-seq dPush dPop
+  , p2S , p2L , trans (f2 vR (λ ()) (λ ()) (λ ())) p1R , p2W
+  , (λ y yS yL yR yW → trans (f2 y yS yL yW) (f1 y yS yR yW))
+
+moveR-sound : ∀ b σ l x r
+  → NoTrailB b r
+  → get σ vS ≡ atm x → get σ vL ≡ encL l → get σ vR ≡ encL r → get σ vW ≡ nil
+  → Σ[ σ′ ∈ Store ] Σ[ k ∈ ℕ ]
+      ( (moveRC b ⊢ σ ⇒ σ′ ∣ k)
+      × (get σ′ vS ≡ atm (popHead b r))
+      × (get σ′ vR ≡ encL (popTail r))
+      × (get σ′ vL ≡ encL (consNB b x l))
+      × (get σ′ vW ≡ nil)
+      × (∀ y → ¬ (y ≡ vS) → ¬ (y ≡ vL) → ¬ (y ≡ vR) → ¬ (y ≡ vW)
+             → get σ′ y ≡ get σ y) )
+moveR-sound b σ l x r ntr hS hL hR hW
+  with Push.push-sound b vS vL vW (λ ()) (λ ()) (λ ()) σ x l hS hL hW
+... | σ₁ , _ , dPush , p1S , p1L , p1W , f1
+  with Push.pop-sound b vS vR vW (λ ()) (λ ()) (λ ())
+         σ₁ r ntr p1S (trans (f1 vR (λ ()) (λ ()) (λ ())) hR) p1W
+... | σ₂ , _ , dPop , p2S , p2R , p2W , f2 =
+    σ₂ , _ , e-seq dPush dPop
+  , p2S , p2R , trans (f2 vL (λ ()) (λ ()) (λ ())) p1L , p2W
+  , (λ y yS yL yR yW → trans (f2 y yS yR yW) (f1 y yS yL yW))
+
+------------------------------------------------------------------------
 -- 8.  The translation of one rule (Fig. 3).
 --
 --   (q₁,(s₁,s₂),q₂)  ↦  [q̄₁,(L s̄₁ R)] => [q̄₂,(L s̄₂ R)]
@@ -1163,15 +1239,6 @@ wf-ruleC b (rmov q₁ mvL q₂) = wf-seq (wf-movelC b) (wf-setState q₁ q₂)
 wf-ruleC b (rmov q₁ mvS q₂) = wf-setState q₁ q₂
 wf-ruleC b (rmov q₁ mvR q₂) = wf-seq (wf-moverC b) (wf-setState q₁ q₂)
 
-------------------------------------------------------------------------
--- 9b.  LEMMA 1, for the rules that do not move the head.
---
--- The two easy shapes of Fig. 3 are discharged here: the symbol rewrite
---     (q₁,(s₁,s₂),q₂)  ↦  [q̄₁,(L s̄₁ R)] => [q̄₂,(L s̄₂ R)]
--- and the stay rule
---     (q₁,↓,q₂)        ↦  [q̄₁,T] => [q̄₂,T].
--- The two head-moving shapes need POP, and follow in the next step.
-
 setState-sound : ∀ q₁ q₂ σ → get σ vQ ≡ atm q₁
   → Σ[ σ′ ∈ Store ] Σ[ k ∈ ℕ ]
       ( (setState q₁ q₂ ⊢ σ ⇒ σ′ ∣ k)
@@ -1191,6 +1258,255 @@ setState-sound q₁ q₂ σ hQ =
                                  ⇒ set (set σ vQ nil) vQ (atm q₂) ∣ 1
   s2 = e-ass refl (subst (λ z → rupd z (atm q₂) ≡ just (atm q₂))
                          (sym (get-set-≡ σ vQ nil)) refl)
+
+------------------------------------------------------------------------
+-- 8c.  THE RULE BODIES ON THE UNPACKED TAPE, WITH THE DISPATCH KEY.
+--
+-- Invariant of the main loop: Q holds the state, S the symbol under the
+-- head, L and R the half-tapes, and K the PAIR (Q . S).  K is redundant —
+-- it is a function of Q and S — but it is what makes the guard of a symbol
+-- rule a single flat test, and it is cleared again when the loop ends, so
+-- it is not garbage.
+--
+-- A state change is `Q ^= q̄ ; Q ^= q̄′` (clear then set) as before, and the
+-- key is re-established by `K ^= cons Q S`, which is its own inverse: it
+-- CLEARS K when K already holds (Q . S) and SETS it when K is nil.
+
+HoldsU : Conf → Store → Set
+HoldsU (q , (l , x , r)) σ =
+    (get σ vQ ≡ atm q) × (get σ vS ≡ atm x)
+  × (get σ vL ≡ encL l) × (get σ vR ≡ encL r)
+  × (get σ vK ≡ atm q ∙ atm x)
+
+UFrame : Store → Store → Set
+UFrame σ′ σ = ∀ y → ¬ (y ≡ vQ) → ¬ (y ≡ vS) → ¬ (y ≡ vL) → ¬ (y ≡ vR)
+            → ¬ (y ≡ vK) → ¬ (y ≡ vW) → get σ′ y ≡ get σ y
+
+setKey : Cmd
+setKey = vK ^= cns (var vQ) (var vS)
+
+uruleC : ℕ → Rule → Cmd
+uruleC b (rsym q s s′ q′) =
+    vK ^= opd (cst (atm q  ∙ atm s ))
+  ⨾ vS ^= opd (cst (atm s ))
+  ⨾ vS ^= opd (cst (atm s′))
+  ⨾ vQ ^= opd (cst (atm q ))
+  ⨾ vQ ^= opd (cst (atm q′))
+  ⨾ vK ^= opd (cst (atm q′ ∙ atm s′))
+uruleC b (rmov q mvL q′) = setKey ⨾ setState q q′ ⨾ moveLC b ⨾ setKey
+uruleC b (rmov q mvS q′) = setKey ⨾ setState q q′ ⨾ setKey
+uruleC b (rmov q mvR q′) = setKey ⨾ setState q q′ ⨾ moveRC b ⨾ setKey
+
+wf-setKey : Wf setKey
+wf-setKey = wf-ass (ni-cns (ni-var (λ ())) (ni-var (λ ())))
+
+wf-uruleC : ∀ b d → Wf (uruleC b d)
+wf-uruleC b (rsym q s s′ q′) =
+  wf-seq (wf-ass (ni-opd ni-cst))
+  (wf-seq (wf-ass (ni-opd ni-cst))
+  (wf-seq (wf-ass (ni-opd ni-cst))
+  (wf-seq (wf-ass (ni-opd ni-cst))
+  (wf-seq (wf-ass (ni-opd ni-cst)) (wf-ass (ni-opd ni-cst))))))
+wf-uruleC b (rmov q mvL q′) =
+  wf-seq wf-setKey (wf-seq (wf-setState q q′) (wf-seq (wf-moveLC b) wf-setKey))
+wf-uruleC b (rmov q mvS q′) =
+  wf-seq wf-setKey (wf-seq (wf-setState q q′) wf-setKey)
+wf-uruleC b (rmov q mvR q′) =
+  wf-seq wf-setKey (wf-seq (wf-setState q q′) (wf-seq (wf-moveRC b) wf-setKey))
+
+-- the two directions of a constant reversible assignment
+constSet : ∀ x c σ → get σ x ≡ nil → (x ^= opd (cst c)) ⊢ σ ⇒ set σ x c ∣ 1
+constSet x c σ h = e-ass refl (subst (λ z → rupd z c ≡ just c) (sym h) refl)
+
+constClr : ∀ x c σ → get σ x ≡ c → (x ^= opd (cst c)) ⊢ σ ⇒ set σ x nil ∣ 1
+constClr x c σ h = e-ass refl (subst (λ z → rupd z c ≡ just nil) (sym h) (rupd-self c))
+
+setKey-set : ∀ σ q x → get σ vQ ≡ atm q → get σ vS ≡ atm x → get σ vK ≡ nil
+           → setKey ⊢ σ ⇒ set σ vK (atm q ∙ atm x) ∣ 1
+setKey-set σ q x hQ hS hK =
+  e-ass (cong just (cong₂ _∙_ hQ hS))
+        (subst (λ z → rupd z (atm q ∙ atm x) ≡ just (atm q ∙ atm x)) (sym hK) refl)
+
+setKey-clr : ∀ σ q x → get σ vQ ≡ atm q → get σ vS ≡ atm x
+           → get σ vK ≡ atm q ∙ atm x → setKey ⊢ σ ⇒ set σ vK nil ∣ 1
+setKey-clr σ q x hQ hS hK =
+  e-ass (cong just (cong₂ _∙_ hQ hS))
+        (subst (λ z → rupd z (atm q ∙ atm x) ≡ just nil) (sym hK)
+               (rupd-self (atm q ∙ atm x)))
+
+USpec : ℕ → Rule → Conf → Store → Set
+USpec b d c′ σ =
+  Σ[ σ′ ∈ Store ] Σ[ k ∈ ℕ ]
+    ( (uruleC b d ⊢ σ ⇒ σ′ ∣ k) × HoldsU c′ σ′ × (get σ′ vW ≡ nil) × UFrame σ′ σ )
+
+-- (q,(s,s′),q′) : six constant assignments, nothing else moves.
+usym-sound : ∀ b q s s′ q′ σ l r
+  → HoldsU (q , (l , s , r)) σ → get σ vW ≡ nil
+  → USpec b (rsym q s s′ q′) (q′ , (l , s′ , r)) σ
+usym-sound b q s s′ q′ σ l r (hQ , hS , hL , hR , hK) hW =
+    τ6 , _
+  , e-seq a1 (e-seq a2 (e-seq a3 (e-seq a4 (e-seq a5 a6))))
+  , (g6Q , g6S , g6L , g6R , get-set-≡ τ5 vK (atm q′ ∙ atm s′))
+  , g6W , frame
+  where
+  τ1 τ2 τ3 τ4 τ5 τ6 : Store
+  τ1 = set σ  vK nil
+  τ2 = set τ1 vS nil
+  τ3 = set τ2 vS (atm s′)
+  τ4 = set τ3 vQ nil
+  τ5 = set τ4 vQ (atm q′)
+  τ6 = set τ5 vK (atm q′ ∙ atm s′)
+
+  g1S : get τ1 vS ≡ atm s
+  g1S = trans (get-set-≢ σ vK vS nil (λ ())) hS
+  g3Q : get τ3 vQ ≡ atm q
+  g3Q = trans (get-set-≢ τ2 vS vQ (atm s′) (λ ()))
+        (trans (get-set-≢ τ1 vS vQ nil (λ ()))
+               (trans (get-set-≢ σ vK vQ nil (λ ())) hQ))
+  g5K : get τ5 vK ≡ nil
+  g5K = trans (get-set-≢ τ4 vQ vK (atm q′) (λ ()))
+        (trans (get-set-≢ τ3 vQ vK nil (λ ()))
+        (trans (get-set-≢ τ2 vS vK (atm s′) (λ ()))
+        (trans (get-set-≢ τ1 vS vK nil (λ ())) (get-set-≡ σ vK nil))))
+
+  a1 = constClr vK (atm q ∙ atm s) σ hK
+  a2 = constClr vS (atm s) τ1 g1S
+  a3 = constSet vS (atm s′) τ2 (get-set-≡ τ1 vS nil)
+  a4 = constClr vQ (atm q) τ3 g3Q
+  a5 = constSet vQ (atm q′) τ4 (get-set-≡ τ3 vQ nil)
+  a6 = constSet vK (atm q′ ∙ atm s′) τ5 g5K
+
+  g6Q : get τ6 vQ ≡ atm q′
+  g6Q = trans (get-set-≢ τ5 vK vQ (atm q′ ∙ atm s′) (λ ()))
+              (get-set-≡ τ4 vQ (atm q′))
+  g6S : get τ6 vS ≡ atm s′
+  g6S = trans (get-set-≢ τ5 vK vS (atm q′ ∙ atm s′) (λ ()))
+        (trans (get-set-≢ τ4 vQ vS (atm q′) (λ ()))
+        (trans (get-set-≢ τ3 vQ vS nil (λ ())) (get-set-≡ τ2 vS (atm s′))))
+  down : ∀ y → ¬ (y ≡ vQ) → ¬ (y ≡ vS) → ¬ (y ≡ vK) → get τ6 y ≡ get σ y
+  down y yQ yS yK =
+    trans (get-set-≢ τ5 vK y (atm q′ ∙ atm s′) (λ e → yK (sym e)))
+    (trans (get-set-≢ τ4 vQ y (atm q′) (λ e → yQ (sym e)))
+    (trans (get-set-≢ τ3 vQ y nil (λ e → yQ (sym e)))
+    (trans (get-set-≢ τ2 vS y (atm s′) (λ e → yS (sym e)))
+    (trans (get-set-≢ τ1 vS y nil (λ e → yS (sym e)))
+           (get-set-≢ σ vK y nil (λ e → yK (sym e)))))))
+  g6L : get τ6 vL ≡ encL l
+  g6L = trans (down vL (λ ()) (λ ()) (λ ())) hL
+  g6R : get τ6 vR ≡ encL r
+  g6R = trans (down vR (λ ()) (λ ()) (λ ())) hR
+  g6W : get τ6 vW ≡ nil
+  g6W = trans (down vW (λ ()) (λ ()) (λ ())) hW
+  frame : UFrame τ6 σ
+  frame y yQ yS yL yR yK yW = down y yQ yS yK
+
+-- (q,↓,q′) : clear the key, change the state, re-establish the key.
+umvS-sound : ∀ b q q′ σ l x r
+  → HoldsU (q , (l , x , r)) σ → get σ vW ≡ nil
+  → USpec b (rmov q mvS q′) (q′ , (l , x , r)) σ
+umvS-sound b q q′ σ l x r (hQ , hS , hL , hR , hK) hW
+  with setState-sound q q′ (set σ vK nil)
+         (trans (get-set-≢ σ vK vQ nil (λ ())) hQ)
+... | σ₂ , _ , dS , g2Q , f2 =
+    set σ₂ vK (atm q′ ∙ atm x) , _
+  , e-seq (setKey-clr σ q x hQ hS hK) (e-seq dS (setKey-set σ₂ q′ x g2Q g2S g2K))
+  , ( trans (get-set-≢ σ₂ vK vQ (atm q′ ∙ atm x) (λ ())) g2Q
+    , trans (get-set-≢ σ₂ vK vS (atm q′ ∙ atm x) (λ ())) g2S
+    , trans (get-set-≢ σ₂ vK vL (atm q′ ∙ atm x) (λ ())) g2L
+    , trans (get-set-≢ σ₂ vK vR (atm q′ ∙ atm x) (λ ())) g2R
+    , get-set-≡ σ₂ vK (atm q′ ∙ atm x) )
+  , trans (get-set-≢ σ₂ vK vW (atm q′ ∙ atm x) (λ ())) g2W
+  , (λ y yQ yS yL yR yK yW →
+       trans (get-set-≢ σ₂ vK y (atm q′ ∙ atm x) (λ e → yK (sym e)))
+       (trans (f2 y yQ) (get-set-≢ σ vK y nil (λ e → yK (sym e)))))
+  where
+  g2S : get σ₂ vS ≡ atm x
+  g2S = trans (f2 vS (λ ())) (trans (get-set-≢ σ vK vS nil (λ ())) hS)
+  g2L : get σ₂ vL ≡ encL l
+  g2L = trans (f2 vL (λ ())) (trans (get-set-≢ σ vK vL nil (λ ())) hL)
+  g2R : get σ₂ vR ≡ encL r
+  g2R = trans (f2 vR (λ ())) (trans (get-set-≢ σ vK vR nil (λ ())) hR)
+  g2W : get σ₂ vW ≡ nil
+  g2W = trans (f2 vW (λ ())) (trans (get-set-≢ σ vK vW nil (λ ())) hW)
+  g2K : get σ₂ vK ≡ nil
+  g2K = trans (f2 vK (λ ())) (get-set-≡ σ vK nil)
+
+-- (q,←,q′) : clear the key, change the state, MOVE, re-establish the key.
+umvL-sound : ∀ b q q′ σ l x r → NoTrailB b l
+  → HoldsU (q , (l , x , r)) σ → get σ vW ≡ nil
+  → USpec b (rmov q mvL q′) (q′ , (popTail l , popHead b l , consNB b x r)) σ
+umvL-sound b q q′ σ l x r ntl (hQ , hS , hL , hR , hK) hW
+  with setState-sound q q′ (set σ vK nil)
+         (trans (get-set-≢ σ vK vQ nil (λ ())) hQ)
+... | σ₂ , _ , dS , g2Q , f2
+  with moveL-sound b σ₂ l x r ntl
+         (trans (f2 vS (λ ())) (trans (get-set-≢ σ vK vS nil (λ ())) hS))
+         (trans (f2 vL (λ ())) (trans (get-set-≢ σ vK vL nil (λ ())) hL))
+         (trans (f2 vR (λ ())) (trans (get-set-≢ σ vK vR nil (λ ())) hR))
+         (trans (f2 vW (λ ())) (trans (get-set-≢ σ vK vW nil (λ ())) hW))
+... | σ₃ , _ , dM , g3S , g3L , g3R , g3W , f3 =
+    set σ₃ vK (atm q′ ∙ atm (popHead b l)) , _
+  , e-seq (setKey-clr σ q x hQ hS hK)
+          (e-seq dS (e-seq dM (setKey-set σ₃ q′ (popHead b l) g3Q g3S g3K)))
+  , ( trans (get-set-≢ σ₃ vK vQ _ (λ ())) g3Q
+    , trans (get-set-≢ σ₃ vK vS _ (λ ())) g3S
+    , trans (get-set-≢ σ₃ vK vL _ (λ ())) g3L
+    , trans (get-set-≢ σ₃ vK vR _ (λ ())) g3R
+    , get-set-≡ σ₃ vK _ )
+  , trans (get-set-≢ σ₃ vK vW _ (λ ())) g3W
+  , (λ y yQ yS yL yR yK yW →
+       trans (get-set-≢ σ₃ vK y _ (λ e → yK (sym e)))
+       (trans (f3 y yS yL yR yW)
+       (trans (f2 y yQ) (get-set-≢ σ vK y nil (λ e → yK (sym e))))))
+  where
+  g3Q : get σ₃ vQ ≡ atm q′
+  g3Q = trans (f3 vQ (λ ()) (λ ()) (λ ()) (λ ())) g2Q
+  g3K : get σ₃ vK ≡ nil
+  g3K = trans (f3 vK (λ ()) (λ ()) (λ ()) (λ ()))
+              (trans (f2 vK (λ ())) (get-set-≡ σ vK nil))
+
+-- (q,→,q′) : the mirror image.
+umvR-sound : ∀ b q q′ σ l x r → NoTrailB b r
+  → HoldsU (q , (l , x , r)) σ → get σ vW ≡ nil
+  → USpec b (rmov q mvR q′) (q′ , (consNB b x l , popHead b r , popTail r)) σ
+umvR-sound b q q′ σ l x r ntr (hQ , hS , hL , hR , hK) hW
+  with setState-sound q q′ (set σ vK nil)
+         (trans (get-set-≢ σ vK vQ nil (λ ())) hQ)
+... | σ₂ , _ , dS , g2Q , f2
+  with moveR-sound b σ₂ l x r ntr
+         (trans (f2 vS (λ ())) (trans (get-set-≢ σ vK vS nil (λ ())) hS))
+         (trans (f2 vL (λ ())) (trans (get-set-≢ σ vK vL nil (λ ())) hL))
+         (trans (f2 vR (λ ())) (trans (get-set-≢ σ vK vR nil (λ ())) hR))
+         (trans (f2 vW (λ ())) (trans (get-set-≢ σ vK vW nil (λ ())) hW))
+... | σ₃ , _ , dM , g3S , g3R , g3L , g3W , f3 =
+    set σ₃ vK (atm q′ ∙ atm (popHead b r)) , _
+  , e-seq (setKey-clr σ q x hQ hS hK)
+          (e-seq dS (e-seq dM (setKey-set σ₃ q′ (popHead b r) g3Q g3S g3K)))
+  , ( trans (get-set-≢ σ₃ vK vQ _ (λ ())) g3Q
+    , trans (get-set-≢ σ₃ vK vS _ (λ ())) g3S
+    , trans (get-set-≢ σ₃ vK vL _ (λ ())) g3L
+    , trans (get-set-≢ σ₃ vK vR _ (λ ())) g3R
+    , get-set-≡ σ₃ vK _ )
+  , trans (get-set-≢ σ₃ vK vW _ (λ ())) g3W
+  , (λ y yQ yS yL yR yK yW →
+       trans (get-set-≢ σ₃ vK y _ (λ e → yK (sym e)))
+       (trans (f3 y yS yL yR yW)
+       (trans (f2 y yQ) (get-set-≢ σ vK y nil (λ e → yK (sym e))))))
+  where
+  g3Q : get σ₃ vQ ≡ atm q′
+  g3Q = trans (f3 vQ (λ ()) (λ ()) (λ ()) (λ ())) g2Q
+  g3K : get σ₃ vK ≡ nil
+  g3K = trans (f3 vK (λ ()) (λ ()) (λ ()) (λ ()))
+              (trans (f2 vK (λ ())) (get-set-≡ σ vK nil))
+
+------------------------------------------------------------------------
+-- 9b.  LEMMA 1, for the rules that do not move the head.
+--
+-- The two easy shapes of Fig. 3 are discharged here: the symbol rewrite
+--     (q₁,(s₁,s₂),q₂)  ↦  [q̄₁,(L s̄₁ R)] => [q̄₂,(L s̄₂ R)]
+-- and the stay rule
+--     (q₁,↓,q₂)        ↦  [q̄₁,T] => [q̄₂,T].
+-- The two head-moving shapes need POP, and follow in the next step.
 
 -- (q₁,↓,q₂): only the state changes.
 rule-stay-sound : ∀ b q₁ q₂ σ t
