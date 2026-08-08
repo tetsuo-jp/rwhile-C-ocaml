@@ -1010,7 +1010,66 @@ macro SPEC-STEP-AV(Cd, Cd', RCode)
       * live references to ri_fp3's single working register -- giving its stack
       * machine two working slots would sidestep the whole thing.  (b) is much
       * cheaper and reaches the project's stated goal (fp1 via ri_fp3), but it
-      * leaves the specializer's limitation in place. *)
+      * leaves the specializer's limitation in place.
+      *
+      * ===== (b) WAS DONE, 2026-08-08.  FLAT PATTERNS NOW WORK =====
+      * Two changes to examples/ri_fp3.rwhile, both on the SUBJECT side; spec_av
+      * is untouched.
+      *
+      *   1. A SECOND WORKING REGISTER in EVAL-PAT-STEP-FP3, selected by a unary
+      *      counter Dp that mirrors the stack depth.  The two leaves of a flat
+      *      cons pattern are pushed at different depths, so they stage through
+      *      different slots and neither AV goes stale.  Dp is self-restoring
+      *      ('rep runs EVAL-PAT then INV-EVAL-PAT, emptying St and Dp together)
+      *      and static at specialization time, so the choice costs no residual.
+      *   2. PAT-MOVE-FP3: the store moves became REPLACEMENTS (`X <= V[J]`)
+      *      instead of the XOR pair `LOOKUP; UPDATE`.  This is what discharges
+      *      C3.  The XOR pair residualizes as `V[J] ^= lift(AV)`, and lifting a
+      *      COMPOUND AV makes an EXPRESSION, which reads its dynamic leaves
+      *      without consuming them -- they are stranded and the residual stops
+      *      being store-clean ("Some variables are not nil").  A replacement
+      *      residualizes as a 'rep, whose RHS is a PATTERN, and a pattern read
+      *      consumes.  C4 is met for free: nothing is erased, the value is
+      *      ROUTED out.  Legal because the target of a pattern write is nil by
+      *      R-WHILE's own semantics, and the working register is nil by
+      *      construction.
+      *
+      * THE TRIGGER WAS NEVER TRANSPOSITION.  `sx_splitjoin` -- uncons then
+      * rejoin in the SAME order, i.e. the identity -- failed identically.  What
+      * it takes is TWO LEAVES IN ONE BUILT PATTERN.  The earlier note's "only
+      * the two that exchange the halves of a cons fail" read the sample, not the
+      * cause: those happened to be the only two-leaf sources tested.
+      *
+      * MEASURED (nodes in the fp1 residual, [spec_av]((ri_fp3.src))):
+      *
+      *     src            before   after
+      *     id                835     649   -22%
+      *     id2 / rep        1045     767   -27%
+      *     id3              1117     847   -24%
+      *     swap             1661    1071   -36%   (before: FAILED to run)
+      *     sx_splitjoin     1661    1071   -36%   (before: FAILED to run)
+      *
+      * So the residuals got SMALLER as well as correct -- one 'rep in place of
+      * two 'ass -- which is the direction comp2/|spec_av| < 1 needs.  ri_min's
+      * fp1 numbers are untouched (103 / 63; it does not go through ri_fp3).
+      *
+      * THE REMAINING BOUND (open, pinned by TestSuite's
+      * "fp1-via-ri_fp3 KNOWN BUG: nested pattern residual fails" and by
+      * examples/sx_three.rwhile).  NESTED patterns still fail, and for a
+      * SECOND, INDEPENDENT sharing: the 'consE step routes every split through
+      * the same two slots V1e/V2e, so the compound AV built at one nesting level
+      * goes stale when the next level reuses them.  The residual comes out
+      * NON-LINEAR (`cons 5 (cons 5 nil)` -- the interpreter warns) and then
+      * fails with a pattern write conflict.  ri_fp3 INTERPRETS sx_three
+      * correctly; only the residual is broken.
+      *
+      * Multiplying V1e/V2e the same way only moves the bound: k register pairs
+      * cover nesting depth k, because the number of simultaneously live values
+      * is unbounded in the pattern.  Direction (a) -- capture-on-escape in the
+      * specializer, i.e. capture exactly when AV-CONS embeds a dynamic AV in a
+      * compound -- remains the only bound-free fix, and change 2 above shows how
+      * its C3/C4 half is meant to look: deliver through a 'rep, not an
+      * expression. *)
      PAT-WRITE-ITER(RpQ, RpAV, RCode);
      Arg <= cons RpQ RpR
    else
