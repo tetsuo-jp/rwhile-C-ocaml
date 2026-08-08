@@ -1065,11 +1065,59 @@ macro SPEC-STEP-AV(Cd, Cd', RCode)
       *
       * Multiplying V1e/V2e the same way only moves the bound: k register pairs
       * cover nesting depth k, because the number of simultaneously live values
-      * is unbounded in the pattern.  Direction (a) -- capture-on-escape in the
-      * specializer, i.e. capture exactly when AV-CONS embeds a dynamic AV in a
-      * compound -- remains the only bound-free fix, and change 2 above shows how
-      * its C3/C4 half is meant to look: deliver through a 'rep, not an
-      * expression. *)
+      * is unbounded in the pattern.
+      *
+      * ===== (a) CAPTURE-ON-ESCAPE: IMPLEMENTED, MEASURED, REJECTED ON COST =====
+      * (2026-08-08.  The experiment is kept out of the tree; this is its record.)
+      *
+      * It WORKS, and it is the first design that removes the nesting bound.
+      * Shape: a real temp allocator (TMP-ALLOC: a global counter TmpCtr started
+      * at 100 in main, one nil added per allocation) plus AV-CAPTURE(A, RCode),
+      * called on both components in PAT-READ-ITER-STEP's 'consE arm -- exactly
+      * where a dynamic AV escapes into a compound.  When A is a bare
+      * ('D.('var.k)) it emits `Tmp <= ('var.k)` and returns ('D.('var.Tmp)).
+      *
+      * The C3/C4 half is settled: emitting the capture as a 'rep rather than an
+      * 'ass is what makes it work.  A 'rep's RHS is a PATTERN, so it CONSUMES
+      * slot k -- the value moves, the slot is freed, and the temp is consumed in
+      * turn by the pattern write that delivers the compound.  Nothing is erased,
+      * so no self-clear is needed.  This is the same insight as PAT-MOVE-FP3
+      * above.  Capture-always failed on C3 precisely because it delivered
+      * through AV-LIFT, i.e. through an expression.
+      *
+      * MEASURED: sx_three -- the nested pattern that pins the current bound --
+      * specializes into a residual that RUNS and returns ('b.('a.nil)), correct.
+      * The flat cases stay correct too.  So the bound is genuinely gone.
+      *
+      * WHAT KILLS IT IS COST, and by a much wider margin than capture-always:
+      *
+      *     fp1 residual [spec_av]((ri_min.swap))   103 -> 2131 nodes
+      *                                         0.63x -> 13.07x |ri_min|
+      *     fp1 residual [spec_av]((ri_min.id))      63 -> 1075
+      *     via ri_fp3: id    649 -> 1661     swap  1071 -> 8239   (7.7x)
+      *
+      * A residual THIRTEEN TIMES the interpreter is not a specialization at all;
+      * the project's target is comp2/|spec_av| < 1.  The cause is that
+      * PAT-READ-ITER's 'consE fires for every cons in every pattern read the
+      * specializer performs, and captures unconditionally -- overwhelmingly for
+      * slots that are never reused, where the emitted move is pure overhead.
+      *
+      * WHAT THIS CHANGES FOR THE NEXT ATTEMPT.  "Capture only when the reference
+      * would go stale" was previously thought to need escape analysis over the
+      * AV store, which the representation cannot support.  There is now a
+      * cheaper route: capture unconditionally (sound, bound-free, above) and
+      * delete the redundant captures in a RESIDUAL POST-PASS -- a `Tmp <=
+      * ('var.k)` whose k is never written again is plain copy propagation, and
+      * the residual is ordinary R-WHILE, so src/Simp.ml and src/Optimize.ml are
+      * the right place.  That turns an intractable analysis over annotated
+      * values into a standard analysis over a small residual program.
+      *
+      * Two smaller things the experiment surfaced, needed by any retry:
+      *   - the fp1 TEST HARNESSES (parse_macro_harness bodies in TestSuite.ml)
+      *     build their own main, so they must initialise and clear TmpCtr or the
+      *     store-clean check fails on the counter alone;
+      *   - examples/spec_av_clean.rwhile must be kept in step, or the
+      *     refactor-gate tests fail. *)
      PAT-WRITE-ITER(RpQ, RpAV, RCode);
      Arg <= cons RpQ RpR
    else
