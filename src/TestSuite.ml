@@ -689,6 +689,119 @@ let test_copyprop_is_identity_without_moves () =
   Alcotest.(check string) "no single-use temp moves: unchanged"
     (same src) (cp src)
 
+(* ===== Encoding: where the nodes of a p2d-encoded program go =====
+ * Motivation (2026-08-08).  comp2 cannot be shrunk by fusing moves (21 candidates
+ * in 400531 nodes -- see the note at the end of Simp.ml), so the bulk is what the
+ * commands CARRY, not how many there are.  Encoding.breakdown attributes every
+ * node to one of eight categories.  These tests pin the two things that make the
+ * attribution trustworthy: it ADDS UP (the categories total count_nodes exactly),
+ * and each category is the size the encoding really charges, computed by hand
+ * from Program2DataRwhile.transProgram. *)
+
+let enc_breakdown src = Encoding.breakdown_program (parse_program src)
+
+let test_encoding_adds_up () =
+  (* Encoding.breakdown raises if the categories miss count_nodes, so simply
+   * running it over a spread of shapes is the check.  Re-assert it here anyway,
+   * so a failure names the property rather than the exception. *)
+  List.iter (fun src ->
+      let p = parse_program src in
+      let r = Encoding.breakdown_program p in
+      Alcotest.(check int) ("breakdown adds up: " ^ src)
+        (EvalRwhile.count_nodes (Program2DataRwhile.program2data p))
+        (Encoding.total r))
+    [ "read X; Y <= X; write Y";
+      "read X; Y ^= cons X X; X ^= Y; write Y";
+      "read X; cons A B <= X; X <= cons B A; write X";
+      "read X; if =? X nil then Y ^= 'a else Y ^= 'b fi =? Y nil; write Y";
+      "read X; from =? Y nil do Y <= X loop Y <= X until =? Y nil; write Y";
+      "read X; Y ^= (('a.'b).('c.nil)); X ^= Y; write X" ]
+
+let test_encoding_var_cost_is_unary () =
+  (* Variable index k costs 2k+1 nodes (k conses + k+1 nils), so the SAME program
+   * with more variables ahead of the hot one costs strictly more.  This is the
+   * term pass 1 (Optimize.var_order) minimises; the test pins that it is really
+   * the unary numeral being charged, not a constant per occurrence. *)
+  let r = enc_breakdown "read X; Y <= X; write Y" in
+  (* Four occurrences (read X, the two pattern leaves, write Y) of two variables,
+   * which get indices 0 and 1 whichever way the numbering breaks the tie.  Index
+   * 0 costs 1 node, index 1 costs 3 -- twice each. *)
+  Alcotest.(check int) "four variable occurrences" 4 r.Encoding.var_occs;
+  Alcotest.(check int) "unary indices: 2*1 + 2*3" 8 r.Encoding.var_index;
+  Alcotest.(check int) "header is 2 nodes each" 8 r.Encoding.var_header;
+  Alcotest.(check int) "largest index is 1" 1 r.Encoding.max_index
+
+let test_encoding_const_is_charged_to_const () =
+  (* an embedded literal is charged to `const`, not to the structural categories *)
+  let r = enc_breakdown "read X; Y ^= (('a.'b).('c.nil)); X ^= Y; write X" in
+  (* ('a.'b).('c.nil) = 3 conses + 4 leaves = 7 nodes *)
+  Alcotest.(check int) "one 'val occurrence" 1 r.Encoding.const_occs;
+  Alcotest.(check int) "literal charged at its own size" 7 r.Encoding.const
+
+let test_encoding_hot_numbering_shrinks_var_index () =
+  (* The whole point of the attribution: pass 1 shows up as a smaller var_index
+   * and nothing else moves much.  Compare hot-vars (default) with first-occurrence
+   * numbering on a program where the hot variable is introduced late. *)
+  let src = "read X; A ^= X; B ^= A; C ^= B; D ^= C;              D ^= D; D ^= C; C ^= B; B ^= A; A ^= X;              Y ^= X; write Y" in
+  let p = parse_program src in
+  let hot = Encoding.breakdown_program p in
+  let old =
+    let saved = !Program2DataRwhile.hot_vars in
+    Program2DataRwhile.hot_vars := false;
+    let r = Encoding.breakdown_program p in
+    Program2DataRwhile.hot_vars := saved; r in
+  Alcotest.(check bool) "hot-vars numbering costs no more in var_index"
+    true (hot.Encoding.var_index <= old.Encoding.var_index);
+  Alcotest.(check int) "the same variable occurrences either way"
+    old.Encoding.var_occs hot.Encoding.var_occs;
+  Alcotest.(check int) "renumbering does not change the structural nodes"
+    (old.Encoding.com_struct + old.Encoding.exp_struct + old.Encoding.pat_struct)
+    (hot.Encoding.com_struct + hot.Encoding.exp_struct + hot.Encoding.pat_struct)
+
+let test_encoding_optimal_is_a_lower_bound () =
+  (* optimal_var_index is a closed-form minimum over ALL renumberings, so no
+   * actual numbering may beat it -- check both the default (pass 1) and
+   * first-occurrence numbering on the same program. *)
+  let src = "read X; A ^= X; B ^= A; C ^= B; D ^= C;              D ^= D; D ^= C; C ^= B; B ^= A; A ^= X;              Y ^= X; X ^= Y; Y ^= X; Y ^= X; write X" in
+  let p = parse_program src in
+  let check label r =
+    Alcotest.(check bool) (label ^ ": optimal is a lower bound")
+      true (Encoding.optimal_var_index r <= r.Encoding.var_index) in
+  check "hot-vars" (Encoding.breakdown_program p);
+  let saved = !Program2DataRwhile.hot_vars in
+  Program2DataRwhile.hot_vars := false;
+  check "first-occurrence" (Encoding.breakdown_program p);
+  Program2DataRwhile.hot_vars := saved
+
+let test_encoding_optimal_by_hand () =
+  (* three variables occurring 4, 2 and 1 times cost 4*1 + 2*3 + 1*5 = 15 nodes
+   * under the best numbering, whatever the actual one is *)
+  let r = Encoding.empty () in
+  Hashtbl.replace r.Encoding.idx_hist 0 1;
+  Hashtbl.replace r.Encoding.idx_hist 1 4;
+  Hashtbl.replace r.Encoding.idx_hist 2 2;
+  Alcotest.(check int) "4*1 + 2*3 + 1*5" 15 (Encoding.optimal_var_index r)
+
+let test_encoding_bits_nodes_by_hand () =
+  (* the bit-list cost model, on indices whose bits are easy to read off:
+   *   0        -> the empty list, 1 node
+   *   1 = 1b   -> 1 + (1 + 3)                     = 5
+   *   2 = 10b  -> 1 + (1 + 1) + (1 + 3)           = 7
+   *   3 = 11b  -> 1 + (1 + 3) + (1 + 3)           = 9
+   *   4 = 100b -> 1 + (1+1) + (1+1) + (1+3)       = 9 *)
+  List.iter (fun (k, want) ->
+      Alcotest.(check int) (Printf.sprintf "bits_nodes %d" k) want (Encoding.bits_nodes k))
+    [ 0, 1; 1, 5; 2, 7; 3, 9; 4, 9 ];
+  (* and it must beat the unary numeral exactly where the tail is: 2k+1 vs
+   * O(log k).  At index 239 unary costs 479 nodes. *)
+  Alcotest.(check bool) "bit-list is cheaper than unary at the tail"
+    true (Encoding.bits_nodes 239 < 2 * 239 + 1)
+
+let test_encoding_rejects_non_program () =
+  Alcotest.check_raises "a non-program value is rejected, not silently counted"
+    (Failure "Encoding: malformed program")
+    (fun () -> ignore (Encoding.breakdown (atom "'nonsense")))
+
 (* ===== Program-to-data file integration tests ===== *)
 
 let parse_file_program filename =
@@ -3042,6 +3155,16 @@ let () =
       Alcotest.test_case "fuses inside a conditional branch" `Quick test_copyprop_inside_conditional;
       Alcotest.test_case "loop body: preserves semantics" `Quick test_copyprop_inside_loop_semantics;
       Alcotest.test_case "identity without single-use temps" `Quick test_copyprop_is_identity_without_moves;
+    ];
+    "encoding-breakdown", [
+      Alcotest.test_case "categories add up to count_nodes" `Quick test_encoding_adds_up;
+      Alcotest.test_case "variable cost is the unary index" `Quick test_encoding_var_cost_is_unary;
+      Alcotest.test_case "literals are charged to const" `Quick test_encoding_const_is_charged_to_const;
+      Alcotest.test_case "pass 1 shows up as smaller var_index" `Quick test_encoding_hot_numbering_shrinks_var_index;
+      Alcotest.test_case "optimal renumbering is a lower bound" `Quick test_encoding_optimal_is_a_lower_bound;
+      Alcotest.test_case "optimal renumbering, by hand" `Quick test_encoding_optimal_by_hand;
+      Alcotest.test_case "bit-list numeral cost model" `Quick test_encoding_bits_nodes_by_hand;
+      Alcotest.test_case "malformed input is rejected" `Quick test_encoding_rejects_non_program;
     ];
     "stats", [
       Alcotest.test_case "count_nodes" `Quick test_count_nodes;

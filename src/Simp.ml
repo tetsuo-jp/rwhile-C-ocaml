@@ -220,11 +220,16 @@ let copyprop_com (whole : com) (c : com) : com =
  * multi_occ.  Twenty-one variable-to-variable moves in a program with 1040
  * CReps and 400531 nodes -- so even a PERFECT gate could remove 21 commands.
  * The 363969 nodes inside comp2's loop bodies are not made of fusable moves at
- * all: comp2 averages ~113 nodes per command, i.e. its bulk is in PATTERNS AND
- * EMBEDDED CONSTANTS (the p2d-encoded subject), not in the command count.
- * Shrinking comp2 therefore means shrinking encoded data -- the lever pass 1
- * already pulls (unary numerals: hot-vars renumbering halved the encoding) --
- * not eliminating moves.  Do not spend more effort on liveness analysis here. *)
+ * all: comp2 averages ~113 nodes per command, so its bulk is what the commands
+ * CARRY, not the command count.  Shrinking comp2 therefore means shrinking
+ * encoded data, not eliminating moves.  Do not spend more effort on liveness
+ * analysis here.
+ *
+ * WHAT THE COMMANDS CARRY, measured 2026-08-08 (Encoding.breakdown,
+ * ./measure_proj full).  The guess written here first -- "patterns and embedded
+ * constants" -- was WRONG.  Patterns are 0.9% of comp2 and constants 1.0%:
+ * 91.9% is the UNARY VARIABLE NUMERALS.  The two levers on that, with their
+ * closed-form limits, are in RWHILE_S.md ("符号化のノードはどこへ行っているか"). *)
 let rec copyprop_blocks whole c =
   let c = copyprop_com whole c in
   let rec go = function

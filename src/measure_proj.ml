@@ -289,7 +289,21 @@ let gate spec_file =
   if s_ok && i_ok then (Printf.printf "GATE PASS (meaning + reversibility)\n"; exit 0)
   else (Printf.printf "GATE FAIL\n"; exit 1)
 
+(* encoding: attribute the nodes of the p2d encodings we care about.  comp2 is a
+ * residual, but the QUESTION -- what is the encoding spending its nodes on --
+ * is answered just as well by the programs comp2 is made of, and those encode in
+ * milliseconds instead of minutes.  (`./measure_proj full` runs the same
+ * breakdown on comp2 itself, to confirm the shape carries over.) *)
+let encoding () =
+  List.iter (fun name ->
+      let p = parse_prog (dir ^ "/" ^ name ^ ".rwhile") in
+      let r = Encoding.breakdown_program p in
+      Encoding.print_report name r;
+      Encoding.print_index_cost name r 8)
+    [ "spec_av"; "spec"; "ri"; "ri_fp3"; "ri_min" ]
+
 let () =
+  if Array.length Sys.argv >= 2 && Sys.argv.(1) = "encoding" then (encoding (); exit 0);
   if Array.length Sys.argv >= 3 && Sys.argv.(1) = "gate" then gate Sys.argv.(2);
   if Array.length Sys.argv >= 3 && Sys.argv.(1) = "dyncond" then (dyncond Sys.argv.(2); exit 0);
   if Array.length Sys.argv >= 2 && Sys.argv.(1) = "jones" then
@@ -395,5 +409,11 @@ let () =
     (* breakdown: what dominates comp2 (before/after Simp)? *)
     Printf.printf "breakdown (constructor histogram + nodes under loops):\n";
     (match comp2_prog with Prog (_, _, body, _) -> report_hist "comp2     " body);
-    (match comp2_simp with Prog (_, _, body, _) -> report_hist "comp2_simp" body)
+    (match comp2_simp with Prog (_, _, body, _) -> report_hist "comp2_simp" body);
+    (* ...and WHERE those nodes go (Encoding.breakdown; the categories add up to
+     * count_nodes exactly).  ~113 nodes per command means the bulk is what each
+     * command carries, so this is the table that says which term to attack. *)
+    Encoding.print_report "comp2" (Encoding.breakdown comp2);
+    Encoding.print_index_cost "comp2" (Encoding.breakdown comp2) 10;
+    Encoding.print_report "comp2_cp" (Encoding.breakdown comp2_cp_d)
   end
