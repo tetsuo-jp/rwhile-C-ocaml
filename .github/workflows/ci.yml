@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [master, stage0-spec-cleanup-fixes]
+  pull_request:
+
+jobs:
+  build-test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+
+      # apt を使うのは、opam から extlib / alcotest をビルドすると数分かかるため
+      # （sibling の while-C-ocaml/.github/workflows/ci.yml と同じ流儀）。
+      # 24.04 の apt に無いパッケージが出たら、この step を
+      #   - uses: ocaml/setup-ocaml@v3
+      #     with: { ocaml-compiler: "5.3" }
+      #   - run: opam install -y extlib alcotest
+      # に差し替え、以降の make を `opam exec -- make` にする。
+      - name: Install toolchain (OCaml, BNFC, extlib, alcotest)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            ocaml ocaml-findlib bnfc \
+            libextlib-ocaml-dev libalcotest-ocaml-dev
+
+      # 生成物（BNFC_Util.ml, Par/LexRwhile.*）は未コミット。
+      # .cf / .mll / .mly から毎回生成されることをここで担保する。
+      - name: Build interpreter (native)
+        run: make -C src ri
+
+      - name: Alcotest suite
+        run: make -C src run-tests
+
+      # examples/ を実際に走らせる煙試験（src/Makefile の test ターゲット）
+      - name: Examples smoke test
+        run: make -C src test
+
+      # 測定ツールは論文の数値の出どころなので、腐らせない
+      - name: Build measurement tools
+        run: make -C src measure_proj specsize
+
+      - name: Jones optimality measurement (self-interpreter)
+        run: cd src && ./measure_proj jones-self
+
+      # インタプリタの中核性質を CI で直接押さえる:
+      # 逆変換の往復（p の逆の逆 = p）と、self-interpretation の値一致。
+      - name: E2E — inversion round-trip
+        run: |
+          cd src
+          ./ri -inverse ../examples/lookup.rwhile > /tmp/inv1.rwhile
+          ./ri -inverse /tmp/inv1.rwhile > /tmp/inv2.rwhile
+          out_orig=$(./ri ../examples/lookup.rwhile ../examples/nil.val)
+          out_back=$(./ri /tmp/inv2.rwhile ../examples/nil.val)
+          echo "orig=$out_orig  inv-inv=$out_back"
+          test "$out_orig" = "$out_back"
