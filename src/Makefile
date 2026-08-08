@@ -19,8 +19,8 @@ BNFC_Util.ml: Rwhile.cf
 	bnfc -ocaml Rwhile.cf
 	touch BNFC_Util.ml
 
-test-suite: BNFC_Util.ml AbsRwhile.ml PrintRwhile.ml ParRwhile.mli ParRwhile.ml LexRwhile.ml Desugar.ml InvRwhile.ml Subst.ml MacroRwhile.ml EvalRwhile.ml Optimize.ml Program2DataRwhile.ml Core.ml TestSuite.ml
-	$(OCAMLC) -package alcotest -linkpkg -o $@ BNFC_Util.ml AbsRwhile.ml PrintRwhile.ml ParRwhile.mli ParRwhile.ml LexRwhile.ml Desugar.ml InvRwhile.ml Subst.ml MacroRwhile.ml EvalRwhile.ml Optimize.ml Program2DataRwhile.ml Core.ml TestSuite.ml
+test-suite: BNFC_Util.ml AbsRwhile.ml PrintRwhile.ml ParRwhile.mli ParRwhile.ml LexRwhile.ml Desugar.ml InvRwhile.ml Subst.ml MacroRwhile.ml EvalRwhile.ml Optimize.ml Program2DataRwhile.ml Core.ml Simp.ml TestSuite.ml
+	$(OCAMLC) -package alcotest -linkpkg -o $@ BNFC_Util.ml AbsRwhile.ml PrintRwhile.ml ParRwhile.mli ParRwhile.ml LexRwhile.ml Desugar.ml InvRwhile.ml Subst.ml MacroRwhile.ml EvalRwhile.ml Optimize.ml Program2DataRwhile.ml Core.ml Simp.ml TestSuite.ml
 
 run-tests: test-suite
 	./test-suite
@@ -49,7 +49,7 @@ measure_proj: BNFC_Util.ml AbsRwhile.ml PrintRwhile.ml ParRwhile.mli ParRwhile.m
 # prints it (FP3PROBE_SHOW=1), then runs it and compares with direct evaluation.
 #   ./fp3probe                      the six standard sources
 #   FP3PROBE_SHOW=1 ./fp3probe ri_fp3 swap
-fp3probe: BNFC_Util.ml AbsRwhile.ml PrintRwhile.ml ParRwhile.mli ParRwhile.ml LexRwhile.ml Desugar.ml InvRwhile.ml Subst.ml MacroRwhile.ml EvalRwhile.ml Optimize.ml Program2DataRwhile.ml Core.ml fp3probe.ml
+fp3probe: BNFC_Util.ml AbsRwhile.ml PrintRwhile.ml ParRwhile.mli ParRwhile.ml LexRwhile.ml Desugar.ml InvRwhile.ml Subst.ml MacroRwhile.ml EvalRwhile.ml Optimize.ml Program2DataRwhile.ml Core.ml Simp.ml fp3probe.ml
 	$(OCAMLC) -o $@ $^
 
 # specsize: size spec_av's AV store (FpN) to a subject program's variable count.

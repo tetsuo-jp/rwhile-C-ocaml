@@ -44,12 +44,16 @@ let () =
               with Failure m -> Error m) with
        | Error m -> Printf.printf "  SPECIALIZATION FAILED: %s\n" m
        | Ok comp ->
-         let prog = Program2DataRwhile.data2program comp in
          let rec nodes = function
            | VNil -> 1 | VAtom _ -> 1
            | VCons (a, b) -> 1 + nodes a + nodes b
            | VList vs -> List.fold_left (fun n v -> n + nodes v) 1 vs in
-         Printf.printf "  residual nodes = %d\n" (nodes comp);
+         let prog0 = Program2DataRwhile.data2program comp in
+         let progcp = Simp.copyprop_program prog0 in
+         let compcp = Program2DataRwhile.program2data progcp in
+         Printf.printf "  residual nodes = %d   (copyprop: %d)\n"
+           (nodes comp) (nodes compcp);
+         let prog = if Sys.getenv_opt "FP3PROBE_CP" <> None then progcp else prog0 in
          if Sys.getenv_opt "FP3PROBE_SHOW" <> None then
            Printf.printf "  residual:\n%s\n"
              (PrintRwhile.printTree PrintRwhile.prtProgram prog);

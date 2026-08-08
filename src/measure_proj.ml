@@ -313,6 +313,22 @@ let () =
   Printf.printf "fp1 residual [spec_av]((ri_min.swap)) = %d nodes (%.2fx |ri_min|)\n"
     (cn b_swap) (float_of_int (cn b_swap) /. float_of_int (cn pd_rimin));
   Printf.printf "fp1 residual [spec_av]((ri_min.id))   = %d nodes\n" (cn b_id);
+  (* ...and after copy propagation over the residual's moves (Simp.copyprop_program).
+   * With capture-on-escape enabled in spec_av this is the number that matters: the
+   * captures that are pure overhead are a write-once/read-once temp, i.e. a copy. *)
+  let cp v = cn (Program2DataRwhile.program2data
+                   (Simp.copyprop_program (Program2DataRwhile.data2program v))) in
+  Printf.printf "  after copyprop:  swap = %d nodes (%.2fx |ri_min|)   id = %d nodes\n"
+    (cp b_swap) (float_of_int (cp b_swap) /. float_of_int (cn pd_rimin)) (cp b_id);
+  (* the copy-propagated residual must compute the SAME thing and still invert *)
+  let cpp v = Simp.copyprop_program (Program2DataRwhile.data2program v) in
+  let ab0 = VCons (VAtom (Atom "'a"), VAtom (Atom "'b")) in
+  let bcp = cpp b_swap in
+  Printf.printf "  copyprop correctness: [Bcp](('a.'b))=%s ; [inv Bcp](that)=%s\n"
+    (PrintRwhile.printTree PrintRwhile.prtValT (EvalRwhile.evalProgram bcp ab0))
+    (PrintRwhile.printTree PrintRwhile.prtValT
+       (EvalRwhile.evalProgram (InvRwhile.invProgram bcp)
+          (EvalRwhile.evalProgram bcp ab0)));
   (* execution-cost (Jones-optimality dimension): the fp1 residual runs in fewer
    * evalCom steps than the interpreter, since static dispatch was resolved. *)
   let ab = VCons (VAtom (Atom "'a"), VAtom (Atom "'b")) in

@@ -580,6 +580,62 @@ let test_parse_print_roundtrip_prog () =
     Alcotest.(check program_testable) ("roundtrip prog: " ^ s) p p'
   ) inputs
 
+(* ===== Simp: copy propagation over residual moves ===== *)
+(* Motivation (2026-08-08).  Capture-on-escape in spec_av fixes the nested-pattern
+ * bound but emits `Tmp <= ('var.k)` at EVERY escape, overwhelmingly for slots
+ * that are never reused -- blowing the fp1 residual up 13x.  The captures that
+ * are pure overhead are exactly a copy: a fresh temp written once, read once,
+ * with its source untouched in between.  Removing those is plain copy
+ * propagation, and the residual is ordinary R-WHILE, so it belongs here rather
+ * than in the annotated-value domain. *)
+
+let simp_prog_body (Prog (_, _, body, _)) = body
+
+let cp s = show_program (Simp.copyprop_program (parse_program s))
+let same s = show_program (parse_program s)
+
+let test_copyprop_basic () =
+  (* T is written once and consumed once, K untouched in between -> fuse *)
+  Alcotest.(check string) "T <= K; X <= T  ==>  X <= K"
+    (same "read K; X <= K; write X")
+    (cp   "read K; T <= K; X <= T; write X")
+
+let test_copyprop_into_cons_pattern () =
+  Alcotest.(check string) "T <= K; cons A B <= T  ==>  cons A B <= K"
+    (same "read K; cons A B <= K; X <= cons A B; write X")
+    (cp   "read K; T <= K; cons A B <= T; X <= cons A B; write X")
+
+let test_copyprop_blocked_source_rewritten () =
+  (* K is written between the move and the use: the value would differ *)
+  let src = "read K; T <= K; K <= Y; X <= T; Y <= K; write X" in
+  Alcotest.(check string) "blocked when the source is rewritten in between"
+    (same src) (cp src)
+
+let test_copyprop_blocked_temp_read_twice () =
+  let src = "read K; T <= K; X <= T; Y ^= X; write X" in
+  Alcotest.(check bool) "temp read by an expression is not fused away"
+    true
+    (let out = cp "read K; T <= K; Y ^= T; X <= T; write X" in
+     ignore src; out = same "read K; T <= K; Y ^= T; X <= T; write X")
+
+let test_copyprop_preserves_semantics () =
+  (* the property that actually matters: same answer, still invertible *)
+  let src = "read K; T <= K; cons A B <= T; U <= B; X <= cons U A; write X" in
+  let p = parse_program src in
+  let p' = Simp.copyprop_program p in
+  let d = VCons (atom "'a", atom "'b") in
+  Alcotest.(check valT_testable) "copyprop preserves the answer"
+    (EvalRwhile.evalProgram p d) (EvalRwhile.evalProgram p' d);
+  let inv_of q = InvRwhile.invProgram q in
+  Alcotest.(check valT_testable) "copyprop preserves the inverse's answer"
+    (EvalRwhile.evalProgram (inv_of p) (EvalRwhile.evalProgram p d))
+    (EvalRwhile.evalProgram (inv_of p') (EvalRwhile.evalProgram p' d))
+
+let test_copyprop_is_identity_without_moves () =
+  let src = "read K; X ^= K; K ^= X; write X" in
+  Alcotest.(check string) "no single-use temp moves: unchanged"
+    (same src) (cp src)
+
 (* ===== Program-to-data file integration tests ===== *)
 
 let parse_file_program filename =
@@ -2884,6 +2940,14 @@ let () =
       Alcotest.test_case "macro minus" `Quick test_eval_macro_minus;
       Alcotest.test_case "reversibility" `Quick test_eval_reversibility;
       Alcotest.test_case "non-cleared fails" `Quick test_eval_non_cleared_fails;
+    ];
+    "simp-copyprop", [
+      Alcotest.test_case "basic move fusion" `Quick test_copyprop_basic;
+      Alcotest.test_case "fuses into a cons pattern" `Quick test_copyprop_into_cons_pattern;
+      Alcotest.test_case "blocked when source is rewritten" `Quick test_copyprop_blocked_source_rewritten;
+      Alcotest.test_case "expression read is not fused" `Quick test_copyprop_blocked_temp_read_twice;
+      Alcotest.test_case "preserves semantics and inversion" `Quick test_copyprop_preserves_semantics;
+      Alcotest.test_case "identity without single-use temps" `Quick test_copyprop_is_identity_without_moves;
     ];
     "stats", [
       Alcotest.test_case "count_nodes" `Quick test_count_nodes;
