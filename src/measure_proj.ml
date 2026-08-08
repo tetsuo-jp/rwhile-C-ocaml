@@ -241,12 +241,24 @@ let jones_self spec_av =
    * only ever been tested on loop-free programs.  Their loop control is static
    * (a counter against a literal) and their body is dynamic, so spec_av unrolls
    * them and the residual is loop-free -- the lp_p/lp_r columns show exactly
-   * that.  A DATA-DEPENDENT loop (examples/reverse.rwhile) still cannot be
-   * specialised through ri_fp3 at all; see FINDINGS_reversible_projections.md
-   * ("'error <= '41"), and the jones-self-open test that pins the failure. *)
+   * that.
+   *
+   * reverse and dyncond3 are the DYNAMIC-CONTROL subjects (2026-08-09).  They
+   * used to be unspecialisable at all ("'error <= '41"); spec_av now unrolls
+   * speculatively and rolls back to a checkpoint when the exit test turns out
+   * not to stay static, so they residualise.  Read their rows against the
+   * loop_static rows: those unroll to lp_r=0, these must KEEP their loop
+   * (lp_r>0), because there is nothing static left to unroll away.  That is
+   * also why their ratios are the worst in the table -- the residual is the
+   * interpreter's dynamic core, not a specialised program. *)
   let cases = [ "id", ab; "id2", ab; "id3", ab; "rep", ab;
                 "swap", ab; "sx_splitjoin", ab; "sx_three", ab_nil;
-                "loop_static2", ab; "loop_static3", ab ] in
+                "loop_static2", ab; "loop_static3", ab;
+                (* dyncond3's test is the bare input, and ri_fp3 compares the
+                   saved entry value against the exit assertion by bit-equality
+                   (ri.rwhile BUG 1, unfixed here), so only the canonical
+                   booleans can be self-interpreted at all. *)
+                "reverse", ab_nil; "dyncond3", VCons (VNil, VNil) ] in
   (* JONES_EXTRA=a,b,c appends ../examples/<name>.rwhile to the battery, run on
    * ('a.'b).  For trying a candidate subject without editing this file -- the
    * loop subjects above were found that way, and the next person will want to
@@ -418,6 +430,68 @@ let dyncond spec_file =
   Printf.printf "dyncond %s: comp=%d nodes ; [comp]('x)=%s (expect 'one) ; [comp](nil)=%s (expect 'two)\n"
     spec_file (cn comp) (s r1) (s r2)
 
+(* dyncontrol: what SPECULATIVE UNROLLING + ROLLBACK bought (2026-08-09).
+ *
+ * These subjects have DYNAMIC CONTROL, so before the rollback path spec_av died
+ * on all of them with `'error <= '41`.  Measured DIRECTLY (the subject is the
+ * subject -- no self-interpreter in the picture), which is the honest place to
+ * read the gain: `./measure_proj jones-self` measures the same subjects THROUGH
+ * ri_fp3, and there the residual is the interpreter's dynamic core, so its
+ * ratios say more about residualising an interpreter than about this fix.
+ *
+ * Src is the STATIC input half; the residual takes the dynamic half.  Reported:
+ * residual size, loops kept (a data-dependent loop MUST keep one -- there is
+ * nothing static left to unroll away), and, on each test input, whether the
+ * residual agrees with the source and whether its syntactic inverse round-trips
+ * (the residual has to be a legitimate R-WHILE program, not just a value). *)
+let dyncontrol spec_av =
+  let a = fun s -> VAtom (Atom s) in
+  (* Only DATA-DEPENDENT loops belong here.  dyncond3 is deliberately absent:
+     specialised directly its `if V0` tests a PARTIAL-STATIC cons, so the test is
+     statically true and the rollback path is never reached -- it exercises the
+     wall only through ri_fp3 (see `./measure_proj jones-self`). *)
+  let cases = [
+    (* name, static input half, dynamic halves to check *)
+    "reverse", a "'c", [ vlist [a "'a"; a "'b"]; vlist [a "'a"]; VNil ];
+    "length",  a "'c", [ vlist [a "'a"; a "'b"]; vlist [a "'a"]; VNil ];
+    "length2", a "'c", [ vlist [a "'a"; a "'b"]; vlist [a "'a"]; VNil ];
+  ] in
+  Printf.printf "Dynamic-control subjects, specialised DIRECTLY (no interpreter).\n";
+  Printf.printf "  resid = [spec_av]((p.('S.src))) ; [resid](d) must be [p]((src.d)).\n";
+  Printf.printf "  Every one of these raised `'error <= '41` before speculative\n";
+  Printf.printf "  unrolling + rollback (FINDINGS_reversible_projections.md sec 10).\n";
+  Printf.printf "  %-10s %8s %5s %5s %7s %7s %7s %7s %6s %5s %5s\n"
+    "program" "|resid|" "lp_p" "lp_r" "st_dir" "st_p+" "st_res" "wk_p+" "wk_res" "Jr" "ok";
+  List.iter (fun (name, src, ds) ->
+      try
+        let p = parse_prog (dir ^ "/" ^ name ^ ".rwhile") in
+        let pd = Program2DataRwhile.program2data p in
+        let comp = EvalRwhile.evalProgram spec_av (spec_in pd src) in
+        let resid = Program2DataRwhile.data2program comp in
+        let meter f = EvalRwhile.reset_steps (); EvalRwhile.reset_work ();
+          let v = f () in (v, EvalRwhile.get_steps (), EvalRwhile.get_work ()) in
+        let d0 = List.hd ds in
+        let (_, sd, _)  = meter (fun () -> EvalRwhile.evalProgram p (VCons (src, d0))) in
+        let (_, sp, wp) =
+          meter (fun () -> EvalRwhile.evalProgram (Simp.program_preserving p)
+                    (VCons (src, d0))) in
+        let (_, sr, wr) = meter (fun () -> EvalRwhile.evalProgram resid d0) in
+        let ok = List.for_all (fun d ->
+            (try EvalRwhile.evalProgram resid d
+                 = EvalRwhile.evalProgram p (VCons (src, d)) with _ -> false)) ds in
+        let inv_ok =
+          (try EvalRwhile.evalProgram (InvRwhile.invProgram resid)
+                 (EvalRwhile.evalProgram resid d0) = d0 with _ -> false) in
+        Printf.printf "  %-10s %8d %5d %5d %7d %7d %7d %7d %6d %4.2fx %5b%s\n"
+          name (cn comp) (body_loops p) (body_loops resid)
+          sd sp sr wp wr (float_of_int wr /. float_of_int wp) ok
+          (if inv_ok then "" else "  (INVERSE DOES NOT ROUND-TRIP)")
+      with e ->
+        Printf.printf "  %-10s -  (failed: %s)\n" name (Printexc.to_string e))
+    cases;
+  Printf.printf "  Jr = wk_res / wk_p+ (the reversible Jones criterion; <=1 is optimal).\n";
+  Printf.printf "  ok = the residual agrees with the source on EVERY listed input.\n"
+
 (* fp1 safety gate: check that a CANDIDATE specialiser (e.g. a spec_av_bti work
  * copy) still produces CORRECT, REVERSIBLE fp1 residuals before/after a BTI edit.
  * Criterion (hard): for op in {swap,id} and several inputs d, the residual
@@ -477,6 +551,8 @@ let () =
   if Array.length Sys.argv >= 3 && Sys.argv.(1) = "dyncond" then (dyncond Sys.argv.(2); exit 0);
   if Array.length Sys.argv >= 2 && Sys.argv.(1) = "jones" then
     jones (parse_prog (dir ^ "/spec_av.rwhile"));
+  if Array.length Sys.argv >= 2 && Sys.argv.(1) = "dyncontrol" then
+    (dyncontrol (parse_prog (dir ^ "/spec_av.rwhile")); exit 0);
   if Array.length Sys.argv >= 2 && Sys.argv.(1) = "jones-self" then
     jones_self (parse_prog (dir ^ "/spec_av.rwhile"));
   if Array.length Sys.argv >= 2 && Sys.argv.(1) = "garbage" then garbage ();
