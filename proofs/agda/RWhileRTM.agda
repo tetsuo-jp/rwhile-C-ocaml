@@ -53,6 +53,7 @@ open import Data.Bool using (Bool; true; false; if_then_else_)
 open import Data.Maybe using (Maybe; just; nothing)
 open import Data.Product using (_×_; _,_; Σ-syntax)
 open import Relation.Nullary using (¬_)
+open import Data.Empty using (⊥; ⊥-elim)
 open import Relation.Binary.PropositionalEquality
   using (_≡_; refl; sym; trans; cong; cong₂; subst)
 
@@ -114,6 +115,70 @@ consNB b s (x ∷ r) = s ∷ x ∷ r
 movel : ℕ → Tape → Tape
 movel b ([]     , s , r) = []  , b  , consNB b s r
 movel b (s' ∷ l , s , r) = l   , s' , consNB b s r
+
+-- Reading movel as "pop from l, push onto r" — which is exactly Fig. 2c,
+-- `MOVEL((L S R)) ≡ PUSH(S,R) ; POP(S,L)`.  An empty left half-tape pops a
+-- blank, which is the first clause of movel.
+popHead : ℕ → List ℕ → ℕ
+popHead b []      = b
+popHead b (y ∷ _) = y
+
+popTail : List ℕ → List ℕ
+popTail []       = []
+popTail (_ ∷ l0) = l0
+
+movel-pop-push : ∀ b l x r
+               → movel b (l , x , r) ≡ (popTail l , popHead b l , consNB b x r)
+movel-pop-push b []      x r = refl
+movel-pop-push b (y ∷ l) x r = refl
+
+------------------------------------------------------------------------
+-- The canonicity invariant on half-tapes: NO TRAILING BLANK.
+--
+-- The letter writes configurations in Q × ((Σ∖{b})* × Σ × (Σ∖{b})*).  What
+-- the construction actually needs — and what movel actually preserves — is
+-- weaker: a half-tape must not END in a blank.  (Blank-freeness everywhere
+-- is NOT preserved: moving left over a blank under the head pushes that
+-- blank onto a non-empty right half-tape, which is a legitimate tape.)
+--
+-- The invariant is what makes POP's exit assertion hold: `encL l` can only
+-- be (b̄ . nil) when l is the single blank, which this rules out.
+
+data NoTrailB (b : ℕ) : List ℕ → Set where
+  nt-[] : NoTrailB b []
+  nt-1  : ∀ {x} → ¬ (x ≡ b) → NoTrailB b (x ∷ [])
+  nt-∷  : ∀ {x y l} → NoTrailB b (y ∷ l) → NoTrailB b (x ∷ y ∷ l)
+
+tf→⊥ : true ≡ false → ⊥
+tf→⊥ ()
+
+eqℕ-false : ∀ m n → ¬ (m ≡ n) → eqℕ m n ≡ false
+eqℕ-false zero    zero    ne = ⊥-elim (ne refl)
+eqℕ-false zero    (suc n) ne = refl
+eqℕ-false (suc m) zero    ne = refl
+eqℕ-false (suc m) (suc n) ne = eqℕ-false m n (λ e → ne (cong suc e))
+
+eqℕ-false-inv : ∀ {m n} → eqℕ m n ≡ false → ¬ (m ≡ n)
+eqℕ-false-inv {m} {n} e q =
+  tf→⊥ (trans (sym (subst (λ z → eqℕ z n ≡ true) (sym q) (eqℕ-refl n))) e)
+
+-- consNB preserves it: pushing onto a non-empty half-tape keeps the old
+-- last symbol, and pushing onto the empty one either drops the blank or
+-- leaves a single non-blank symbol.
+consNB-nt : ∀ b x l → NoTrailB b l → NoTrailB b (consNB b x l)
+consNB-nt b x (y ∷ l) nt = nt-∷ nt
+consNB-nt b x []      nt = go (eqℕ x b) refl
+  where
+  go : ∀ u → eqℕ x b ≡ u → NoTrailB b (consNB b x [])
+  go true  e rewrite e = nt-[]
+  go false e rewrite e = nt-1 (eqℕ-false-inv e)
+
+-- popping preserves it too (a suffix of a list with no trailing blank has
+-- none either)
+popTail-nt : ∀ b l → NoTrailB b l → NoTrailB b (popTail l)
+popTail-nt b []           nt        = nt-[]
+popTail-nt b (x ∷ [])     (nt-1 _)  = nt-[]
+popTail-nt b (x ∷ y ∷ l)  (nt-∷ nt) = nt
 
 -- One computation step (Fig. 1 of the letter).  Note that the → case is
 -- given by the CONVERSE of movel, exactly as in the letter — that is what
@@ -199,6 +264,17 @@ vTmp = 5        -- scratch: the suffix (s̄ . r̄), used while splitting T
 vW   = 6        -- scratch: PUSH/POP's working cell
 vIn  = 7        -- the program's input  R
 vOut = 8        -- the program's output R'
+
+------------------------------------------------------------------------
+-- 4b.  What it means for a store to hold a configuration.
+
+HoldsConf : Conf → Store → Set
+HoldsConf (q , t) σ = (get σ vQ ≡ atm q) × (get σ vT ≡ encT t)
+
+Scratch-nil : Store → Set
+Scratch-nil σ = (get σ vL ≡ nil) × (get σ vS ≡ nil) × (get σ vR ≡ nil)
+              × (get σ vTmp ≡ nil) × (get σ vW ≡ nil)
+
 
 ------------------------------------------------------------------------
 -- 5.  `q <= r` for the tape triple, as the local/delocal idiom.
@@ -668,6 +744,166 @@ module Push (b s stk w : ℕ)
     exit : evalT τ5 (eqE (var stk) (cst nil)) ≡ just false
     exit = testEq τ5 v nil g5stk
 
+  ------------------------------------------------------------------------
+  -- POP, the inverse of PUSH, run FORWARDS.
+  --
+  -- `popC = inv pushC` normalises to the same six commands in the opposite
+  -- order (left-nested, since `inv (c ⨾ d) = inv d ⨾ inv c`), with the
+  -- conditional's entry and exit tests exchanged.  Run forwards from
+  -- STK = l̄ it delivers S = the head symbol and STK = the tail — where an
+  -- EMPTY half-tape pops a BLANK, which is the first clause of movel.
+  --
+  -- The exit assertion of the normalisation step is `STK =? (b̄ . nil)`, and
+  -- in the else-branch it must be FALSE.  That is exactly where NoTrailB is
+  -- needed: without it the half-tape [b] would make the assertion true and
+  -- the program would be stuck.
+
+  testEqAt : ∀ (τ : Store) (u c : V) → get τ stk ≡ u
+           → evalT τ (eqE (var stk) (cst c)) ≡ just (eqV u c)
+  testEqAt τ u c h rewrite h = cong just (isTrue-boolV (eqV u c))
+
+  private
+    ifFF : ∀ (u : Bool) → (if u then false else false) ≡ false
+    ifFF true  = refl
+    ifFF false = refl
+
+  -- the five assignments after the normalisation step
+  module PopTail (π : Store) (x : ℕ) (l₀ : List ℕ)
+                 (pstk : get π stk ≡ atm x ∙ encL l₀)
+                 (ps : get π s ≡ nil) (pw : get π w ≡ nil) where
+    v : V
+    v = atm x ∙ encL l₀
+
+    π1 π2 π3 π4 π5 : Store
+    π1 = set π  w   v
+    π2 = set π1 stk nil
+    π3 = set π2 stk (encL l₀)
+    π4 = set π3 s   (atm x)
+    π5 = set π4 w   nil
+
+    g1w : get π1 w ≡ v
+    g1w = get-set-≡ π w v
+    g1stk : get π1 stk ≡ v
+    g1stk = trans (get-set-≢ π w stk v w≢stk) pstk
+    g2w : get π2 w ≡ v
+    g2w = trans (get-set-≢ π1 stk w nil stk≢w) g1w
+    g2stk : get π2 stk ≡ nil
+    g2stk = get-set-≡ π1 stk nil
+    g3w : get π3 w ≡ v
+    g3w = trans (get-set-≢ π2 stk w (encL l₀) stk≢w) g2w
+    g3stk : get π3 stk ≡ encL l₀
+    g3stk = get-set-≡ π2 stk (encL l₀)
+    g3s : get π3 s ≡ nil
+    g3s = trans (get-set-≢ π2 stk s (encL l₀) stk≢s)
+          (trans (get-set-≢ π1 stk s nil stk≢s)
+                 (trans (get-set-≢ π w s v w≢s) ps))
+    g4w : get π4 w ≡ v
+    g4w = trans (get-set-≢ π3 s w (atm x) s≢w) g3w
+    g4s : get π4 s ≡ atm x
+    g4s = get-set-≡ π3 s (atm x)
+    g4stk : get π4 stk ≡ encL l₀
+    g4stk = trans (get-set-≢ π3 s stk (atm x) s≢stk) g3stk
+
+    g5s : get π5 s ≡ atm x
+    g5s = trans (get-set-≢ π4 w s nil w≢s) g4s
+    g5stk : get π5 stk ≡ encL l₀
+    g5stk = trans (get-set-≢ π4 w stk nil w≢stk) g4stk
+    g5w : get π5 w ≡ nil
+    g5w = get-set-≡ π4 w nil
+
+    frameP : ∀ y → ¬ (y ≡ s) → ¬ (y ≡ stk) → ¬ (y ≡ w) → get π5 y ≡ get π y
+    frameP y ys ystk yw =
+      trans (get-set-≢ π4 w y nil (λ e → yw (sym e)))
+      (trans (get-set-≢ π3 s y (atm x) (λ e → ys (sym e)))
+      (trans (get-set-≢ π2 stk y (encL l₀) (λ e → ystk (sym e)))
+      (trans (get-set-≢ π1 stk y nil (λ e → ystk (sym e)))
+             (get-set-≢ π w y v (λ e → yw (sym e))))))
+
+    p5 : (w ^= opd (var stk)) ⊢ π ⇒ π1 ∣ 1
+    p5 = e-ass (cong just pstk)
+               (subst (λ z → rupd z v ≡ just v) (sym pw) refl)
+    p4 : (stk ^= opd (var w)) ⊢ π1 ⇒ π2 ∣ 1
+    p4 = e-ass (cong just g1w)
+               (subst (λ z → rupd z v ≡ just nil) (sym g1stk) (rupd-self v))
+    p3 : (stk ^= tlE (var w)) ⊢ π2 ⇒ π3 ∣ 1
+    p3 = e-ass (subst (λ z → tlM z ≡ just (encL l₀)) (sym g2w) refl)
+               (subst (λ z → rupd z (encL l₀) ≡ just (encL l₀)) (sym g2stk) refl)
+    p2 : (s ^= hdE (var w)) ⊢ π3 ⇒ π4 ∣ 1
+    p2 = e-ass (subst (λ z → hdM z ≡ just (atm x)) (sym g3w) refl)
+               (subst (λ z → rupd z (atm x) ≡ just (atm x)) (sym g3s) refl)
+    p1 : (w ^= cns (var s) (var stk)) ⊢ π4 ⇒ π5 ∣ 1
+    p1 = e-ass (cong just (cong₂ _∙_ g4s g4stk))
+               (subst (λ z → rupd z v ≡ just nil) (sym g4w) (rupd-self v))
+
+    tail-run : ∀ {ρ k}
+             → cond (eqE (var stk) (cst nil))
+                    (stk ^= opd (cst (atm b ∙ nil))) skip
+                    (eqE (var stk) (cst (atm b ∙ nil))) ⊢ ρ ⇒ π ∣ k
+             → popC b s stk w ⊢ ρ ⇒ π5 ∣ suc (suc (suc (suc (suc (k + 1) + 1) + 1) + 1) + 1)
+    tail-run dc = e-seq (e-seq (e-seq (e-seq (e-seq dc p5) p4) p3) p2) p1
+
+  PopSpec : Store → List ℕ → Set
+  PopSpec σ l =
+    Σ[ σ′ ∈ Store ] Σ[ k ∈ ℕ ]
+      ( (popC b s stk w ⊢ σ ⇒ σ′ ∣ k)
+      × (get σ′ s ≡ atm (popHead b l))
+      × (get σ′ stk ≡ encL (popTail l))
+      × (get σ′ w ≡ nil)
+      × (∀ y → ¬ (y ≡ s) → ¬ (y ≡ stk) → ¬ (y ≡ w) → get σ′ y ≡ get σ y) )
+
+  pop-sound : ∀ σ l → NoTrailB b l
+    → get σ s ≡ nil → get σ stk ≡ encL l → get σ w ≡ nil → PopSpec σ l
+
+  -- (a) empty half-tape: the normalisation step RESTORES the blank that PUSH
+  --     dropped, and the pop then delivers it.
+  pop-sound σ [] nt-[] hs hstk hw =
+      π5 , _ , tail-run (e-then entry (e-ass refl setv) exit)
+    , g5s , g5stk , g5w
+    , (λ y ys ystk yw → trans (frameP y ys ystk yw)
+                              (get-set-≢ σ stk y (atm b ∙ nil) (λ e → ystk (sym e))))
+    where
+    π : Store
+    π = set σ stk (atm b ∙ nil)
+    open PopTail π b [] (get-set-≡ σ stk (atm b ∙ nil))
+                        (trans (get-set-≢ σ stk s (atm b ∙ nil) stk≢s) hs)
+                        (trans (get-set-≢ σ stk w (atm b ∙ nil) stk≢w) hw)
+    entry : evalT σ (eqE (var stk) (cst nil)) ≡ just true
+    entry = testEqAt σ nil nil hstk
+    setv : rupd (get σ stk) (atm b ∙ nil) ≡ just (atm b ∙ nil)
+    setv = subst (λ z → rupd z (atm b ∙ nil) ≡ just (atm b ∙ nil)) (sym hstk) refl
+    exit : evalT π (eqE (var stk) (cst (atm b ∙ nil))) ≡ just true
+    exit = trans (testEqAt π (atm b ∙ nil) (atm b ∙ nil) (get-set-≡ σ stk (atm b ∙ nil)))
+                 (cong just (eqV-refl (atm b ∙ nil)))
+
+  -- (b) a single symbol: NoTrailB says it is not the blank, which is what
+  --     makes the else-branch's exit assertion false.
+  pop-sound σ (y ∷ []) (nt-1 y≢b) hs hstk hw =
+      π5 , _ , tail-run (e-else entry e-skip exit)
+    , g5s , g5stk , g5w , frameP
+    where
+    open PopTail σ y [] hstk hs hw
+    entry : evalT σ (eqE (var stk) (cst nil)) ≡ just false
+    entry = testEqAt σ (atm y ∙ nil) nil hstk
+    eqF : eqV (atm y ∙ nil) (atm b ∙ nil) ≡ false
+    eqF rewrite eqℕ-false y b y≢b = refl
+    exit : evalT σ (eqE (var stk) (cst (atm b ∙ nil))) ≡ just false
+    exit = trans (testEqAt σ (atm y ∙ nil) (atm b ∙ nil) hstk) (cong just eqF)
+
+  -- (c) two or more symbols: the tail is a cons, so the assertion is false
+  --     whatever the head symbol is.
+  pop-sound σ (y ∷ z ∷ l1) (nt-∷ nt) hs hstk hw =
+      π5 , _ , tail-run (e-else entry e-skip exit)
+    , g5s , g5stk , g5w , frameP
+    where
+    open PopTail σ y (z ∷ l1) hstk hs hw
+    entry : evalT σ (eqE (var stk) (cst nil)) ≡ just false
+    entry = testEqAt σ (atm y ∙ (atm z ∙ encL l1)) nil hstk
+    eqF : eqV (atm y ∙ (atm z ∙ encL l1)) (atm b ∙ nil) ≡ false
+    eqF = ifFF (eqℕ y b)
+    exit : evalT σ (eqE (var stk) (cst (atm b ∙ nil))) ≡ just false
+    exit = trans (testEqAt σ (atm y ∙ (atm z ∙ encL l1)) (atm b ∙ nil) hstk)
+                 (cong just eqF)
+
 ------------------------------------------------------------------------
 -- 7.  MOVEL and MOVER (Fig. 2c).
 --
@@ -679,6 +915,52 @@ movelC b = unpackT ⨾ pushC b vS vR vW ⨾ popC b vS vL vW ⨾ packT
 
 moverC : ℕ → Cmd
 moverC b = inv (movelC b)
+
+------------------------------------------------------------------------
+-- 7b.  MOVEL IS CORRECT: it computes the letter's `movel`.
+--
+--   MOVEL((L S R)) ≡ PUSH(S,R) ; POP(S,L)
+--
+-- and `movel b (l,x,r) = (popTail l , popHead b l , consNB b x r)`
+-- (movel-pop-push), so the two stack operations are exactly the two halves
+-- of one head move.  The left half-tape must have no trailing blank; that is
+-- what POP needs.
+
+movel-sound : ∀ b σ l x r
+  → NoTrailB b l
+  → get σ vT ≡ encT (l , x , r) → Scratch-nil σ
+  → Σ[ σ′ ∈ Store ] Σ[ k ∈ ℕ ]
+      ( (movelC b ⊢ σ ⇒ σ′ ∣ k)
+      × (get σ′ vT ≡ encT (movel b (l , x , r)))
+      × Scratch-nil σ′
+      × (∀ y → ¬ (y ≡ vT) → ¬ (y ≡ vL) → ¬ (y ≡ vS) → ¬ (y ≡ vR)
+             → ¬ (y ≡ vTmp) → ¬ (y ≡ vW) → get σ′ y ≡ get σ y) )
+movel-sound b σ l x r ntl hT (hL , hS , hR , hTmp , hW)
+  with unpack-sound σ l x r hT hL hS hR hTmp
+... | σ₁ , _ , dU , g1L , g1S , g1R , g1T , g1Tmp , f1
+  with Push.push-sound b vS vR vW (λ ()) (λ ()) (λ ())
+         σ₁ x r g1S g1R (trans (f1 vW (λ ()) (λ ()) (λ ()) (λ ()) (λ ())) hW)
+... | σ₂ , _ , dPush , p2S , p2R , p2W , f2
+  with Push.pop-sound b vS vL vW (λ ()) (λ ()) (λ ())
+         σ₂ l ntl p2S (trans (f2 vL (λ ()) (λ ()) (λ ())) g1L) p2W
+... | σ₃ , _ , dPop , p3S , p3L , p3W , f3
+  with pack-sound σ₃ (popTail l) (popHead b l) (consNB b x r)
+         p3L p3S
+         (trans (f3 vR (λ ()) (λ ()) (λ ())) p2R)
+         (trans (f3 vT (λ ()) (λ ()) (λ ()))
+                (trans (f2 vT (λ ()) (λ ()) (λ ())) g1T))
+         (trans (f3 vTmp (λ ()) (λ ()) (λ ()))
+                (trans (f2 vTmp (λ ()) (λ ()) (λ ())) g1Tmp))
+... | σ₄ , _ , dPack , g4T , g4L , g4S , g4R , g4Tmp , f4 =
+    σ₄ , _
+  , e-seq dU (e-seq dPush (e-seq dPop dPack))
+  , subst (λ z → get σ₄ vT ≡ encT z) (sym (movel-pop-push b l x r)) g4T
+  , (g4L , g4S , g4R , g4Tmp
+    , trans (f4 vW (λ ()) (λ ()) (λ ()) (λ ()) (λ ())) p3W)
+  , (λ y yT yL yS yR yTmp yW →
+        trans (f4 y yT yL yS yR yTmp)
+        (trans (f3 y yS yL yW)
+        (trans (f2 y yS yR yW) (f1 y yT yL yS yR yTmp))))
 
 ------------------------------------------------------------------------
 -- 8.  The translation of one rule (Fig. 3).
@@ -706,16 +988,6 @@ ruleC b (rsym q₁ s₁ s₂ q₂) =
 ruleC b (rmov q₁ mvL q₂) = movelC b ⨾ setState q₁ q₂
 ruleC b (rmov q₁ mvS q₂) = setState q₁ q₂
 ruleC b (rmov q₁ mvR q₂) = moverC b ⨾ setState q₁ q₂
-
-------------------------------------------------------------------------
--- 9.  What it means for a store to hold a configuration.
-
-HoldsConf : Conf → Store → Set
-HoldsConf (q , t) σ = (get σ vQ ≡ atm q) × (get σ vT ≡ encT t)
-
-Scratch-nil : Store → Set
-Scratch-nil σ = (get σ vL ≡ nil) × (get σ vS ≡ nil) × (get σ vR ≡ nil)
-              × (get σ vTmp ≡ nil) × (get σ vW ≡ nil)
 
 ------------------------------------------------------------------------
 -- 9b.  LEMMA 1, for the rules that do not move the head.
@@ -816,6 +1088,27 @@ rule-sym-sound b q₁ s₁ s₂ q₂ σ l r hQ hT (hL , hS , hR , hTmp , hW)
              (trans (get-set-≢ σ₂ vS vW (atm s₂) (λ ()))
              (trans (get-set-≢ σ₁ vS vW nil (λ ()))
                     (trans (f1 vW (λ ()) (λ ()) (λ ()) (λ ()) (λ ())) hW)))
+
+-- (q₁,←,q₂): move the head left, then change the state.
+rule-left-sound : ∀ b q₁ q₂ σ l x r
+  → NoTrailB b l
+  → get σ vQ ≡ atm q₁ → get σ vT ≡ encT (l , x , r) → Scratch-nil σ
+  → Σ[ σ′ ∈ Store ] Σ[ k ∈ ℕ ]
+      ( (ruleC b (rmov q₁ mvL q₂) ⊢ σ ⇒ σ′ ∣ k)
+      × (get σ′ vQ ≡ atm q₂)
+      × (get σ′ vT ≡ encT (movel b (l , x , r)))
+      × Scratch-nil σ′ )
+rule-left-sound b q₁ q₂ σ l x r ntl hQ hT sn
+  with movel-sound b σ l x r ntl hT sn
+... | σ₁ , _ , dM , g1T , (g1L , g1S , g1R , g1Tmp , g1W) , f1
+  with setState-sound q₁ q₂ σ₁
+         (trans (f1 vQ (λ ()) (λ ()) (λ ()) (λ ()) (λ ()) (λ ())) hQ)
+... | σ₂ , _ , dS , g2Q , f2 =
+    σ₂ , _ , e-seq dM dS , g2Q
+  , trans (f2 vT (λ ())) g1T
+  , ( trans (f2 vL (λ ())) g1L , trans (f2 vS (λ ())) g1S
+    , trans (f2 vR (λ ())) g1R , trans (f2 vTmp (λ ())) g1Tmp
+    , trans (f2 vW (λ ())) g1W )
 
 ------------------------------------------------------------------------
 -- 10.  LEMMA 1 of the letter, as a statement.
