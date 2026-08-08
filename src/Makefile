@@ -44,6 +44,14 @@ dump_vars_hy: $(COMMON) dump_vars_hy.ml
 measure_proj: BNFC_Util.ml AbsRwhile.ml PrintRwhile.ml ParRwhile.mli ParRwhile.ml LexRwhile.ml Desugar.ml InvRwhile.ml Subst.ml MacroRwhile.ml EvalRwhile.ml Optimize.ml Program2DataRwhile.ml Core.ml Simp.ml measure_proj.ml
 	$(OCAMLC) -o $@ $^
 
+# fp3probe: iterate on the open fp1-via-ri_fp3 bug.  For each source it computes
+# comp = [spec_av]((ri_fp3 . src)), reports the residual's node count, optionally
+# prints it (FP3PROBE_SHOW=1), then runs it and compares with direct evaluation.
+#   ./fp3probe                      the six standard sources
+#   FP3PROBE_SHOW=1 ./fp3probe ri_fp3 swap
+fp3probe: BNFC_Util.ml AbsRwhile.ml PrintRwhile.ml ParRwhile.mli ParRwhile.ml LexRwhile.ml Desugar.ml InvRwhile.ml Subst.ml MacroRwhile.ml EvalRwhile.ml Optimize.ml Program2DataRwhile.ml Core.ml fp3probe.ml
+	$(OCAMLC) -o $@ $^
+
 # specsize: size spec_av's AV store (FpN) to a subject program's variable count.
 specsize: BNFC_Util.ml AbsRwhile.ml PrintRwhile.ml ParRwhile.mli ParRwhile.ml LexRwhile.ml Desugar.ml InvRwhile.ml Subst.ml MacroRwhile.ml EvalRwhile.ml Optimize.ml Program2DataRwhile.ml Core.ml specsize.ml
 	$(OCAMLC) -o $@ $^

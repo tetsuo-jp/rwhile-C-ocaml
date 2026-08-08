@@ -34,6 +34,9 @@ src/test-suite
 src/d2p
 src/specsize
 src/measure_proj
+src/fp3probe
+src/dump_vars
+src/dump_vars_hy
 
 # Editor / OS
 *~
