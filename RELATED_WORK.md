@@ -50,6 +50,86 @@
 
 → 第2/第3射影・cogen の概念自体は古典では既知。本研究の差分は「**可逆領域での実現**」。
 
+## 1.5. Jones 最適性の定義と、可逆側で基準を変える理由
+
+本研究は「可逆版 Jones 最適性（`残余 ≤ p⁺`）」を新たに定める。ここは査読で必ず
+「最適性の基準を都合よく弱めたのではないか」と問われるので、古典の定義を原典で
+確認したうえで、**何を変えたのか／変えていないのか**を明示する。
+
+### 古典の定義（JGS 1993, 6章 6.4 節, Definition 6.4）
+
+原典（Jones-Gomard-Sestoft 1993）の 6 章は "Efficiency, Speedup, and Optimality"、
+6.4 節が "Optimality of mix"。定義は現物で確認した（PDF を Paperpile から取得、
+6.4 節の Definition 6.4）：
+
+> **Definition 6.4** mix is optimal provided
+> t<sub>p'</sub>(d) ≤ t<sub>p</sub>(d)
+> for all p, d ∈ D, where sint is a self-interpreter and p' = [[mix]] sint p
+
+押さえるべき点は 3 つ：
+
+1. **測るのは時間 t であって、プログラムサイズではない。** 本研究の実測が
+   `-steps`／`-work`（実行時に踏んだ命令ノード／比較で調べた値ノード）で報告され、
+   `|resid|` を主指標にしていないのは、この定義に合わせているため。
+2. **比較対象は「素の p」。** 自己インタプリタ sint を p に特殊化した残余 p' が、
+   元の p 以上に速くなければならない。解釈オーバヘッドが完全に消えたことの
+   機械独立な言い換えになっている。
+3. **JGS 自身がこの定義の弱点を明記している。** mix が「第 1 引数が sint に等しい
+   ときだけ第 2 引数をそのまま返し、他では自明な部分評価をする」ように作られていれば、
+   mix 方程式を保ったまま定義上は最適と判定されてしまう（原文 "can be `cheated'"）。
+   最適性の定義は昔から「騙されうる」ものとして扱われてきた。
+
+用語の来歴：問題提起は Jones 1988（New Generation Computing 6, pp. 291-302）。
+"Jones optimality" という**名前**を与えたのは Makholm 2000（SAIG）で、
+Glück 2002（ASIA-PEPM）と Glück 2008（HOSC）が「どの特殊化器がどこまで強いか」の
+階層として精密化した。Jones 2004（Science of Computer Programming）は
+インタプリタ特殊化の側からこの基準を再検討している。
+
+### 可逆側で基準を変える必要がある理由
+
+可逆言語の自己インタプリタは**プログラム保存**でなければならない。入力を消せない
+以上、解釈し終えた時点でプログラムの符号 ⌜p⌝ は出力側に残る（本リポの
+`ri.rwhile` の主ループについては Agda で機械検証済み：`RWhileSIMach` の
+`sim`・`machine-linear`。`AGDA_CORRESPONDENCE.md` および `LINEAR_TIME_SI.md` を参照）。
+
+したがって fp1 の残余 p' は「d を計算する」だけでなく「⌜p⌝ も出力する」義務を負う。
+ところが**素の p はその義務を果たさない**。この状態で古典の
+`t_{p'}(d) ≤ t_p(d)` を課すと、可逆性が強制した余分な出力ぶんを残余の側にだけ
+課金することになり、特殊化器の良し悪しではなく**射影の定義そのものを測ってしまう**。
+
+そこで、同じ義務を果たす最小のプログラム
+
+  **p⁺**：`[p⁺](d) = (p2d p . [p](d))`（実装は `Simp.program_preserving`）
+
+を比較対象に置き、可逆版の基準を `t_{p'}(d) ≤ t_{p⁺}(d)` とする。
+
+実測（`./measure_proj jones-self`、被験 7 本）：
+**work 指標では 7/7 で成立**（比 0.97-1.00x）、**steps 指標では不成立**
+（p⁺ の 1.4-5.0 倍）。詳細と但し書きは `FINDINGS_reversible_projections.md`。
+
+### 「弱めた」のではなく「測る量を正した」（この区別を本文に書くこと）
+
+p⁺ への置き換えは、**JGS の cheat 耐性を上げるものではない**。mix が sint を
+特別扱いすれば、p⁺ 基準も同じように騙せる。両者は別の問題に対処している：
+
+| | 何が問題か | 対処 |
+|---|---|---|
+| JGS の cheat | **特殊化器**が sint を特別扱いできる | 未解決（定義の既知の限界） |
+| 本研究の p⁺ | **比較対象**が残余と同じ義務を負っていない | 比較対象を p から p⁺ へ |
+
+つまり本研究の主張は「基準を緩めた」ではなく「**同じ義務を負う者どうしを比べる
+ようにした**」である。逆に、可逆設定で素の p を基準に据えた場合、どんなに良い
+特殊化器でも原理的に最適になれない（⌜p⌝ の出力ぶんが必ず超過する）ことを
+指摘できると、p⁺ の必然性がさらに強くなる。**この「原理的に到達不能」の主張は
+まだ機械検証していない。今後の課題**（`RESEARCH_ROADMAP.md` の④）。
+
+### 未確認（要確認）
+
+- 可逆部分評価の先行研究（Mogensen 2011、PEPM 2024）が最適性の基準を
+  どう置いているか、**原典で未確認**。素の p を基準にしているなら本研究の
+  問題提起はそのまま差分になり、既に別の調整をしているなら比較が要る。
+- Glück 2008 の「BTI-universal specializer」の階層に、可逆版がどこに入るかは未検討。
+
 ## 2. 可逆部分評価（最も近い先行研究）— fp1＋反転射影どまり
 
 - **Mogensen, "Partial evaluation of the reversible language Janus"（PEPM 2011）**
@@ -132,5 +212,24 @@
 - *Bootstrapping Compiler Generators from Partial Evaluators*, 2012 — https://link.springer.com/chapter/10.1007/978-3-642-29709-0_13
 - Glück, Kaarsgaard, Yokoyama, *From reversible programming languages to reversible metalanguages*, TCS 920, 2022
 - Glück & Yokoyama, *Reversible computing from a programming language perspective*, TCS 953, 2023
+### Jones 最適性（§1.5）— 2026-08-09 に一次情報源で裏取り済み
+
+Semantic Scholar / DBLP で著者・年・掲載誌・DOI を確認した。書籍は現物 PDF
+（Paperpile）で 6 章 6.4 節・Definition 6.4 の文面まで確認済み。
+
+- Jones, Gomard, Sestoft, *Partial Evaluation and Automatic Program Generation*,
+  Prentice Hall, 1993 — 6章 "Efficiency, Speedup, and Optimality"、6.4 節
+  "Optimality of mix"、Definition 6.4。dblp: books/daglib/0072559（DOI なし）
+- Jones, *Challenging Problems in Partial Evaluation and Mixed Computation*,
+  New Generation Computing 6, pp. 291-302, 1988 — doi:10.1007/BF03037143
+- Makholm, *On Jones-Optimal Specialization for Strongly Typed Languages*,
+  SAIG 2000 — doi:10.1007/3-540-45350-4_11（"Jones optimality" の命名）
+- Glück, *Jones optimality, binding-time improvements, and the strength of
+  program specializers*, ASIA-PEPM 2002 — doi:10.1145/568173.568175
+- Glück, *An investigation of Jones optimality and BTI-universal specializers*,
+  Higher-Order and Symbolic Computation, 2008 — doi:10.1007/s10990-008-9033-5
+- Jones, *Transformation by interpreter specialisation*,
+  Science of Computer Programming, 2004 — doi:10.1016/j.scico.2004.03.010
+
 - dblp: Tetsuo Yokoyama — https://dblp.org/pid/96/6619.html
 - dblp: Torben Æ. Mogensen — https://dblp.org/pid/19/4483.html
