@@ -227,6 +227,221 @@ packT : Cmd
 packT = inv unpackT
 
 ------------------------------------------------------------------------
+-- 5b.  unpackT AND packT ARE CORRECT.
+--
+-- These are the two halves of the letter's `(L S R) <= T` and `T <= (L S R)`.
+-- Each is six assignments; each assignment either SETS a nil variable or
+-- CLEARS one holding exactly the value named on the right, and in none of
+-- them does the target occur in the expression.  The variables are concrete
+-- numerals, so every distinctness side condition closes by `λ ()`.
+
+unpack-sound : ∀ σ l x r
+  → get σ vT ≡ encT (l , x , r)
+  → get σ vL ≡ nil → get σ vS ≡ nil → get σ vR ≡ nil → get σ vTmp ≡ nil
+  → Σ[ σ′ ∈ Store ] Σ[ k ∈ ℕ ]
+      ( (unpackT ⊢ σ ⇒ σ′ ∣ k)
+      × (get σ′ vL ≡ encL l) × (get σ′ vS ≡ atm x) × (get σ′ vR ≡ encL r)
+      × (get σ′ vT ≡ nil) × (get σ′ vTmp ≡ nil)
+      × (∀ y → ¬ (y ≡ vT) → ¬ (y ≡ vL) → ¬ (y ≡ vS) → ¬ (y ≡ vR) → ¬ (y ≡ vTmp)
+             → get σ′ y ≡ get σ y) )
+unpack-sound σ l x r hT hL hS hR hTmp =
+    υ6 , _
+  , e-seq d1 (e-seq d2 (e-seq d3 (e-seq d4 (e-seq d5 d6))))
+  , g6L , g6S , g6R , g6T , get-set-≡ υ5 vTmp nil , frame
+  where
+  A B : V
+  A = encL l
+  B = atm x ∙ encL r
+
+  υ1 υ2 υ3 υ4 υ5 υ6 : Store
+  υ1 = set σ  vL   A
+  υ2 = set υ1 vTmp B
+  υ3 = set υ2 vT   nil
+  υ4 = set υ3 vS   (atm x)
+  υ5 = set υ4 vR   (encL r)
+  υ6 = set υ5 vTmp nil
+
+  g1T : get υ1 vT ≡ A ∙ B
+  g1T = trans (get-set-≢ σ vL vT A (λ ())) hT
+  g1Tmp : get υ1 vTmp ≡ nil
+  g1Tmp = trans (get-set-≢ σ vL vTmp A (λ ())) hTmp
+  g1L : get υ1 vL ≡ A
+  g1L = get-set-≡ σ vL A
+
+  g2T : get υ2 vT ≡ A ∙ B
+  g2T = trans (get-set-≢ υ1 vTmp vT B (λ ())) g1T
+  g2L : get υ2 vL ≡ A
+  g2L = trans (get-set-≢ υ1 vTmp vL B (λ ())) g1L
+  g2Tmp : get υ2 vTmp ≡ B
+  g2Tmp = get-set-≡ υ1 vTmp B
+
+  g3Tmp : get υ3 vTmp ≡ B
+  g3Tmp = trans (get-set-≢ υ2 vT vTmp nil (λ ())) g2Tmp
+  g3S : get υ3 vS ≡ nil
+  g3S = trans (get-set-≢ υ2 vT vS nil (λ ()))
+        (trans (get-set-≢ υ1 vTmp vS B (λ ()))
+               (trans (get-set-≢ σ vL vS A (λ ())) hS))
+  g3L : get υ3 vL ≡ A
+  g3L = trans (get-set-≢ υ2 vT vL nil (λ ())) g2L
+
+  g4Tmp : get υ4 vTmp ≡ B
+  g4Tmp = trans (get-set-≢ υ3 vS vTmp (atm x) (λ ())) g3Tmp
+  g4R : get υ4 vR ≡ nil
+  g4R = trans (get-set-≢ υ3 vS vR (atm x) (λ ()))
+        (trans (get-set-≢ υ2 vT vR nil (λ ()))
+        (trans (get-set-≢ υ1 vTmp vR B (λ ()))
+               (trans (get-set-≢ σ vL vR A (λ ())) hR)))
+
+  g5Tmp : get υ5 vTmp ≡ B
+  g5Tmp = trans (get-set-≢ υ4 vR vTmp (encL r) (λ ())) g4Tmp
+  g5S : get υ5 vS ≡ atm x
+  g5S = trans (get-set-≢ υ4 vR vS (encL r) (λ ())) (get-set-≡ υ3 vS (atm x))
+  g5R : get υ5 vR ≡ encL r
+  g5R = get-set-≡ υ4 vR (encL r)
+
+  g6L : get υ6 vL ≡ A
+  g6L = trans (get-set-≢ υ5 vTmp vL nil (λ ()))
+        (trans (get-set-≢ υ4 vR vL (encL r) (λ ()))
+               (trans (get-set-≢ υ3 vS vL (atm x) (λ ())) g3L))
+  g6S : get υ6 vS ≡ atm x
+  g6S = trans (get-set-≢ υ5 vTmp vS nil (λ ())) g5S
+  g6R : get υ6 vR ≡ encL r
+  g6R = trans (get-set-≢ υ5 vTmp vR nil (λ ())) g5R
+  g6T : get υ6 vT ≡ nil
+  g6T = trans (get-set-≢ υ5 vTmp vT nil (λ ()))
+        (trans (get-set-≢ υ4 vR vT (encL r) (λ ()))
+        (trans (get-set-≢ υ3 vS vT (atm x) (λ ())) (get-set-≡ υ2 vT nil)))
+
+  frame : ∀ y → ¬ (y ≡ vT) → ¬ (y ≡ vL) → ¬ (y ≡ vS) → ¬ (y ≡ vR) → ¬ (y ≡ vTmp)
+        → get υ6 y ≡ get σ y
+  frame y yT yL yS yR yTmp =
+    trans (get-set-≢ υ5 vTmp y nil (λ e → yTmp (sym e)))
+    (trans (get-set-≢ υ4 vR y (encL r) (λ e → yR (sym e)))
+    (trans (get-set-≢ υ3 vS y (atm x) (λ e → yS (sym e)))
+    (trans (get-set-≢ υ2 vT y nil (λ e → yT (sym e)))
+    (trans (get-set-≢ υ1 vTmp y B (λ e → yTmp (sym e)))
+           (get-set-≢ σ vL y A (λ e → yL (sym e)))))))
+
+  d1 : (vL ^= hdE (var vT)) ⊢ σ ⇒ υ1 ∣ 1
+  d1 = e-ass (subst (λ z → hdM z ≡ just A) (sym hT) refl)
+             (subst (λ z → rupd z A ≡ just A) (sym hL) refl)
+  d2 : (vTmp ^= tlE (var vT)) ⊢ υ1 ⇒ υ2 ∣ 1
+  d2 = e-ass (subst (λ z → tlM z ≡ just B) (sym g1T) refl)
+             (subst (λ z → rupd z B ≡ just B) (sym g1Tmp) refl)
+  d3 : (vT ^= cns (var vL) (var vTmp)) ⊢ υ2 ⇒ υ3 ∣ 1
+  d3 = e-ass (cong just (cong₂ _∙_ g2L g2Tmp))
+             (subst (λ z → rupd z (A ∙ B) ≡ just nil) (sym g2T) (rupd-self (A ∙ B)))
+  d4 : (vS ^= hdE (var vTmp)) ⊢ υ3 ⇒ υ4 ∣ 1
+  d4 = e-ass (subst (λ z → hdM z ≡ just (atm x)) (sym g3Tmp) refl)
+             (subst (λ z → rupd z (atm x) ≡ just (atm x)) (sym g3S) refl)
+  d5 : (vR ^= tlE (var vTmp)) ⊢ υ4 ⇒ υ5 ∣ 1
+  d5 = e-ass (subst (λ z → tlM z ≡ just (encL r)) (sym g4Tmp) refl)
+             (subst (λ z → rupd z (encL r) ≡ just (encL r)) (sym g4R) refl)
+  d6 : (vTmp ^= cns (var vS) (var vR)) ⊢ υ5 ⇒ υ6 ∣ 1
+  d6 = e-ass (cong just (cong₂ _∙_ g5S g5R))
+             (subst (λ z → rupd z B ≡ just nil) (sym g5Tmp) (rupd-self B))
+
+-- packT is `inv unpackT`, so it is the same six assignments in the opposite
+-- order (left-nested, as `inv (c ⨾ d) = inv d ⨾ inv c` builds it).
+pack-sound : ∀ σ l x r
+  → get σ vL ≡ encL l → get σ vS ≡ atm x → get σ vR ≡ encL r
+  → get σ vT ≡ nil → get σ vTmp ≡ nil
+  → Σ[ σ′ ∈ Store ] Σ[ k ∈ ℕ ]
+      ( (packT ⊢ σ ⇒ σ′ ∣ k)
+      × (get σ′ vT ≡ encT (l , x , r))
+      × (get σ′ vL ≡ nil) × (get σ′ vS ≡ nil) × (get σ′ vR ≡ nil)
+      × (get σ′ vTmp ≡ nil)
+      × (∀ y → ¬ (y ≡ vT) → ¬ (y ≡ vL) → ¬ (y ≡ vS) → ¬ (y ≡ vR) → ¬ (y ≡ vTmp)
+             → get σ′ y ≡ get σ y) )
+pack-sound σ l x r hL hS hR hT hTmp =
+    ω6 , _
+  , e-seq (e-seq (e-seq (e-seq (e-seq b1 b2) b3) b4) b5) b6
+  , g6T , get-set-≡ ω5 vL nil , g6S , g6R , g6Tmp , frame
+  where
+  A B : V
+  A = encL l
+  B = atm x ∙ encL r
+
+  ω1 ω2 ω3 ω4 ω5 ω6 : Store
+  ω1 = set σ  vTmp B
+  ω2 = set ω1 vR   nil
+  ω3 = set ω2 vS   nil
+  ω4 = set ω3 vT   (A ∙ B)
+  ω5 = set ω4 vTmp nil
+  ω6 = set ω5 vL   nil
+
+  g1Tmp : get ω1 vTmp ≡ B
+  g1Tmp = get-set-≡ σ vTmp B
+  g1R : get ω1 vR ≡ encL r
+  g1R = trans (get-set-≢ σ vTmp vR B (λ ())) hR
+  g2Tmp : get ω2 vTmp ≡ B
+  g2Tmp = trans (get-set-≢ ω1 vR vTmp nil (λ ())) g1Tmp
+  g2S : get ω2 vS ≡ atm x
+  g2S = trans (get-set-≢ ω1 vR vS nil (λ ())) (trans (get-set-≢ σ vTmp vS B (λ ())) hS)
+  g3Tmp : get ω3 vTmp ≡ B
+  g3Tmp = trans (get-set-≢ ω2 vS vTmp nil (λ ())) g2Tmp
+  g3L : get ω3 vL ≡ A
+  g3L = trans (get-set-≢ ω2 vS vL nil (λ ()))
+        (trans (get-set-≢ ω1 vR vL nil (λ ()))
+               (trans (get-set-≢ σ vTmp vL B (λ ())) hL))
+  g3T : get ω3 vT ≡ nil
+  g3T = trans (get-set-≢ ω2 vS vT nil (λ ()))
+        (trans (get-set-≢ ω1 vR vT nil (λ ()))
+               (trans (get-set-≢ σ vTmp vT B (λ ())) hT))
+  g4T : get ω4 vT ≡ A ∙ B
+  g4T = get-set-≡ ω3 vT (A ∙ B)
+  g4Tmp : get ω4 vTmp ≡ B
+  g4Tmp = trans (get-set-≢ ω3 vT vTmp (A ∙ B) (λ ())) g3Tmp
+  g5T : get ω5 vT ≡ A ∙ B
+  g5T = trans (get-set-≢ ω4 vTmp vT nil (λ ())) g4T
+  g5L : get ω5 vL ≡ A
+  g5L = trans (get-set-≢ ω4 vTmp vL nil (λ ()))
+        (trans (get-set-≢ ω3 vT vL (A ∙ B) (λ ())) g3L)
+
+  g6T : get ω6 vT ≡ A ∙ B
+  g6T = trans (get-set-≢ ω5 vL vT nil (λ ())) g5T
+  g6S : get ω6 vS ≡ nil
+  g6S = trans (get-set-≢ ω5 vL vS nil (λ ()))
+        (trans (get-set-≢ ω4 vTmp vS nil (λ ()))
+               (trans (get-set-≢ ω3 vT vS (A ∙ B) (λ ())) (get-set-≡ ω2 vS nil)))
+  g6R : get ω6 vR ≡ nil
+  g6R = trans (get-set-≢ ω5 vL vR nil (λ ()))
+        (trans (get-set-≢ ω4 vTmp vR nil (λ ()))
+        (trans (get-set-≢ ω3 vT vR (A ∙ B) (λ ()))
+               (trans (get-set-≢ ω2 vS vR nil (λ ())) (get-set-≡ ω1 vR nil))))
+  g6Tmp : get ω6 vTmp ≡ nil
+  g6Tmp = trans (get-set-≢ ω5 vL vTmp nil (λ ())) (get-set-≡ ω4 vTmp nil)
+
+  frame : ∀ y → ¬ (y ≡ vT) → ¬ (y ≡ vL) → ¬ (y ≡ vS) → ¬ (y ≡ vR) → ¬ (y ≡ vTmp)
+        → get ω6 y ≡ get σ y
+  frame y yT yL yS yR yTmp =
+    trans (get-set-≢ ω5 vL y nil (λ e → yL (sym e)))
+    (trans (get-set-≢ ω4 vTmp y nil (λ e → yTmp (sym e)))
+    (trans (get-set-≢ ω3 vT y (A ∙ B) (λ e → yT (sym e)))
+    (trans (get-set-≢ ω2 vS y nil (λ e → yS (sym e)))
+    (trans (get-set-≢ ω1 vR y nil (λ e → yR (sym e)))
+           (get-set-≢ σ vTmp y B (λ e → yTmp (sym e)))))))
+
+  b1 : (vTmp ^= cns (var vS) (var vR)) ⊢ σ ⇒ ω1 ∣ 1
+  b1 = e-ass (cong just (cong₂ _∙_ hS hR))
+             (subst (λ z → rupd z B ≡ just B) (sym hTmp) refl)
+  b2 : (vR ^= tlE (var vTmp)) ⊢ ω1 ⇒ ω2 ∣ 1
+  b2 = e-ass (subst (λ z → tlM z ≡ just (encL r)) (sym g1Tmp) refl)
+             (subst (λ z → rupd z (encL r) ≡ just nil) (sym g1R) (rupd-self (encL r)))
+  b3 : (vS ^= hdE (var vTmp)) ⊢ ω2 ⇒ ω3 ∣ 1
+  b3 = e-ass (subst (λ z → hdM z ≡ just (atm x)) (sym g2Tmp) refl)
+             (subst (λ z → rupd z (atm x) ≡ just nil) (sym g2S) (rupd-self (atm x)))
+  b4 : (vT ^= cns (var vL) (var vTmp)) ⊢ ω3 ⇒ ω4 ∣ 1
+  b4 = e-ass (cong just (cong₂ _∙_ g3L g3Tmp))
+             (subst (λ z → rupd z (A ∙ B) ≡ just (A ∙ B)) (sym g3T) refl)
+  b5 : (vTmp ^= tlE (var vT)) ⊢ ω4 ⇒ ω5 ∣ 1
+  b5 = e-ass (subst (λ z → tlM z ≡ just B) (sym g4T) refl)
+             (subst (λ z → rupd z B ≡ just nil) (sym g4Tmp) (rupd-self B))
+  b6 : (vL ^= hdE (var vT)) ⊢ ω5 ⇒ ω6 ∣ 1
+  b6 = e-ass (subst (λ z → hdM z ≡ just A) (sym g5T) refl)
+             (subst (λ z → rupd z A ≡ just nil) (sym g5L) (rupd-self A))
+
+------------------------------------------------------------------------
 -- 6.  PUSH and POP (Fig. 2c, 2d).
 --
 -- The letter writes
@@ -500,6 +715,107 @@ HoldsConf (q , t) σ = (get σ vQ ≡ atm q) × (get σ vT ≡ encT t)
 
 Scratch-nil : Store → Set
 Scratch-nil σ = (get σ vL ≡ nil) × (get σ vS ≡ nil) × (get σ vR ≡ nil)
+              × (get σ vTmp ≡ nil) × (get σ vW ≡ nil)
+
+------------------------------------------------------------------------
+-- 9b.  LEMMA 1, for the rules that do not move the head.
+--
+-- The two easy shapes of Fig. 3 are discharged here: the symbol rewrite
+--     (q₁,(s₁,s₂),q₂)  ↦  [q̄₁,(L s̄₁ R)] => [q̄₂,(L s̄₂ R)]
+-- and the stay rule
+--     (q₁,↓,q₂)        ↦  [q̄₁,T] => [q̄₂,T].
+-- The two head-moving shapes need POP, and follow in the next step.
+
+setState-sound : ∀ q₁ q₂ σ → get σ vQ ≡ atm q₁
+  → Σ[ σ′ ∈ Store ] Σ[ k ∈ ℕ ]
+      ( (setState q₁ q₂ ⊢ σ ⇒ σ′ ∣ k)
+      × (get σ′ vQ ≡ atm q₂)
+      × (∀ y → ¬ (y ≡ vQ) → get σ′ y ≡ get σ y) )
+setState-sound q₁ q₂ σ hQ =
+    set (set σ vQ nil) vQ (atm q₂) , _
+  , e-seq s1 s2
+  , get-set-≡ (set σ vQ nil) vQ (atm q₂)
+  , (λ y yq → trans (get-set-≢ (set σ vQ nil) vQ y (atm q₂) (λ e → yq (sym e)))
+                    (get-set-≢ σ vQ y nil (λ e → yq (sym e))))
+  where
+  s1 : (vQ ^= opd (cst (atm q₁))) ⊢ σ ⇒ set σ vQ nil ∣ 1
+  s1 = e-ass refl (subst (λ z → rupd z (atm q₁) ≡ just nil) (sym hQ)
+                         (rupd-self (atm q₁)))
+  s2 : (vQ ^= opd (cst (atm q₂))) ⊢ set σ vQ nil
+                                 ⇒ set (set σ vQ nil) vQ (atm q₂) ∣ 1
+  s2 = e-ass refl (subst (λ z → rupd z (atm q₂) ≡ just (atm q₂))
+                         (sym (get-set-≡ σ vQ nil)) refl)
+
+-- (q₁,↓,q₂): only the state changes.
+rule-stay-sound : ∀ b q₁ q₂ σ t
+  → get σ vQ ≡ atm q₁ → get σ vT ≡ encT t → Scratch-nil σ
+  → Σ[ σ′ ∈ Store ] Σ[ k ∈ ℕ ]
+      ( (ruleC b (rmov q₁ mvS q₂) ⊢ σ ⇒ σ′ ∣ k)
+      × (get σ′ vQ ≡ atm q₂) × (get σ′ vT ≡ encT t) × Scratch-nil σ′ )
+rule-stay-sound b q₁ q₂ σ t hQ hT (hL , hS , hR , hTmp , hW)
+  with setState-sound q₁ q₂ σ hQ
+... | σ′ , k , d , gQ , fr =
+    σ′ , k , d , gQ
+  , trans (fr vT (λ ())) hT
+  , trans (fr vL (λ ())) hL , trans (fr vS (λ ())) hS
+  , trans (fr vR (λ ())) hR , trans (fr vTmp (λ ())) hTmp
+  , trans (fr vW (λ ())) hW
+
+-- (q₁,(s₁,s₂),q₂): unpack the tape, exchange the symbol under the head by a
+-- pair of reversible assignments (the first CLEARS, the second SETS), pack it
+-- back, and change the state.
+rule-sym-sound : ∀ b q₁ s₁ s₂ q₂ σ l r
+  → get σ vQ ≡ atm q₁ → get σ vT ≡ encT (l , s₁ , r) → Scratch-nil σ
+  → Σ[ σ′ ∈ Store ] Σ[ k ∈ ℕ ]
+      ( (ruleC b (rsym q₁ s₁ s₂ q₂) ⊢ σ ⇒ σ′ ∣ k)
+      × (get σ′ vQ ≡ atm q₂) × (get σ′ vT ≡ encT (l , s₂ , r)) × Scratch-nil σ′ )
+rule-sym-sound b q₁ s₁ s₂ q₂ σ l r hQ hT (hL , hS , hR , hTmp , hW)
+  with unpack-sound σ l s₁ r hT hL hS hR hTmp
+... | σ₁ , _ , dU , g1L , g1S , g1R , g1T , g1Tmp , f1
+  with pack-sound (set (set σ₁ vS nil) vS (atm s₂)) l s₂ r
+         (trans (get-set-≢ (set σ₁ vS nil) vS vL (atm s₂) (λ ()))
+                (trans (get-set-≢ σ₁ vS vL nil (λ ())) g1L))
+         (get-set-≡ (set σ₁ vS nil) vS (atm s₂))
+         (trans (get-set-≢ (set σ₁ vS nil) vS vR (atm s₂) (λ ()))
+                (trans (get-set-≢ σ₁ vS vR nil (λ ())) g1R))
+         (trans (get-set-≢ (set σ₁ vS nil) vS vT (atm s₂) (λ ()))
+                (trans (get-set-≢ σ₁ vS vT nil (λ ())) g1T))
+         (trans (get-set-≢ (set σ₁ vS nil) vS vTmp (atm s₂) (λ ()))
+                (trans (get-set-≢ σ₁ vS vTmp nil (λ ())) g1Tmp))
+... | σ₄ , _ , dP , g4T , g4L , g4S , g4R , g4Tmp , f4
+  with setState-sound q₁ q₂ σ₄ q1-at-σ₄
+  where
+  σ₂ σ₃ : Store
+  σ₂ = set σ₁ vS nil
+  σ₃ = set σ₂ vS (atm s₂)
+  q1-at-σ₄ : get σ₄ vQ ≡ atm q₁
+  q1-at-σ₄ = trans (f4 vQ (λ ()) (λ ()) (λ ()) (λ ()) (λ ()))
+             (trans (get-set-≢ σ₂ vS vQ (atm s₂) (λ ()))
+             (trans (get-set-≢ σ₁ vS vQ nil (λ ()))
+                    (trans (f1 vQ (λ ()) (λ ()) (λ ()) (λ ()) (λ ())) hQ)))
+... | σ₅ , _ , dS , g5Q , f5 =
+    σ₅ , _
+  , e-seq dU (e-seq e1 (e-seq e2 (e-seq dP dS)))
+  , g5Q
+  , trans (f5 vT (λ ())) g4T
+  , trans (f5 vL (λ ())) g4L , trans (f5 vS (λ ())) g4S
+  , trans (f5 vR (λ ())) g4R , trans (f5 vTmp (λ ())) g4Tmp
+  , trans (f5 vW (λ ())) vW-at-σ₄
+  where
+  σ₂ σ₃ : Store
+  σ₂ = set σ₁ vS nil
+  σ₃ = set σ₂ vS (atm s₂)
+  e1 : (vS ^= opd (cst (atm s₁))) ⊢ σ₁ ⇒ σ₂ ∣ 1
+  e1 = e-ass refl (subst (λ z → rupd z (atm s₁) ≡ just nil) (sym g1S)
+                         (rupd-self (atm s₁)))
+  e2 : (vS ^= opd (cst (atm s₂))) ⊢ σ₂ ⇒ σ₃ ∣ 1
+  e2 = e-ass refl (subst (λ z → rupd z (atm s₂) ≡ just (atm s₂))
+                         (sym (get-set-≡ σ₁ vS nil)) refl)
+  vW-at-σ₄ : get σ₄ vW ≡ nil
+  vW-at-σ₄ = trans (f4 vW (λ ()) (λ ()) (λ ()) (λ ()) (λ ()))
+             (trans (get-set-≢ σ₂ vS vW (atm s₂) (λ ()))
+             (trans (get-set-≢ σ₁ vS vW nil (λ ()))
+                    (trans (f1 vW (λ ()) (λ ()) (λ ()) (λ ()) (λ ())) hW)))
 
 ------------------------------------------------------------------------
 -- 10.  LEMMA 1 of the letter, as a statement.
