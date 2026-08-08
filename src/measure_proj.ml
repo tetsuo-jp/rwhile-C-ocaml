@@ -251,9 +251,13 @@ let jones_self spec_av =
    * ('a.'b).  For trying a candidate subject without editing this file -- the
    * loop subjects above were found that way, and the next person will want to
    * try their own before deciding it is worth a permanent example. *)
+  (* Already-permanent names are dropped rather than appended twice: a duplicated
+   * row in this table is a paper number waiting to be double-counted. *)
   let cases = cases @ (match Sys.getenv_opt "JONES_EXTRA" with
       | None | Some "" -> []
-      | Some s -> List.map (fun n -> (n, ab)) (String.split_on_char ',' s)) in
+      | Some s -> String.split_on_char ',' s
+                  |> List.filter (fun n -> n <> "" && not (List.mem_assoc n cases))
+                  |> List.map (fun n -> (n, ab))) in
   let meter f = EvalRwhile.reset_steps (); EvalRwhile.reset_work ();
     let v = f () in (v, EvalRwhile.get_steps (), EvalRwhile.get_work ()) in
   Printf.printf "Jones optimality with the SELF-interpreter ri_fp3 (steps / work)\n";
@@ -265,7 +269,11 @@ let jones_self spec_av =
   Printf.printf "  %-13s %7s %5s %5s %6s %6s %6s %6s %6s %6s %6s %7s %7s %7s %7s %6s %5s\n"
     "program" "|resid|" "lp_p" "lp_r" "st_dir" "st_p+" "st_si" "st_raw" "st_res" "J(st)" "Jr(st)"
     "wk_dir" "wk_p+" "wk_si" "wk_res" "Jr(wk)" "ok";
+  (* A candidate subject that hits the dynamic-control wall (§10 of
+   * FINDINGS_reversible_projections.md) raises mid-row.  Report it as a row and
+   * keep going: killing the table loses the numbers for every other subject. *)
   List.iter (fun (name, d) ->
+    try
       let srcp = parse_prog (dir ^ "/" ^ name ^ ".rwhile") in
       let pd = Program2DataRwhile.program2data srcp in
       let (dres, sd, wd) = meter (fun () -> EvalRwhile.evalProgram srcp d) in
@@ -284,7 +292,9 @@ let jones_self spec_av =
       Printf.printf "  %-13s %7d %5d %5d %6d %6d %6d %6d %6d %5.1fx %5.1fx %7d %7d %7d %7d %5.2fx %5b\n"
         name (cn (Program2DataRwhile.program2data rprog))
         (body_loops srcp) (body_loops rprog) sd sp ss sraw sr
-        (ratio sr sd) (ratio sr sp) wd wp ws wr (ratio wr wp) ok)
+        (ratio sr sd) (ratio sr sp) wd wp ws wr (ratio wr wp) ok
+    with Failure msg ->
+      Printf.printf "  %-13s %7s  (specialisation failed: %s)\n" name "-" msg)
     cases;
   Printf.printf "  ok = residual, self-interpreter and p+ all produce the SAME value\n";
   Printf.printf "       (so p+ is the right baseline: it is what the residual must compute).\n";

@@ -18,6 +18,48 @@
 - ドキュメント：`RWHILE_S.md`「判明したこと 3」、`FINDINGS_reversible_projections.md`、
   `RESEARCH_ROADMAP.md` ④。
 
+### 被験をループ込みへ拡大し、壁の正体を特定（同日）
+
+- **申し送り「ループ被験は fp1-via-ri_fp3 が未対応」は誤りだった。壁は動的制御。**
+  ループ被験 `loop_static2/3` は通り、`ri_fp3` は `reverse` を正しく自己解釈する。
+  **ループを含まない** `dyncond3.rwhile`（動的分岐のみ）が同じ `'error <= '41` で落ちることが決め手。
+  破綻箇所は `examples/spec_av.rwhile` の `'lcheck` ハンドラ 1 か所、破れる不変条件は
+  「展開を始めたループは脱出条件が静的なままであり続ける」。選択的動的化では解けない。
+- **結果**：ループ被験は **steps・work の両指標で `残余 ≤ p⁺` が成立する唯一の例**
+  （0.1×／0.91×・0.86×）。反復を増やしても `st_res` は 1 のままなので、直線被験の steps 側の
+  不成立は**固定の段取りコスト**であって一般的な劣位ではない。
+- `./measure_proj` に `lp_p`／`lp_r` 列（`CLoop` ノード数）と `JONES_EXTRA=a,b,c`（被験の追試）。
+  既存被験名は二重に足さない。特殊化に失敗した被験は表を殺さず 1 行で報告する。
+- テスト群 `jones-self` +2、**`jones-self-open`（3 件）**が壁を期待される失敗として pin
+  （通るようになったら落ちて気づく）。テスト総数 268 → 273 件。
+- 新規 `examples/loop_static2.rwhile`・`loop_static3.rwhile`・`dyncond3.rwhile`。
+  詳細は `FINDINGS_reversible_projections.md` §10。
+
+### p⁺ の定義側を Agda で機械検証（同日）
+
+- 新規 5 モジュール（すべて `{-# OPTIONS --safe #-}`・**postulate ゼロ**）：
+  `RWhileJonesRev`（抽象層の基準）、`RWhileProgPres`（構成と意味論）、
+  `RWhileProgPresRev`（可逆性）、`RWhileProgPresMin`（拡張の中での最小性）、
+  `RWhileJonesRevCE`（反証）。`./check.sh` は 108 モジュール PASS。
+- **証明できたこと**：p⁺ の可逆性（逆も同じコスト `k+8` で往復）、意味論が仕様どおり、
+  fp1 残余がプログラム保存の義務を継承すること、古典版 Jones 最適性 ⇒ 可逆版。
+- **反証したこと**：「p⁺ は義務を果たす最小のプログラム」は**一般には偽**。
+  義務は外延的に関数を固定するが、コストは関数から決まらないため。代わりに
+  「**p の拡張の中での**最小性」を証明（下界 `+3`、p⁺ は `+8`、差は常に加法定数）。
+  → 和文では「最小の義務」ではなく「**義務を満たす最小の拡張**」と書き分けること。
+- **既知の差**：抽象層と具象層は未接続、モデルの定数 8 は実機 `-steps` の 4 と異なる
+  （定理が主張しているのは**定数性**であって 8 ではない）、`-work` 指標のコストモデルは未整備。
+  対応表は `AGDA_CORRESPONDENCE.md`。
+
+### 文献・CI（同日）
+
+- `RELATED_WORK.md` §1.5：Jones 最適性の定義を**原典で確認**（JGS 1993 の 6 章 6.4 節
+  Definition 6.4、時間 t で測る）。**JGS 自身が定義は "cheated" されうると明記している**点を
+  引き、p⁺ への置き換えが「基準を緩めた」のではなく「同じ義務を負う者どうしを比べる」もので
+  あることを表で明示。書誌 6 件を Semantic Scholar／DBLP で裏取り。
+- `.github/workflows/ci.yml`：`ri` のビルド → 273 件のテスト → examples の煙試験 →
+  測定ツールのビルドと実行 → 逆変換の往復の E2E。
+
 ## [Unreleased] - 2026-03-06
 
 ### リファクタリング
