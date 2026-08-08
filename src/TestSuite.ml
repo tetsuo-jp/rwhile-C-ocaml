@@ -37,8 +37,34 @@ let macro_prefix filename =
   | Some i -> String.sub src 0 i
   | None -> failwith ("main marker not found in " ^ filename)
 
+let contains_sub s sub =
+  let n = String.length s and m = String.length sub in
+  let rec go i = i + m <= n && (String.sub s i m = sub || go (i + 1)) in
+  go 0
+
+let rindex_sub s sub =
+  let n = String.length s and m = String.length sub in
+  let rec go i = if i < 0 then -1 else if String.sub s i m = sub then i else go (i - 1) in
+  go (n - m)
+
+(* spec_av's AV-CAPTURE draws residual temp indices from the global counter
+ * TmpCtr, which spec_av's own main initialises (TEMP-IDX) and clears.  These
+ * harnesses build their OWN main around spec_av's macros, so they must bracket
+ * the body the same way -- otherwise the store-clean check trips on the counter
+ * alone ("Some variables are not nil: TmpCtr := ..."), which looks like a
+ * specialiser bug and is not one.  Injected here, in the one place, rather than
+ * in each of the harness bodies. *)
 let parse_macro_harness filename body =
-  parse_program ((macro_prefix filename) ^ "\n" ^ body)
+  let prefix = macro_prefix filename in
+  let body =
+    if contains_sub prefix "TEMP-IDX" && contains_sub body "write" then begin
+      let i = String.index body ';' in
+      let w = rindex_sub body "write" in
+      String.sub body 0 (i + 1) ^ " TEMP-IDX(TmpCtr); "
+      ^ String.sub body (i + 1) (w - i - 1)
+      ^ "TmpCtr ^= TmpCtr; " ^ String.sub body w (String.length body - w)
+    end else body in
+  parse_program (prefix ^ "\n" ^ body)
 
 let eval_string prog_str val_str =
   let prog = parse_program prog_str in
@@ -1756,7 +1782,7 @@ let test_ri_fp3_self_interprets () =
  * exactly V0/V1/V2, so a four-variable subject would fail for that unrelated
  * reason and this test would pin nothing.
  * If this test fails, the bound has moved: check what now works and re-pin. *)
-let test_fp1_ri_fp3_nested_pattern_known_bug () =
+let test_fp1_ri_fp3_nested_pattern_runs () =
   let spec_av = parse_file_program (examples_dir ^ "/spec_av.rwhile") in
   let ri_fp3 = Program2DataRwhile.program2data
       (parse_file_program (examples_dir ^ "/ri_fp3.rwhile")) in
@@ -1764,12 +1790,11 @@ let test_fp1_ri_fp3_nested_pattern_known_bug () =
   let comp = EvalRwhile.evalProgram spec_av
       (spec_in ri_fp3 (Program2DataRwhile.program2data srcp)) in
   let d = VCons (atom "'a", VCons (atom "'b", VNil)) in
-  Alcotest.(check bool)
-    "KNOWN BUG: a NESTED pattern's fp1-via-ri_fp3 residual still fails to run"
-    true
-    (try ignore (EvalRwhile.evalProgram
-                   (Program2DataRwhile.data2program comp) d); false
-     with Failure _ -> true)
+  Alcotest.(check valT_testable)
+    "sx_three: a NESTED pattern's fp1-via-ri_fp3 residual runs correctly"
+    (EvalRwhile.evalProgram srcp d)
+    (match EvalRwhile.evalProgram (Program2DataRwhile.data2program comp) d with
+     | VCons (_, res) -> res | v -> v)
 
 (* Evaluate a program-as-data value (a spec residual / comp) DIRECTLY by
  * decoding it back to an AST -- the reliable alternative to run_via_ri, which
@@ -1876,8 +1901,21 @@ let test_specialization_gain () =
   let rimin = Program2DataRwhile.program2data
       (parse_file_program (examples_dir ^ "/ri_min.rwhile")) in
   let int_size = EvalRwhile.count_nodes rimin in
+  (* Measured on the residual AFTER copy propagation (2026-08-08).  spec_av now
+     CAPTURES every dynamic annotated value as it escapes into a compound, which
+     is what removes the nested-pattern bound of fp1-via-ri_fp3; the price is one
+     `Tmp <= ('var.k)` per escape, overwhelmingly for slots that are never
+     reused.  Those are a write-once/read-once temp, i.e. a copy, and
+     Simp.copyprop_program removes them -- taking the residual well BELOW where
+     it was before capture (swap 103 -> 59 nodes, 0.63x -> 0.36x |ri_min|).
+     Judging the raw residual here would measure the intermediate, not the
+     specialiser's output. *)
   let resid_size op =
-    EvalRwhile.count_nodes (EvalRwhile.evalProgram spec_av (spec_in rimin (atom op))) in
+    EvalRwhile.count_nodes
+      (Program2DataRwhile.program2data
+         (Simp.copyprop_program
+            (Program2DataRwhile.data2program
+               (EvalRwhile.evalProgram spec_av (spec_in rimin (atom op)))))) in
   let b_swap = resid_size "'swap" and b_id = resid_size "'id" in
   Printf.eprintf
     "[SPEC-GAIN] ri_min interpreter = %d nodes; fp1 residual: swap=%d, id=%d\n%!"
@@ -2258,11 +2296,38 @@ let test_ss_av_swap_dynamic () =
    * (== rep_yzx) and makes Y,Z dynamic; the second rep `X <= cons Z Y` then
    * rebinds X to the partial cons ('C.((D Z).(D Y))) with no residual. So the
    * store ends X=('C.((D var2).(D var1))), Y=Z=('S.nil), and RCode=[rep_yzx]. *)
-  check_spec_step_av "swap dynamic structural"
-    "(('D . ('var . nil)) . (('S . nil) . (('S . nil) . nil)))"
-    swap_cmd
-    ("((('C . (('D . ('var . (nil . (nil . nil)))) . ('D . ('var . (nil . nil))))) . (('S . nil) . (('S . nil) . nil))) . ("
-     ^ rep_yzx ^ " . nil))")
+  (* UPDATED 2026-08-08 for capture-on-escape.  The two halves are now CAPTURED
+     as they escape into the compound, so X refers to two freshly allocated temps
+     rather than to slots 2 and 1, and RCode carries the two captures in front of
+     the residualized split.  Asserting the SHAPE rather than a golden literal:
+     what matters is that X is a structural cons of two DISTINCT dynamic
+     references (no aliasing -- constraint C1), not which indices they got. *)
+  let prog = parse_macro_harness (examples_dir ^ "/spec_av.rwhile")
+    "read In; cons Vl Cmd <= In; SPEC-CMD-AV(Cmd); Out <= cons Vl RCode; write Out" in
+  let out = EvalRwhile.evalProgram prog
+    (pair (parse_val "(('D . ('var . nil)) . (('S . nil) . (('S . nil) . nil)))")
+          (parse_val swap_cmd)) in
+  (match out with
+   | VCons (VCons (xslot, VCons (y, VCons (z, VNil))), rcode) ->
+      Alcotest.(check bool)
+        "X = ('C.((D var i).(D var j))) with i <> j (distinct captures, no alias)"
+        true
+        (match xslot with
+         | VCons (VAtom (Atom "'C"),
+                  VCons (VCons (VAtom (Atom "'D"), VCons (VAtom (Atom "'var"), i)),
+                         VCons (VAtom (Atom "'D"), VCons (VAtom (Atom "'var"), j)))) ->
+            unary_to_int i >= 0 && unary_to_int j >= 0 && i <> j
+         | _ -> false);
+      Alcotest.(check valT_testable) "Y is static nil" (parse_val "('S . nil)") y;
+      Alcotest.(check valT_testable) "Z is static nil" (parse_val "('S . nil)") z;
+      let rec len = function VCons (_, t) -> 1 + len t | _ -> 0 in
+      Alcotest.(check int)
+        "RCode = the residualized split plus the two captures" 3 (len rcode);
+      Alcotest.(check bool) "the residualized split is still there" true
+        (let rec mem = function
+           | VCons (h, t) -> h = parse_val rep_yzx || mem t
+           | _ -> false in mem rcode)
+   | _ -> Alcotest.fail "spec step returned an unexpected shape")
 
 (* ===== fp1 residual assembly (Stage C, C2) =====
  * End-to-end: specialize a command with a dynamic input via SPEC-CMD-AV, then
@@ -2980,7 +3045,7 @@ let () =
       Alcotest.test_case "fp1-via-ri_fp3: non-transposing sources now run correctly" `Quick test_fp1_ri_fp3_nontransposing_ok;
       Alcotest.test_case "fp1-via-ri_fp3: two-leaf patterns run (was a KNOWN BUG)" `Quick test_fp1_ri_fp3_two_leaf_patterns_run;
       Alcotest.test_case "ri_fp3 self-interprets (incl. a loop) correctly" `Quick test_ri_fp3_self_interprets;
-      Alcotest.test_case "fp1-via-ri_fp3 KNOWN BUG: nested pattern residual fails" `Quick test_fp1_ri_fp3_nested_pattern_known_bug;
+      Alcotest.test_case "fp1-via-ri_fp3: nested pattern runs (was a KNOWN BUG)" `Quick test_fp1_ri_fp3_nested_pattern_runs;
       Alcotest.test_case "dyn-cond comp correct directly; KNOWN ri.rwhile 'cond bug via run_via_ri" `Quick test_fp1_dyncond_known_bug;
       Alcotest.test_case "depth-general nested read residualizes (PAT-READ-ITER)" `Quick test_fp1_nested_read;
       Alcotest.test_case "fp1-via-ri_fp3: STEP tracks Result structurally (was a KNOWN BUG)" `Quick test_fp1_step_structural_result;

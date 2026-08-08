@@ -455,19 +455,19 @@ macro PAT-READ-AV(P, RA)
  * PAT-READ-LEAF-AV2's leaf else-branch; ASSEMBLE-FP1's nested output pattern
  * (cons (cons 'var I) (cons Body (cons 'var J))) needs the depth-general read,
  * else the residual bakes the inner cons as a constant and never assembles. *)
-macro PAT-READ-ITER-STEP(Wk, Wk', PrSt)
+macro PAT-READ-ITER-STEP(Wk, Wk', PrSt, RCode)
   cons PrP Wk <= Wk;
   case PrP yields PrP of
       cons 'cons PrAg => cons PrX PrY <= PrAg; Wk <= cons PrX (cons PrY (cons (cons 'consE nil) Wk)); PrX ^= PrX; PrY ^= PrY => cons 'consB PrAg
-    | cons 'consE PrAg2 => cons PrY (cons PrX (cons (cons 'consB nil) Wk')) <= Wk'; PrAg2 <= cons PrX PrY; cons PrA2 (cons PrA1 PrSt) <= PrSt; AV-CONS(PrA1, PrA2, PrAc); PrSt <= cons PrAc PrSt => cons 'cons PrAg2
+    | cons 'consE PrAg2 => cons PrY (cons PrX (cons (cons 'consB nil) Wk')) <= Wk'; PrAg2 <= cons PrX PrY; cons PrA2 (cons PrA1 PrSt) <= PrSt; AV-CAPTURE(PrA1, RCode); AV-CAPTURE(PrA2, RCode); AV-CONS(PrA1, PrA2, PrAc); PrSt <= cons PrAc PrSt => cons 'cons PrAg2
     | Rest => PAT-READ-LEAF-AV2(Rest, PrLa); PrSt <= cons PrLa PrSt => Rest
   end;
   Wk' <= cons PrP Wk'
 
-macro PAT-READ-ITER(P, RA)
+macro PAT-READ-ITER(P, RA, RCode)
   P <= cons P nil;
   from (=? P' nil) loop
-    PAT-READ-ITER-STEP(P, P', PrSt)
+    PAT-READ-ITER-STEP(P, P', PrSt, RCode)
   until (=? P nil);
   cons P nil <= P';
   cons RA nil <= PrSt
@@ -501,6 +501,58 @@ macro PAT-WRITE-AV(P, WA)
  * variable indices and within ri.rwhile's store, so it never collides. *)
 macro TEMP-IDX(TmpT)
   TmpT ^= (nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.(nil.nil))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+
+(* TMP-ALLOC(T): T := a FRESH residual variable index, and bump the counter.
+ * TEMP-IDX hands out one fixed index (100), which SWAP-VIA-TEMP can use only
+ * because it consumes it immediately.  TmpCtr is a global initialised to 100 in
+ * main and self-cleared there; each call returns the current value and adds one
+ * nil, so successive calls cannot collide, and the indices stay above every
+ * interpreted program's variable indices. *)
+macro TMP-ALLOC(TaT)
+  TaT ^= TmpCtr;
+  TmpCtr <= cons nil TmpCtr
+
+(* AV-CAPTURE(A, RCode): if A is a bare dynamic SLOT REFERENCE ('D.('var.k)),
+ * MOVE that slot's run-time value into a freshly allocated temp and return
+ * ('D.('var.Tmp)) instead.
+ *
+ * This is CAPTURE-ON-ESCAPE, and it is the answer to constraint C2.  The AV
+ * ('D.('var.k)) names a MUTABLE SLOT, not a value: the moment slot k is
+ * re-assigned, every copy of that AV still reads as "the value of variable k"
+ * while denoting something else.  A copy that has ESCAPED -- been embedded in a
+ * compound by AV-CONS, e.g. onto ri_fp3's stack -- cannot be reached and
+ * re-pointed later, so it must be made independent AT THE MOMENT IT ESCAPES.
+ *
+ * The capture is emitted as a 'rep (`Tmp <= ('var.k)`), never as an 'ass with a
+ * lifted expression.  That is deliberate and is what killed capture-always:
+ * a 'rep's right-hand side is a PATTERN, so it CONSUMES slot k -- the value
+ * moves, the slot is freed for reuse, and the temp is later consumed in turn by
+ * the pattern write that delivers the compound (C3).  Nothing is erased, so no
+ * self-clear is needed in the residual (C4).  Slot k's AV entry is already
+ * ('S.nil) -- PAT-READ-LEAF-AV2 left it that way when it handed the reference
+ * out -- so the AV store needs no update here.
+ *
+ * Only bare ('D.('var.k)) is captured: other dynamics ('D.('pairp ...) etc.)
+ * are computed expressions, not slot references, and a compound 'C AV holds
+ * leaves that were already captured when THEY escaped, so there is no chaining. *)
+macro AV-CAPTURE(A, RCode)
+  CapD ^= =? (hd A) 'D;
+  if CapD then
+    cons CapT CapP <= A;
+    CapV ^= =? (hd CapP) 'var;
+    if CapV then
+      cons CapVt CapK <= CapP;
+      TMP-ALLOC(CapNew);
+      CapKc ^= CapK;
+      CapNc ^= CapNew;
+      RCode <= cons (cons 'rep (cons (cons 'var CapNc) (cons 'var CapKc))) RCode;
+      CapK ^= CapK;
+      CapP <= cons CapVt CapNew
+    fi CapV;
+    CapV ^= CapV;
+    A <= cons CapT CapP
+  fi CapD;
+  CapD ^= CapD
 
 (* SET-SELF-SLOT(I): set store slot I to the self-referential dynamic ('D.('var.I)),
  * re-establishing the no-alias invariant after a runtime move/swap.  I preserved. *)
@@ -819,7 +871,7 @@ macro SPEC-STEP-AV(Cd, Cd', RCode)
       * static structure (e.g. (prog.data)) is split without losing the static
       * part, and a fully-dynamic value flows symbolically (lifted at output). *)
      cons RpQ RpR <= Arg;
-     PAT-READ-ITER(RpR, RpAV);   (* depth-general read (was PAT-READ-AV, depth-1) *)
+     PAT-READ-ITER(RpR, RpAV, RCode);   (* depth-general read (was PAT-READ-AV, depth-1) *)
      (* PAT-WRITE-ITER (below) handles arbitrary-depth patterns and, with the
       * pair? guard, no longer crashes on ri_fp3's static-atom positions. But
       * wiring it makes full-ri_fp3 fp1 DIVERGE (a static loop in ri_fp3's stack
@@ -1008,10 +1060,14 @@ read In;
   UPDATE(Vl, FpI, FpPart);
   CLEAR(FpPart);
 
+  (* fresh-temp counter for AV-CAPTURE: start above every program variable index *)
+  TEMP-IDX(TmpCtr);
+
   (* specialise the body, assemble the residual *)
   SPEC-CMD-AV(FpBody);
   ASSEMBLE-FP1(FpI, FpJ, Out);
   CLEAR(RCode);
+  CLEAR(TmpCtr);
   CLEAR(Vl);
   CLEAR(FpI);
   CLEAR(FpJ);
