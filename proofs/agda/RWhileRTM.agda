@@ -59,7 +59,9 @@ open import Relation.Binary.PropositionalEquality
 
 open import RWhileTime
 open import RWhileTimeInv using (inv)
-open import RWhileSIWf using (get-set-≡; get-set-≢)
+open import RWhileSIWf
+  using (get-set-≡; get-set-≢; Wf; wf-skip; wf-ass; wf-seq; wf-cond; wf-loop;
+         NotIn; ni-opd; ni-cns; ni-hd; ni-tl; ni-eq; ni-pr; ni-var; ni-cst)
 
 ------------------------------------------------------------------------
 -- 1.  Reversible Turing machines (§2 of the letter).
@@ -518,6 +520,34 @@ pack-sound σ l x r hL hS hR hT hTmp =
              (subst (λ z → rupd z A ≡ just nil) (sym g5L) (rupd-self A))
 
 ------------------------------------------------------------------------
+-- 5c.  EVERY GENERATED COMMAND IS LEGAL R-WHILE.
+--
+-- `Wf` is the library's rendering of R-WHILE's linearity side condition: in
+-- `x ^= e` the assigned variable must not occur in e.  That is the condition
+-- the naive PUSH violated (see the caution below), so it is worth certifying
+-- that nothing the translation emits does.  It is also what the library's
+-- `inv-sound` demands before it will run a command backwards.
+
+wf-inv : ∀ c → Wf c → Wf (inv c)
+wf-inv skip           wf-skip         = wf-skip
+wf-inv (x ^= e)       (wf-ass ni)     = wf-ass ni
+wf-inv (c ⨾ d)        (wf-seq wc wd)  = wf-seq (wf-inv d wd) (wf-inv c wc)
+wf-inv (cond e c d f) (wf-cond wc wd) = wf-cond (wf-inv c wc) (wf-inv d wd)
+wf-inv (loop e D L f) (wf-loop wD wL) = wf-loop (wf-inv D wD) (wf-inv L wL)
+
+wf-unpackT : Wf unpackT
+wf-unpackT =
+  wf-seq (wf-ass (ni-hd  (ni-var (λ ()))))
+  (wf-seq (wf-ass (ni-tl  (ni-var (λ ()))))
+  (wf-seq (wf-ass (ni-cns (ni-var (λ ())) (ni-var (λ ()))))
+  (wf-seq (wf-ass (ni-hd  (ni-var (λ ()))))
+  (wf-seq (wf-ass (ni-tl  (ni-var (λ ()))))
+          (wf-ass (ni-cns (ni-var (λ ())) (ni-var (λ ()))))))))
+
+wf-packT : Wf packT
+wf-packT = wf-inv unpackT wf-unpackT
+
+------------------------------------------------------------------------
 -- 6.  PUSH and POP (Fig. 2c, 2d).
 --
 -- The letter writes
@@ -842,6 +872,18 @@ module Push (b s stk w : ℕ)
              → popC b s stk w ⊢ ρ ⇒ π5 ∣ suc (suc (suc (suc (suc (k + 1) + 1) + 1) + 1) + 1)
     tail-run dc = e-seq (e-seq (e-seq (e-seq (e-seq dc p5) p4) p3) p2) p1
 
+  wf-pushC : Wf (pushC b s stk w)
+  wf-pushC =
+    wf-seq (wf-ass (ni-cns (ni-var w≢s) (ni-var w≢stk)))
+    (wf-seq (wf-ass (ni-hd  (ni-var s≢w)))
+    (wf-seq (wf-ass (ni-tl  (ni-var stk≢w)))
+    (wf-seq (wf-ass (ni-opd (ni-var stk≢w)))
+    (wf-seq (wf-ass (ni-opd (ni-var w≢stk)))
+            (wf-cond (wf-ass (ni-opd ni-cst)) wf-skip)))))
+
+  wf-popC : Wf (popC b s stk w)
+  wf-popC = wf-inv (pushC b s stk w) wf-pushC
+
   PopSpec : Store → List ℕ → Set
   PopSpec σ l =
     Σ[ σ′ ∈ Store ] Σ[ k ∈ ℕ ]
@@ -962,6 +1004,17 @@ movel-sound b σ l x r ntl hT (hL , hS , hR , hTmp , hW)
         (trans (f3 y yS yL yW)
         (trans (f2 y yS yR yW) (f1 y yT yL yS yR yTmp))))
 
+-- Well-formedness of the head-move macros and, below, of every translated
+-- rule: the construction never breaks R-WHILE's linearity condition.
+wf-movelC : ∀ b → Wf (movelC b)
+wf-movelC b =
+  wf-seq wf-unpackT
+  (wf-seq (Push.wf-pushC b vS vR vW (λ ()) (λ ()) (λ ()))
+  (wf-seq (Push.wf-popC  b vS vL vW (λ ()) (λ ()) (λ ())) wf-packT))
+
+wf-moverC : ∀ b → Wf (moverC b)
+wf-moverC b = wf-inv (movelC b) (wf-movelC b)
+
 ------------------------------------------------------------------------
 -- 8.  The translation of one rule (Fig. 3).
 --
@@ -988,6 +1041,20 @@ ruleC b (rsym q₁ s₁ s₂ q₂) =
 ruleC b (rmov q₁ mvL q₂) = movelC b ⨾ setState q₁ q₂
 ruleC b (rmov q₁ mvS q₂) = setState q₁ q₂
 ruleC b (rmov q₁ mvR q₂) = moverC b ⨾ setState q₁ q₂
+
+wf-setState : ∀ q₁ q₂ → Wf (setState q₁ q₂)
+wf-setState q₁ q₂ = wf-seq (wf-ass (ni-opd ni-cst)) (wf-ass (ni-opd ni-cst))
+
+-- THE TRANSLATION EMITS ONLY LEGAL R-WHILE.
+wf-ruleC : ∀ b d → Wf (ruleC b d)
+wf-ruleC b (rsym q₁ s₁ s₂ q₂) =
+  wf-seq wf-unpackT
+  (wf-seq (wf-ass (ni-opd ni-cst))
+  (wf-seq (wf-ass (ni-opd ni-cst))
+  (wf-seq wf-packT (wf-setState q₁ q₂))))
+wf-ruleC b (rmov q₁ mvL q₂) = wf-seq (wf-movelC b) (wf-setState q₁ q₂)
+wf-ruleC b (rmov q₁ mvS q₂) = wf-setState q₁ q₂
+wf-ruleC b (rmov q₁ mvR q₂) = wf-seq (wf-moverC b) (wf-setState q₁ q₂)
 
 ------------------------------------------------------------------------
 -- 9b.  LEMMA 1, for the rules that do not move the head.
