@@ -497,6 +497,83 @@ implementation by extraction" route: the *same* Agda code that carries the
 `Extract.agda` uses `--guardedness` (for IO) instead of `--safe`, but it only
 *imports* and runs the `--safe`-checked `rupdF`; no proof is weakened.
 
+## r-Turing completeness (`RWhileRTM1`–`4`, `RWhileRTM`)
+
+A machine-checked proof of the main theorem of
+
+> 青木利晃・横山哲郎, 「可逆プログラミング言語 R-WHILE の可逆チューリング完全性」,
+> 電子情報通信学会論文誌 D, J101-D(9), pp. 1372–1375, 2018.
+
+```agda
+rTuringComplete :
+  ∀ (M : RTM) → IsRTM M
+  → Σ[ C ∈ Cmd ] ( Wf C × ( ∀ r r′ → StepsOK M (q-s M , ([] , blank M , r))
+                                              (q-f M , ([] , blank M , r′))
+        → Σ[ σ′ ∈ Store ] Σ[ k ∈ ℕ ]
+            ( (C ⊢ inStore r ⇒ σ′ ∣ k)
+            × (get σ′ vOut ≡ encL r′) × AllNilBut vOut σ′ ) ) )
+```
+
+For every reversible Turing machine there is an R-WHILE program that
+simulates it: the output variable holds the encoded output tape and **every
+other variable is nil**, so the simulation leaves no garbage.
+
+The development is on `RWhileTime`, the first-order deep embedding, and not
+on the abstract core `RWhileRevFull.Core`. That matters: the abstract core
+takes atomic commands to be arbitrary *relations* on stores, so simulating a
+Turing machine there would be vacuous — one could put the machine's whole
+step relation into a single atom. In `RWhileTime` a `Cmd` is skip / `^=` /
+`⨾` / if-fi / from-until and an `Exp` carries one operator over
+variable-or-constant operands, with no function space anywhere, so the
+program the theorem produces is a genuine piece of R-WHILE text.
+
+Two places where the core forced a different rendering from the letter's:
+
+- **`q <= r` (pattern replacement) is not in the core.** For a linear
+  pattern it is the local/delocal idiom — build the value with `^=`, then
+  clear the source with a `^=` that names it. `unpack-sound` / `pack-sound`.
+  The naive version of PUSH, `STK ^= cons S STK`, is *not* R-WHILE: the
+  assigned variable occurs in the expression, and `rupd` duly gets stuck.
+  That linearity side condition is exactly why the letter builds PUSH from
+  `<=`. `wf-ruleC` and `wf-mainC` certify that nothing generated breaks it.
+- **`rewrite [Q,T] by … | …` matches patterns over the pair (Q,T)**, and a
+  flat `Exp` cannot test two variables at once. The tape is therefore kept
+  unpacked in `L`, `S`, `R` for the whole run of the main loop, and the pair
+  (Q,S) is held in a key variable `K`, so each guard is one equality against
+  a constant. `K` is a function of `Q` and `S` and is cleared when the loop
+  ends, so it is not garbage.
+
+Each of the four RTM conditions is used exactly once: local forward
+determinism selects the then-branch of the dispatch, local backward
+determinism closes the else-branch's exit assertion, "no rule leaves q_f"
+makes the until-test false while steps remain, and "no rule enters q_s"
+makes the from-test false after each step.
+
+The canonicity invariant on half-tapes is **no trailing blank**
+(`NoTrailB`), not blank-freeness: moving left over a blank pushes that blank
+onto a non-empty right half-tape, which is a legitimate tape, so
+blank-freeness is not preserved. No trailing blank is, and it is what makes
+POP's exit assertion hold.
+
+Section 12 of `RWhileRTM` exhibits a machine satisfying the hypotheses and
+runs the theorem on it, so none of this is vacuous.
+
+The development is **split across five modules** (`RWhileRTM1` … `RWhileRTM4`
+and `RWhileRTM`, each re-exporting the previous) for a practical reason: as
+one 2400-line module it needed **47 GB** and was killed by the machine's
+OOM watchdog before Agda ever reached the end. Split, the whole chain checks
+from scratch in about 50 s with a peak of 5.9 GB — `RWhileRTM3` (the four
+rule bodies) is the heavy one at ~5 GB.
+
+Two defects were hiding behind that blowup, because a module Agda never
+finishes gives no errors at all: unsolved metavariables in `lfd-fires` /
+`lbd-fires` (the machine argument had been left implicit, and `LFD M`
+unfolds to a Π-type where `M` occurs only under `rules M`, so it was not
+inferrable), and a frame lemma inside `init-sound` that claimed every
+variable other than the input is nil in the initialised store — false for
+`Q`, `S`, `R` and `K`. **A silent Agda run is not a passing one**: check the
+exit code, or check that the `.agdai` interface was written.
+
 ## Honest scope (what is NOT yet proved)
 
 These are results about an Agda **model** of R-WHILE's core, hand-written to
