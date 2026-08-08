@@ -377,6 +377,12 @@ let () =
       (cn comp2_cp_d)
       (100.0 *. float_of_int (cn comp2_cp_d) /. float_of_int (cn comp2))
       (float_of_int (cn comp2_cp_d) /. float_of_int nspec);
+    (* WHY copy propagation cannot reach comp2's loop bodies: count the rejects *)
+    let r = Simp.copyprop_report comp2_cp in
+    Printf.printf
+      "  copyprop rejects on comp2: moves=%d fused=%d | multi_occ=%d no_use=%d not_consuming=%d src_clobbered=%d\n"
+      r.Simp.moves r.Simp.fused r.Simp.multi_occ r.Simp.no_use
+      r.Simp.not_consuming r.Simp.src_clobbered;
     (* correctness: [comp2](('S.op)) and [comp2_simp](('S.op)) must equal the fp1
      * residual B (= [spec_av]((ri_min.op))). *)
     let inp op = VCons (VAtom (Atom "'S"), VAtom (Atom op)) in

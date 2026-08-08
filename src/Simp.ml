@@ -213,10 +213,18 @@ let copyprop_com (whole : com) (c : com) : com =
  * RWHILE_S.md): the sample here IS the loop-heavy target.  The reason is that
  * comp2's loop-body temps do not satisfy the write-once/read-once test -- they
  * are mentioned elsewhere as well, so the whole-program "exactly twice" gate
- * rejects them.  Kept because it is sound, tested and free, and because it is a
- * precondition for relaxing that gate; but the 363969 nodes inside comp2's loop
- * bodies need a WEAKER condition (per-block liveness rather than a global
- * occurrence count), not a wider traversal.  That is the actual next step. *)
+ * rejects them.  Kept because it is sound, tested and free.
+ *
+ * AND THE GATE IS NOT THE PROBLEM EITHER (measured the same day with
+ * copyprop_report, below).  On comp2: moves=21, fused=0, all 21 rejected as
+ * multi_occ.  Twenty-one variable-to-variable moves in a program with 1040
+ * CReps and 400531 nodes -- so even a PERFECT gate could remove 21 commands.
+ * The 363969 nodes inside comp2's loop bodies are not made of fusable moves at
+ * all: comp2 averages ~113 nodes per command, i.e. its bulk is in PATTERNS AND
+ * EMBEDDED CONSTANTS (the p2d-encoded subject), not in the command count.
+ * Shrinking comp2 therefore means shrinking encoded data -- the lever pass 1
+ * already pulls (unary numerals: hot-vars renumbering halved the encoding) --
+ * not eliminating moves.  Do not spend more effort on liveness analysis here. *)
 let rec copyprop_blocks whole c =
   let c = copyprop_com whole c in
   let rec go = function
@@ -239,6 +247,64 @@ let rec copyprop_blocks whole c =
 let rec copyprop_fix whole c =
   let c' = copyprop_blocks whole c in
   if c' = c then c else copyprop_fix c' c'
+
+(* Why a move was NOT fused.  The gate is a global "t occurs exactly twice", and
+ * on comp2 it rejects essentially everything inside loop bodies -- but "rejected"
+ * covers four different reasons, and they call for different weakenings.  This
+ * counts them so the next attempt starts from data rather than from a guess. *)
+type cp_report = {
+  mutable moves : int;           (* CRep (PVar t, PVar k) candidates, t <> k *)
+  mutable fused : int;           (* would fuse under the current gate *)
+  mutable multi_occ : int;       (* t occurs more than twice in the program *)
+  mutable no_use : int;          (* no later occurrence of t on this spine *)
+  mutable not_consuming : int;   (* the use reads t without consuming it *)
+  mutable src_clobbered : int;   (* k is touched between the move and the use *)
+}
+
+let copyprop_report (Prog (_, _, body, _) : program) : cp_report =
+  let r = { moves = 0; fused = 0; multi_occ = 0; no_use = 0;
+            not_consuming = 0; src_clobbered = 0 } in
+  let rec block c =
+    let cmds = Array.of_list (spine c) in
+    let n = Array.length cmds in
+    for i = 0 to n - 1 do
+      (match cmds.(i) with
+       | CRep (PVar (Var t), PVar (Var k)) when t <> k ->
+          r.moves <- r.moves + 1;
+          if occ_com t body <> 2 then r.multi_occ <- r.multi_occ + 1
+          else begin
+            let j = ref (-1) in
+            for x = i + 1 to n - 1 do
+              if !j < 0 && occ_com t cmds.(x) > 0 then j := x
+            done;
+            if !j < 0 then r.no_use <- r.no_use + 1
+            else begin
+              let j = !j in
+              let consuming = match cmds.(j) with
+                | CRep (dst, src) -> occ_pat t src = 1 && occ_pat t dst = 0
+                | _ -> false in
+              let k_clear = ref true in
+              for x = i + 1 to j - 1 do
+                if occ_com k cmds.(x) > 0 then k_clear := false
+              done;
+              if not consuming then r.not_consuming <- r.not_consuming + 1
+              else if not !k_clear then r.src_clobbered <- r.src_clobbered + 1
+              else r.fused <- r.fused + 1
+            end
+          end
+       | _ -> ());
+      (* recurse into nested blocks *)
+      (match cmds.(i) with
+       | CCond (_, th, el, _) ->
+          (match th with BThen x -> block x | _ -> ());
+          (match el with BElse x -> block x | _ -> ())
+       | CLoop (_, d, l, _) ->
+          (match d with BDo x -> block x | _ -> ());
+          (match l with BLoop x -> block x | _ -> ())
+       | CLocal (_, x) -> block x
+       | _ -> ())
+    done in
+  block body; r
 
 let copyprop_program (Prog (ms, i, body, o) : program) : program =
   Prog (ms, i, copyprop_fix body body, o)
