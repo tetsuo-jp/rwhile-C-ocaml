@@ -4,7 +4,10 @@
  *
  * For each source program, computes comp = [spec_av]((ri_fp3 . src)), prints the
  * residual, then runs it on ('a.'b) and compares with direct evaluation.
- * Defaults: interpreter = ri_fp3, sources = id id2 id3 rep swap sx_splitjoin. *)
+ * Defaults: interpreter = ri_fp3, sources = id id2 id3 rep swap sx_splitjoin.
+ * FP3PROBE_SPEC=<name> uses ../examples/<name>.rwhile as the specialiser instead
+ * of spec_av (e.g. spec_av_bti, to ask whether selective dynamicize changes the
+ * '41 wall). *)
 
 open AbsRwhile
 
@@ -26,7 +29,9 @@ let () =
     | [] -> "ri_fp3", ["id"; "id2"; "id3"; "rep"; "swap"; "sx_splitjoin"]
     | i :: [] -> i, ["id"; "id2"; "id3"; "rep"; "swap"; "sx_splitjoin"]
     | i :: rest -> i, rest in
-  let spec_av = parse_prog (dir ^ "/spec_av.rwhile") in
+  let spec_name = match Sys.getenv_opt "FP3PROBE_SPEC" with
+    | Some s -> s | None -> "spec_av" in
+  let spec_av = parse_prog (dir ^ "/" ^ spec_name ^ ".rwhile") in
   let interp = Program2DataRwhile.program2data
       (parse_prog (dir ^ "/" ^ interp_name ^ ".rwhile")) in
   let d = (match Sys.getenv_opt "FP3PROBE_D" with

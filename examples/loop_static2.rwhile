@@ -1,0 +1,35 @@
+(* loop_static2.rwhile -- a subject that CONTAINS A LOOP, kept to three variables
+ * so ri_fp3 (which dispatches over exactly V0/V1/V2) can interpret it.
+ *
+ * WHY IT EXISTS (2026-08-09).  The jones-self battery had no loop subject at
+ * all: every one of id/id2/id3/rep/swap/sx_splitjoin/sx_three is loop-free, so
+ * the reversible Jones criterion (resid <= p+) had only been tested on straight
+ * line code.  The obvious loop subject, examples/reverse.rwhile, cannot be
+ * specialised through ri_fp3 (spec_av raises 'error <= '41 -- see
+ * FINDINGS_reversible_projections.md), because its loop's EXIT test reads the
+ * dynamic input.  This one separates the two things that failure conflates:
+ * having a loop, and having DATA-DEPENDENT loop control.
+ *
+ * The loop control here is entirely STATIC -- the counter V1 starts nil and the
+ * exit test compares it with a literal -- while the loop BODY operates on the
+ * dynamic input V0.  So spec_av's static unrolling ('lcheck) applies and the
+ * residual should be loop-free, which is the property the Jones measurement is
+ * about.  A data-dependent loop is the open case, not this one.
+ *
+ * [loop_static2](d) = ((d.nil).nil)  -- two iterations, so the counter really is
+ * consulted twice and a one-iteration bug would show.
+ *
+ * loop_static3.rwhile is the same program with one more iteration.  The PAIR is
+ * the point: it says whether the residual's cost per unrolled iteration is
+ * constant, i.e. whether `resid <= p+` survives deeper unrolling or only holds
+ * because the loop was short.
+ *
+ * The counter must be cleared before `write`: R-WHILE's store invariant is that
+ * every variable but the output one ends nil. *)
+read V0;
+  from  =? V1 nil
+  do    V0 <= cons V0 nil
+  loop  V1 <= cons nil V1
+  until =? V1 (nil . nil);
+  V1 ^= (nil . nil);
+write V0

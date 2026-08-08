@@ -1,0 +1,28 @@
+(* dyncond3.rwhile -- a DYNAMIC CONDITIONAL and nothing else: no loop, two
+ * variables, so ri_fp3 (which dispatches over exactly V0/V1/V2) can interpret it.
+ *
+ * WHY IT EXISTS (2026-08-09).  It is the control experiment that names the wall
+ * in front of the jones-self battery.  examples/reverse.rwhile cannot be
+ * specialised through ri_fp3 -- spec_av dies with `'error <= '41` -- and the
+ * obvious reading is "loops are not supported yet".  That reading is wrong:
+ * loop_static2/loop_static3 ARE loops and they specialise fine, while THIS
+ * program has no loop at all and dies with exactly the same '41.
+ *
+ * So the boundary is DYNAMIC CONTROL, not loops.  A dynamic branch in the
+ * interpreted program makes spec_av dynamicize the store; ri_fp3's code stack
+ * Cd is in that store; ri_fp3's own main loop is then a loop whose exit test
+ * `=? Cd nil` stops being static in the middle of being unrolled, and spec_av's
+ * 'lcheck has no residualisation path for that.  See
+ * FINDINGS_reversible_projections.md section 10 and the `jones-self-open` tests.
+ *
+ * [dyncond3](d) = ('one . d) for non-nil d, ('two . nil) for d = nil.
+ * The input is carried into the output because R-WHILE's store invariant leaves
+ * no other way to consume it. *)
+read V0;
+  if V0 then
+    V1 ^= 'one
+  else
+    V1 ^= 'two
+  fi (=? V1 'one);
+  V0 <= cons V1 V0;
+write V0

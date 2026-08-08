@@ -236,8 +236,24 @@ let jones_self spec_av =
   let ab_nil = VCons (atom "'a", VCons (atom "'b", VNil)) in
   let sint = parse_prog (dir ^ "/ri_fp3.rwhile") in
   let pd_sint = Program2DataRwhile.program2data sint in
+  (* loop_static2 / loop_static3 are the LOOP subjects (2026-08-09).  Every other
+   * entry is straight-line code, so before them the reversible criterion had
+   * only ever been tested on loop-free programs.  Their loop control is static
+   * (a counter against a literal) and their body is dynamic, so spec_av unrolls
+   * them and the residual is loop-free -- the lp_p/lp_r columns show exactly
+   * that.  A DATA-DEPENDENT loop (examples/reverse.rwhile) still cannot be
+   * specialised through ri_fp3 at all; see FINDINGS_reversible_projections.md
+   * ("'error <= '41"), and the jones-self-open test that pins the failure. *)
   let cases = [ "id", ab; "id2", ab; "id3", ab; "rep", ab;
-                "swap", ab; "sx_splitjoin", ab; "sx_three", ab_nil ] in
+                "swap", ab; "sx_splitjoin", ab; "sx_three", ab_nil;
+                "loop_static2", ab; "loop_static3", ab ] in
+  (* JONES_EXTRA=a,b,c appends ../examples/<name>.rwhile to the battery, run on
+   * ('a.'b).  For trying a candidate subject without editing this file -- the
+   * loop subjects above were found that way, and the next person will want to
+   * try their own before deciding it is worth a permanent example. *)
+  let cases = cases @ (match Sys.getenv_opt "JONES_EXTRA" with
+      | None | Some "" -> []
+      | Some s -> List.map (fun n -> (n, ab)) (String.split_on_char ',' s)) in
   let meter f = EvalRwhile.reset_steps (); EvalRwhile.reset_work ();
     let v = f () in (v, EvalRwhile.get_steps (), EvalRwhile.get_work ()) in
   Printf.printf "Jones optimality with the SELF-interpreter ri_fp3 (steps / work)\n";
@@ -245,8 +261,9 @@ let jones_self spec_av =
   Printf.printf "  Jones criterion: resid <= direct (J).  Reversible criterion: resid <= p+ (Jr),\n";
   Printf.printf "  where p+ = p made program-preserving ([p+](d) = (p2d p . [p](d))).\n";
   Printf.printf "  raw = the residual as spec_av emits it; res = after copy propagation.\n";
-  Printf.printf "  %-13s %7s %6s %6s %6s %6s %6s %6s %6s %7s %7s %7s %7s %6s %5s\n"
-    "program" "|resid|" "st_dir" "st_p+" "st_si" "st_raw" "st_res" "J(st)" "Jr(st)"
+  Printf.printf "  lp_p / lp_r = CLoop nodes in p and in the residual (0 = unrolled away).\n";
+  Printf.printf "  %-13s %7s %5s %5s %6s %6s %6s %6s %6s %6s %6s %7s %7s %7s %7s %6s %5s\n"
+    "program" "|resid|" "lp_p" "lp_r" "st_dir" "st_p+" "st_si" "st_raw" "st_res" "J(st)" "Jr(st)"
     "wk_dir" "wk_p+" "wk_si" "wk_res" "Jr(wk)" "ok";
   List.iter (fun (name, d) ->
       let srcp = parse_prog (dir ^ "/" ^ name ^ ".rwhile") in
@@ -264,8 +281,9 @@ let jones_self spec_av =
       let ok = snd_of rres = dres && snd_of sires = dres
                && ppres = rres && ppres = sires in
       let ratio a b = float_of_int a /. float_of_int b in
-      Printf.printf "  %-13s %7d %6d %6d %6d %6d %6d %5.1fx %5.1fx %7d %7d %7d %7d %5.2fx %5b\n"
-        name (cn (Program2DataRwhile.program2data rprog)) sd sp ss sraw sr
+      Printf.printf "  %-13s %7d %5d %5d %6d %6d %6d %6d %6d %5.1fx %5.1fx %7d %7d %7d %7d %5.2fx %5b\n"
+        name (cn (Program2DataRwhile.program2data rprog))
+        (body_loops srcp) (body_loops rprog) sd sp ss sraw sr
         (ratio sr sd) (ratio sr sp) wd wp ws wr (ratio wr wp) ok)
     cases;
   Printf.printf "  ok = residual, self-interpreter and p+ all produce the SAME value\n";
