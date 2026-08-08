@@ -2114,36 +2114,70 @@ let test_fp1_ri_fp3_nested_pattern_runs () =
  * MEASURED (./measure_proj jones-self; steps = command nodes, work = value nodes
  * examined by comparison; residual = after Simp.copyprop_program):
  *
- *   program       |resid| st_dir st_p+ st_si st_raw st_res  wk_p+ wk_si wk_res
- *   id                53      1     5     89     11      3     23    64     23
- *   id2               87      1     5     90     19      7     25    75     25
- *   id3              139      1     5    184     27     11     38   150     37
- *   rep               87      1     5     90     19      7     25    75     25
- *   swap             379      3     7    260     41     25     57   234     57
- *   sx_splitjoin     343      3     7    260     41     23     57   234     57
- *   sx_three         543      3     7    354     51     35     72   311     71
+ *   program       |resid| lp_p lp_r st_dir st_p+ st_si st_raw st_res  wk_p+ wk_si wk_res
+ *   id                53     0    0      1     5     89     11      3     23    64     23
+ *   id2               87     0    0      1     5     90     19      7     25    75     25
+ *   id3              139     0    0      1     5    184     27     11     38   150     37
+ *   rep               87     0    0      1     5     90     19      7     25    75     25
+ *   swap             379     0    0      3     7    260     41     25     57   234     57
+ *   sx_splitjoin     343     0    0      3     7    260     41     23     57   234     57
+ *   sx_three         543     0    0      3     7    354     51     35     72   311     71
+ *   loop_static2     121     1    0      6    10   1240     15      1    104  1164     95
+ *   loop_static3     131     1    0      8    12   1852     15      1    118  1723    101
  *
- * Three readings, each pinned by a test below:
+ * (lp_p / lp_r = CLoop nodes in p / in the residual.)
+ *
+ * Four readings, each pinned by a test below:
  *   (1) On the WORK meter the criterion HOLDS: wk_res <= wk_p+ in every case
- *       (and strictly below on id3/sx_three).  The residual examines no more
- *       value nodes than the program-preserving baseline.
- *   (2) On the STEPS meter it FAILS: 1.4x-5.0x of p+ (only `id` is under, at
- *       0.6x).  The residual pays extra COMMANDS -- the interpreter's data
- *       staging, made explicit -- while touching the same amount of data.  This
- *       is the same metric-dependence RWHILE_S.md already records for the
- *       op-language interpreters, now at the self-interpreter.
+ *       (and strictly below on id3/sx_three and on both loop subjects).  The
+ *       residual examines no more value nodes than the program-preserving
+ *       baseline.
+ *   (2) On the STEPS meter it FAILS for the STRAIGHT-LINE subjects: 1.4x-5.0x
+ *       of p+ (only `id` is under, at 0.6x).  The residual pays extra COMMANDS
+ *       -- the interpreter's data staging, made explicit -- while touching the
+ *       same amount of data.  This is the same metric-dependence RWHILE_S.md
+ *       already records for the op-language interpreters, now at the
+ *       self-interpreter.
+ *   (2') ...and it HOLDS for the LOOP subjects, by a wide margin (0.1x of p+):
+ *       there the specialiser has something to remove.  loop_static2/3 have a
+ *       statically-controlled loop over a dynamic body; unrolling collapses the
+ *       whole thing into ONE residual command (st_res = 1), and adding a third
+ *       iteration does not change that.  So the steps-meter failure in (2) is
+ *       not "the specialiser is bad at everything" -- it is the fixed cost of
+ *       staging, which straight-line subjects cannot amortise.
  *   (3) The interpretive layer is nevertheless mostly gone: 25-30x fewer steps
- *       than self-interpretation.
+ *       than self-interpretation (over 1000x on the loop subjects).
  * A negative is pinned as a test on purpose: if (2) flips, the specialiser got
- * better and the claim in RWHILE_S.md must be re-measured, not silently kept. *)
+ * better and the claim in RWHILE_S.md must be re-measured, not silently kept.
+ *
+ * WHAT IS STILL NOT IN THE TABLE (2026-08-09): a DATA-DEPENDENT loop.  The
+ * boundary is not "loops" -- loop_static2/3 are loops and they specialise --
+ * it is DYNAMIC CONTROL; see the `jones-self-open` tests below, which pin the
+ * failure and localise it. *)
 let jones_self_cases =
   let ab = VCons (atom "'a", atom "'b") in
   let ab_nil = VCons (atom "'a", VCons (atom "'b", VNil)) in
   [ "id", ab; "id2", ab; "id3", ab; "rep", ab;
-    "swap", ab; "sx_splitjoin", ab; "sx_three", ab_nil ]
+    "swap", ab; "sx_splitjoin", ab; "sx_three", ab_nil;
+    "loop_static2", ab; "loop_static3", ab ]
+
+(* CLoop nodes in a program body.  The loop subjects need this: the claim about
+   them is not only that they are cheap but that the loop is GONE. *)
+let rec js_count_loops = function
+  | CSeq (a, b)        -> js_count_loops a + js_count_loops b
+  | CCond (_, t, e, _) -> js_bthen t + js_belse e
+  | CLoop (_, d, l, _) -> 1 + js_bdo d + js_bloop l
+  | CLocal (_, c)      -> js_count_loops c
+  | _ -> 0
+and js_bthen = function BThen c -> js_count_loops c | BThenNone -> 0
+and js_belse = function BElse c -> js_count_loops c | BElseNone -> 0
+and js_bdo   = function BDo c -> js_count_loops c | BDoNone -> 0
+and js_bloop = function BLoop c -> js_count_loops c | BLoopNone -> 0
+let js_body_loops (Prog (_, _, b, _)) = js_count_loops b
 
 type jones_row = {
   jname : string;
+  lp_p : int; lp_r : int;              (* CLoop nodes in p / in the residual *)
   st_dir : int; wk_dir : int;          (* p, run directly *)
   st_pp : int;  wk_pp : int;           (* p+ : program-preserving p *)
   st_si : int;  wk_si : int;           (* self-interpretation via ri_fp3 *)
@@ -2171,9 +2205,10 @@ let jones_self_table = lazy (
       let raw = Program2DataRwhile.data2program
           (EvalRwhile.evalProgram spec_av (spec_in pd_sint pd)) in
       let (_, sraw, _) = meter (fun () -> EvalRwhile.evalProgram raw d) in
-      let (rres, sr, wr) =
-        meter (fun () -> EvalRwhile.evalProgram (Simp.copyprop_program raw) d) in
-      { jname = name; st_dir = sd; wk_dir = wd; st_pp = sp; wk_pp = wp;
+      let cpp = Simp.copyprop_program raw in
+      let (rres, sr, wr) = meter (fun () -> EvalRwhile.evalProgram cpp d) in
+      { jname = name; lp_p = js_body_loops srcp; lp_r = js_body_loops cpp;
+        st_dir = sd; wk_dir = wd; st_pp = sp; wk_pp = wp;
         st_si = ss; wk_si = ws; st_raw = sraw; st_res = sr; wk_res = wr;
         agree = (ppres = sires && ppres = rres
                  && rres = VCons (pd, dres)) })
@@ -2211,17 +2246,67 @@ let test_jones_self_work_optimal () =
     (Lazy.force jones_self_table)
 
 (* (2) THE HONEST OTHER HALF.  On the steps meter (command nodes) it does NOT
- * hold: every subject but `id` needs more commands than p+.  Pinned so that an
- * improvement to the specialiser shows up as a failing test rather than as a
- * stale claim in RWHILE_S.md. *)
+ * hold for the STRAIGHT-LINE subjects: each of them but `id` needs more
+ * commands than p+.  It DOES hold for the loop subjects, where unrolling has
+ * something to remove.  Both directions are pinned, so that an improvement to
+ * the specialiser -- or a regression on the loop subjects -- shows up as a
+ * failing test rather than as a stale claim in RWHILE_S.md. *)
 let test_jones_self_steps_not_optimal () =
+  let under_pp = ["id"; "loop_static2"; "loop_static3"] in
   List.iter (fun r ->
-      let expect_over = r.jname <> "id" in
+      let expect_over = not (List.mem r.jname under_pp) in
       Alcotest.(check bool)
         (Printf.sprintf "%s: steps(residual)=%d vs steps(p+)=%d (over p+ expected: %b)"
            r.jname r.st_res r.st_pp expect_over)
         expect_over (r.st_res > r.st_pp))
     (Lazy.force jones_self_table)
+
+(* (2') THE LOOP SUBJECTS.  They are what makes the table say anything about
+ * loops at all, so their two defining properties are checked rather than
+ * assumed: p really contains a loop, and the residual really does not (spec_av
+ * unrolled it).  The residual then beats p+ on BOTH meters -- the only subjects
+ * that do -- which is the honest counterweight to (2). *)
+let test_jones_self_loop_subjects_unrolled () =
+  let loops = List.filter (fun r -> List.mem r.jname ["loop_static2"; "loop_static3"])
+      (Lazy.force jones_self_table) in
+  Alcotest.(check int) "two loop subjects are in the table" 2 (List.length loops);
+  List.iter (fun r ->
+      Alcotest.(check int) (r.jname ^ ": p contains a loop") 1 r.lp_p;
+      Alcotest.(check int) (r.jname ^ ": residual is loop-free (unrolled)") 0 r.lp_r;
+      Alcotest.(check bool)
+        (Printf.sprintf "%s: steps(residual)=%d <= steps(p+)=%d" r.jname r.st_res r.st_pp)
+        true (r.st_res <= r.st_pp);
+      Alcotest.(check bool)
+        (Printf.sprintf "%s: work(residual)=%d < work(p+)=%d" r.jname r.wk_res r.wk_pp)
+        true (r.wk_res < r.wk_pp))
+    loops
+
+(* (2'') ...and the residual is a COMPILED program, not a table lookup for the
+ * one input the measurement used.  The table above runs each residual on a
+ * single d; here the loop subjects' residuals are run on three different d and
+ * must agree with p+ on each.  Without this the 0.1x ratios could be an
+ * artefact of having specialised away the input as well as the loop. *)
+let test_jones_self_loop_residual_is_general () =
+  let spec_av = parse_file_program (examples_dir ^ "/spec_av.rwhile") in
+  let sint = parse_file_program (examples_dir ^ "/ri_fp3.rwhile") in
+  let pd_sint = Program2DataRwhile.program2data sint in
+  let inputs = [ VCons (atom "'a", atom "'b"); VNil; parse_val "(('x . nil) . 'y)" ] in
+  List.iter (fun name ->
+      let srcp = parse_file_program (examples_dir ^ "/" ^ name ^ ".rwhile") in
+      let pd = Program2DataRwhile.program2data srcp in
+      let resid = Simp.copyprop_program (Program2DataRwhile.data2program
+          (EvalRwhile.evalProgram spec_av (spec_in pd_sint pd))) in
+      let pp = Simp.program_preserving srcp in
+      List.iter (fun d ->
+          Alcotest.(check valT_testable)
+            (name ^ ": [residual](d) = [p+](d) for a d the measurement did not use")
+            (EvalRwhile.evalProgram pp d) (EvalRwhile.evalProgram resid d);
+          (* and it is still a reversible program *)
+          Alcotest.(check valT_testable) (name ^ ": [inv residual]([residual](d)) = d")
+            d (EvalRwhile.evalProgram (InvRwhile.invProgram resid)
+                 (EvalRwhile.evalProgram resid d)))
+        inputs)
+    ["loop_static2"; "loop_static3"]
 
 (* (3) The interpretive layer is nevertheless removed almost entirely: the
  * residual runs in under a fifth of the self-interpretation's steps (measured:
@@ -2247,6 +2332,102 @@ let test_jones_self_copyprop_needed () =
         (Printf.sprintf "%s: steps(raw)=%d > steps(copyprop)=%d" r.jname r.st_raw r.st_res)
         true (r.st_raw > r.st_res))
     (Lazy.force jones_self_table)
+
+(* ===== jones-self-open: WHERE THE BATTERY STOPS, AND WHY (2026-08-09) =====
+ *
+ * The jones-self table has loop subjects now (loop_static2/3), but they have
+ * STATIC loop control.  examples/reverse.rwhile -- the obvious loop subject --
+ * still cannot be specialised, and the handover note that came with it said the
+ * cause was "fp1-via-ri_fp3 does not handle loops yet".  Measured here, that is
+ * NOT the cause; these three tests pin what is:
+ *
+ *   (a) ri_fp3 self-interprets reverse CORRECTLY.  The interpreter is fine.
+ *   (b) [spec_av]((ri_fp3 . reverse)) dies with spec_av's own `'error <= '41`,
+ *       which is raised at exactly ONE place in examples/spec_av.rwhile: the
+ *       'lcheck handler, when a loop's EXIT test is dynamic.  'lcheck is the
+ *       continuation that static unrolling pushes, so the message means "I
+ *       started unrolling a loop and its exit test then stopped being static",
+ *       for which spec_av has no residualisation path.
+ *   (c) the SAME failure appears for examples/dyncond3.rwhile, which has NO
+ *       loop at all -- just a conditional on the dynamic input.  So the
+ *       boundary is DYNAMIC CONTROL, not loops: a dynamic branch inside the
+ *       interpreted program makes spec_av dynamicize the store, ri_fp3's code
+ *       stack Cd is part of that store, and ri_fp3's own main loop
+ *       (`from =? Cd' nil loop STEP-FP3 until =? Cd nil`) is the loop whose
+ *       exit test goes dynamic mid-unroll.
+ *   (d) and it is not an ri_fp3 artefact either: specialising reverse DIRECTLY
+ *       (no interpreter in the picture) fails with the same '41, because
+ *       reverse's own `until =? Y nil` goes dynamic after the static head of
+ *       the partial-static input is consumed.
+ *
+ * Contrast: a dynamic conditional in a subject specialised DIRECTLY is handled
+ * (test_fp1_dyncond_direct_ok below, and ./measure_proj dyncond) -- spec_av's
+ * dynamic-'cond path residualises fine.  What has no path is a dynamic exit
+ * test reached AFTER unrolling began.  See FINDINGS_reversible_projections.md
+ * for the analysis and the size estimate of a fix.
+ *
+ * These are pinned as EXPECTED FAILURES.  If one of them stops raising, the
+ * specialiser gained a loop/dynamic-control path and the tables in RWHILE_S.md
+ * must be re-measured rather than left standing. *)
+let spec_av_error_41 =
+  Failure "Pattern matching failed: '41 and 'error are not equal (in inv_evalPat)"
+
+let test_jones_self_open_interpreter_is_fine () =
+  let sint = parse_file_program (examples_dir ^ "/ri_fp3.rwhile") in
+  let rev = parse_file_program (examples_dir ^ "/reverse.rwhile") in
+  let pd = Program2DataRwhile.program2data rev in
+  let d = parse_val "('a . ('b . nil))" in
+  (* [ri_fp3](p2d reverse, d) = (p2d reverse . [reverse](d)) -- so the loop
+     subject that cannot be SPECIALISED is nevertheless INTERPRETED correctly. *)
+  Alcotest.(check valT_testable)
+    "ri_fp3 self-interprets reverse (the interpreter is not the wall)"
+    (VCons (pd, EvalRwhile.evalProgram rev d))
+    (EvalRwhile.evalProgram sint (VCons (pd, d)))
+
+let test_jones_self_open_dynamic_control_via_ri_fp3 () =
+  let spec_av = parse_file_program (examples_dir ^ "/spec_av.rwhile") in
+  let pd_sint = Program2DataRwhile.program2data
+      (parse_file_program (examples_dir ^ "/ri_fp3.rwhile")) in
+  let fp1 name =
+    let pd = Program2DataRwhile.program2data
+        (parse_file_program (examples_dir ^ "/" ^ name ^ ".rwhile")) in
+    fun () -> ignore (EvalRwhile.evalProgram spec_av (spec_in pd_sint pd)) in
+  (* a DATA-DEPENDENT loop ... *)
+  Alcotest.check_raises
+    "OPEN: fp1-via-ri_fp3 of reverse dies at spec_av's 'lcheck ('error <= '41)"
+    spec_av_error_41 (fp1 "reverse");
+  (* ... and a program with NO loop but a dynamic conditional dies identically,
+     which is what identifies the boundary as dynamic control rather than loops *)
+  Alcotest.check_raises
+    "OPEN: fp1-via-ri_fp3 of dyncond3 (loop-free!) dies the same way"
+    spec_av_error_41 (fp1 "dyncond3")
+
+let test_jones_self_open_direct_fp1_too () =
+  let spec_av = parse_file_program (examples_dir ^ "/spec_av.rwhile") in
+  let pd_rev = Program2DataRwhile.program2data
+      (parse_file_program (examples_dir ^ "/reverse.rwhile")) in
+  (* No interpreter in the picture: reverse is the SUBJECT.  Its exit test
+     `=? Y nil` is static (false) while Y is the partial-static input cons, and
+     dynamic once the static head has been consumed -> the same '41. *)
+  Alcotest.check_raises
+    "OPEN: direct fp1 of reverse dies at 'lcheck too (not an ri_fp3 artefact)"
+    spec_av_error_41
+    (fun () -> ignore (EvalRwhile.evalProgram spec_av (spec_in pd_rev (atom "'c"))));
+  (* ...whereas a genuinely dynamic CONDITIONAL in a direct subject IS handled:
+     fp_dyncond_bug's `if D` tests the dynamic half of the input, and spec_av
+     residualises it into a correct two-way residual.  This control case keeps
+     (d) from being read as "spec_av cannot do anything dynamic": what has no
+     path is a dynamic test reached after unrolling has begun. *)
+  let pd_dyn = Program2DataRwhile.program2data
+      (parse_file_program (examples_dir ^ "/fp_dyncond_bug.rwhile")) in
+  let comp = Program2DataRwhile.data2program
+      (EvalRwhile.evalProgram spec_av (spec_in pd_dyn VNil)) in
+  Alcotest.(check valT_testable)
+    "control: a dynamic cond in a DIRECT subject residualises correctly ('one)"
+    (atom "'one") (EvalRwhile.evalProgram comp (atom "'q"));
+  Alcotest.(check valT_testable)
+    "control: ...and takes the other branch on the other input ('two)"
+    (atom "'two") (EvalRwhile.evalProgram comp VNil)
 
 (* Evaluate a program-as-data value (a spec residual / comp) DIRECTLY by
  * decoding it back to an AST -- the reliable alternative to run_via_ri, which
@@ -3483,6 +3664,15 @@ let () =
       Alcotest.test_case "steps meter: residual > p+ (NOT optimal)" `Quick test_jones_self_steps_not_optimal;
       Alcotest.test_case "the interpretive layer is removed (>=5x fewer steps)" `Quick test_jones_self_removes_interpretation;
       Alcotest.test_case "copy propagation is what buys it" `Quick test_jones_self_copyprop_needed;
+      Alcotest.test_case "loop subjects: p loops, residual does not, and it wins on both meters" `Quick test_jones_self_loop_subjects_unrolled;
+      Alcotest.test_case "loop subjects: the residual is general, not input-specific" `Quick test_jones_self_loop_residual_is_general;
+    ];
+    (* The boundary of the battery, pinned as expected failures.  See the note
+       above test_jones_self_open_interpreter_is_fine. *)
+    "jones-self-open", [
+      Alcotest.test_case "ri_fp3 self-interprets reverse (the interpreter is fine)" `Quick test_jones_self_open_interpreter_is_fine;
+      Alcotest.test_case "OPEN: dynamic control via ri_fp3 dies at 'lcheck ('error <= '41)" `Quick test_jones_self_open_dynamic_control_via_ri_fp3;
+      Alcotest.test_case "OPEN: direct fp1 of reverse dies the same way" `Quick test_jones_self_open_direct_fp1_too;
     ];
     "work-meter", [
       Alcotest.test_case "equal values cost their size" `Quick test_work_equal_values_cost_their_size;

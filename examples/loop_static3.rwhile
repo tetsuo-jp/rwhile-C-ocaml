@@ -1,0 +1,17 @@
+(* loop_static3.rwhile -- loop_static2.rwhile with THREE iterations instead of
+ * two.  Same three variables (V0 dynamic in/out, V1 the static counter), same
+ * statically-controlled loop; only the exit literal changes.
+ *
+ * It exists so that the jones-self table has two points on the same family: the
+ * residual of a statically-unrolled loop grows with the iteration count, and
+ * p+ grows too, so the RATIO resid/p+ is what says whether the specialiser's
+ * per-iteration overhead is constant.  One loop subject cannot answer that.
+ *
+ * [loop_static3](d) = (((d.nil).nil).nil) *)
+read V0;
+  from  =? V1 nil
+  do    V0 <= cons V0 nil
+  loop  V1 <= cons nil V1
+  until =? V1 (nil . (nil . nil));
+  V1 ^= (nil . (nil . nil));
+write V0
