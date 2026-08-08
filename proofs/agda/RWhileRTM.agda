@@ -36,11 +36,20 @@
 --     `STK =? (b̄ . nil)`; `stepC` will test the dispatch key `(Q . S)`
 --     against `(q̄ . s̄)`.
 --
--- STATUS (milestone 1).  Definitions and the statements of Lemma 1 and of
--- r-Turing completeness are here and typecheck; `pushC` is proved to
--- realise the paper's PUSH in both of its cases.  The dispatch chain
--- `stepC` and the loop induction of Theorem 2 are milestone 2.  No
--- postulates, no holes — an unproved statement appears as a `Set`, never
+-- STATUS.  LEMMA 1 OF THE LETTER IS PROVED (`lemma1`), for all four rule
+-- shapes of Fig. 3.  So is everything it rests on: the two halves of the
+-- pattern replacement (`unpack-sound`, `pack-sound`), PUSH and POP
+-- (`push-sound`, `pop-sound`), the two head moves (`movel-sound`,
+-- `mover-sound`), and the fact that the translation only ever emits legal
+-- R-WHILE (`wf-ruleC` — R-WHILE's linearity side condition).
+--
+-- What remains is the multi-way dispatch `stepC`, which selects the branch
+-- for the applicable rule (its entry guards are mutually exclusive by local
+-- forward determinism, its exit assertions by local backward determinism),
+-- and the induction over the main loop that turns Lemma 1 into Theorem 2.
+-- r-Turing completeness is therefore still a `Set` here, not a theorem.
+--
+-- No postulates, no holes — an unproved statement appears as a `Set`, never
 -- as an assumed inhabitant.
 ------------------------------------------------------------------------
 
@@ -134,6 +143,14 @@ movel-pop-push : ∀ b l x r
 movel-pop-push b []      x r = refl
 movel-pop-push b (y ∷ l) x r = refl
 
+-- The mirror function, which is what MOVER computes on tapes.
+mover : ℕ → Tape → Tape
+mover b (l , x , r) = consNB b x l , popHead b r , popTail r
+
+tri : ∀ {l l′ : List ℕ} {x x′ : ℕ} {r r′ : List ℕ}
+    → l ≡ l′ → x ≡ x′ → r ≡ r′ → (l , x , r) ≡ (l′ , x′ , r′)
+tri refl refl refl = refl
+
 ------------------------------------------------------------------------
 -- The canonicity invariant on half-tapes: NO TRAILING BLANK.
 --
@@ -174,6 +191,50 @@ consNB-nt b x []      nt = go (eqℕ x b) refl
   go : ∀ u → eqℕ x b ≡ u → NoTrailB b (consNB b x [])
   go true  e rewrite e = nt-[]
   go false e rewrite e = nt-1 (eqℕ-false-inv e)
+
+eqℕ-true-inv : ∀ m n → eqℕ m n ≡ true → m ≡ n
+eqℕ-true-inv zero    zero    e = refl
+eqℕ-true-inv zero    (suc n) ()
+eqℕ-true-inv (suc m) zero    ()
+eqℕ-true-inv (suc m) (suc n) e = cong suc (eqℕ-true-inv m n e)
+
+-- popping then pushing back is the identity — this is where NoTrailB pays
+-- off: without it the half-tape [b] would come back as [].
+consNB-pop : ∀ b l → NoTrailB b l → consNB b (popHead b l) (popTail l) ≡ l
+consNB-pop b []            nt-[]      rewrite eqℕ-refl b          = refl
+consNB-pop b (y ∷ [])      (nt-1 y≢b) rewrite eqℕ-false y b y≢b   = refl
+consNB-pop b (y ∷ z ∷ l1)  (nt-∷ nt)                              = refl
+
+-- pushing then popping back is the identity, unconditionally
+pop-consNB-head : ∀ b x r → popHead b (consNB b x r) ≡ x
+pop-consNB-head b x []      = go (eqℕ x b) refl
+  where
+  go : ∀ u → eqℕ x b ≡ u → popHead b (consNB b x []) ≡ x
+  go true  e rewrite e = sym (eqℕ-true-inv x b e)
+  go false e rewrite e = refl
+pop-consNB-head b x (y ∷ r0) = refl
+
+pop-consNB-tail : ∀ b x r → popTail (consNB b x r) ≡ r
+pop-consNB-tail b x []      = go (eqℕ x b) refl
+  where
+  go : ∀ u → eqℕ x b ≡ u → popTail (consNB b x []) ≡ []
+  go true  e rewrite e = refl
+  go false e rewrite e = refl
+pop-consNB-tail b x (y ∷ r0) = refl
+
+-- movel and mover are mutually inverse on canonical tapes.  The second is
+-- what the letter's → clause needs: `Step` defines a right move by the
+-- CONVERSE of movel, and mover-movel says the tape MOVER produces is the
+-- unique one movel sends back.
+movel-mover : ∀ b l x r → NoTrailB b r → movel b (mover b (l , x , r)) ≡ (l , x , r)
+movel-mover b l x r ntr =
+  trans (movel-pop-push b (consNB b x l) (popHead b r) (popTail r))
+        (tri (pop-consNB-tail b x l) (pop-consNB-head b x l) (consNB-pop b r ntr))
+
+mover-movel : ∀ b l x r → NoTrailB b l → mover b (movel b (l , x , r)) ≡ (l , x , r)
+mover-movel b l x r ntl =
+  trans (cong (mover b) (movel-pop-push b l x r))
+        (tri (consNB-pop b l ntl) (pop-consNB-head b x r) (pop-consNB-tail b x r))
 
 -- popping preserves it too (a suffix of a list with no trailing blank has
 -- none either)
@@ -958,6 +1019,14 @@ movelC b = unpackT ⨾ pushC b vS vR vW ⨾ popC b vS vL vW ⨾ packT
 moverC : ℕ → Cmd
 moverC b = inv (movelC b)
 
+-- MOVER is the MIRROR of MOVEL: pushing the symbol under the head onto the
+-- LEFT half-tape and popping from the RIGHT.  This holds definitionally —
+-- `inv` turns `PUSH(S,R) ; POP(S,L)` into `PUSH(S,L) ; POP(S,R)` because POP
+-- is `inv PUSH` and `inv` is involutive on these concrete terms.
+moverC-mirror : ∀ b → moverC b
+              ≡ (((unpackT ⨾ pushC b vS vL vW) ⨾ popC b vS vR vW) ⨾ packT)
+moverC-mirror b = refl
+
 ------------------------------------------------------------------------
 -- 7b.  MOVEL IS CORRECT: it computes the letter's `movel`.
 --
@@ -1014,6 +1083,44 @@ wf-movelC b =
 
 wf-moverC : ∀ b → Wf (moverC b)
 wf-moverC b = wf-inv (movelC b) (wf-movelC b)
+
+-- MOVER IS CORRECT: it computes `mover`, the mirror of `movel`.  The
+-- half-tape it pops from is the RIGHT one, so that is where NoTrailB is
+-- needed this time.
+mover-sound : ∀ b σ l x r
+  → NoTrailB b r
+  → get σ vT ≡ encT (l , x , r) → Scratch-nil σ
+  → Σ[ σ′ ∈ Store ] Σ[ k ∈ ℕ ]
+      ( (moverC b ⊢ σ ⇒ σ′ ∣ k)
+      × (get σ′ vT ≡ encT (mover b (l , x , r)))
+      × Scratch-nil σ′
+      × (∀ y → ¬ (y ≡ vT) → ¬ (y ≡ vL) → ¬ (y ≡ vS) → ¬ (y ≡ vR)
+             → ¬ (y ≡ vTmp) → ¬ (y ≡ vW) → get σ′ y ≡ get σ y) )
+mover-sound b σ l x r ntr hT (hL , hS , hR , hTmp , hW)
+  with unpack-sound σ l x r hT hL hS hR hTmp
+... | σ₁ , _ , dU , g1L , g1S , g1R , g1T , g1Tmp , f1
+  with Push.push-sound b vS vL vW (λ ()) (λ ()) (λ ())
+         σ₁ x l g1S g1L (trans (f1 vW (λ ()) (λ ()) (λ ()) (λ ()) (λ ())) hW)
+... | σ₂ , _ , dPush , p2S , p2L , p2W , f2
+  with Push.pop-sound b vS vR vW (λ ()) (λ ()) (λ ())
+         σ₂ r ntr p2S (trans (f2 vR (λ ()) (λ ()) (λ ())) g1R) p2W
+... | σ₃ , _ , dPop , p3S , p3R , p3W , f3
+  with pack-sound σ₃ (consNB b x l) (popHead b r) (popTail r)
+         (trans (f3 vL (λ ()) (λ ()) (λ ())) p2L) p3S p3R
+         (trans (f3 vT (λ ()) (λ ()) (λ ()))
+                (trans (f2 vT (λ ()) (λ ()) (λ ())) g1T))
+         (trans (f3 vTmp (λ ()) (λ ()) (λ ()))
+                (trans (f2 vTmp (λ ()) (λ ()) (λ ())) g1Tmp))
+... | σ₄ , _ , dPack , g4T , g4L , g4S , g4R , g4Tmp , f4 =
+    σ₄ , _
+  , e-seq (e-seq (e-seq dU dPush) dPop) dPack
+  , g4T
+  , (g4L , g4S , g4R , g4Tmp
+    , trans (f4 vW (λ ()) (λ ()) (λ ()) (λ ()) (λ ())) p3W)
+  , (λ y yT yL yS yR yTmp yW →
+        trans (f4 y yT yL yS yR yTmp)
+        (trans (f3 y yS yR yW)
+        (trans (f2 y yS yL yW) (f1 y yT yL yS yR yTmp))))
 
 ------------------------------------------------------------------------
 -- 8.  The translation of one rule (Fig. 3).
@@ -1177,23 +1284,98 @@ rule-left-sound b q₁ q₂ σ l x r ntl hQ hT sn
     , trans (f2 vR (λ ())) g1R , trans (f2 vTmp (λ ())) g1Tmp
     , trans (f2 vW (λ ())) g1W )
 
+-- (q₁,→,q₂): move the head right, then change the state.  `Step` states the
+-- right move by the converse of movel; `movel-mover` says the tape produced
+-- here is exactly the one that converse asks for.
+rule-right-sound : ∀ b q₁ q₂ σ l x r
+  → NoTrailB b r
+  → get σ vQ ≡ atm q₁ → get σ vT ≡ encT (l , x , r) → Scratch-nil σ
+  → Σ[ σ′ ∈ Store ] Σ[ k ∈ ℕ ]
+      ( (ruleC b (rmov q₁ mvR q₂) ⊢ σ ⇒ σ′ ∣ k)
+      × (get σ′ vQ ≡ atm q₂)
+      × (get σ′ vT ≡ encT (mover b (l , x , r)))
+      × Scratch-nil σ′
+      × (movel b (mover b (l , x , r)) ≡ (l , x , r)) )
+rule-right-sound b q₁ q₂ σ l x r ntr hQ hT sn
+  with mover-sound b σ l x r ntr hT sn
+... | σ₁ , _ , dM , g1T , (g1L , g1S , g1R , g1Tmp , g1W) , f1
+  with setState-sound q₁ q₂ σ₁
+         (trans (f1 vQ (λ ()) (λ ()) (λ ()) (λ ()) (λ ()) (λ ())) hQ)
+... | σ₂ , _ , dS , g2Q , f2 =
+    σ₂ , _ , e-seq dM dS , g2Q
+  , trans (f2 vT (λ ())) g1T
+  , ( trans (f2 vL (λ ())) g1L , trans (f2 vS (λ ())) g1S
+    , trans (f2 vR (λ ())) g1R , trans (f2 vTmp (λ ())) g1Tmp
+    , trans (f2 vW (λ ())) g1W )
+  , movel-mover b l x r ntr
+
 ------------------------------------------------------------------------
--- 10.  LEMMA 1 of the letter, as a statement.
+-- 10.  LEMMA 1 OF THE LETTER, PROVED.
 --
 --   c ⇒_d c′  ⟹  C⟦d̲⟧ c̄ = c̄′
 --
--- i.e. the translated rule, run on a store holding c, terminates on a store
--- holding c′ with the scratch variables clear again.  (Milestone 2 proves
--- this; it is stated here so that the milestone is a type, not prose.)
+-- The translated rule, run on a store holding c, terminates on a store
+-- holding c′ with the scratch variables clear again — so it can be run
+-- again, which is what the main loop needs.
+--
+-- `Step` bundles the rule membership with the move; `StepBy` names the rule
+-- that was used, which is what a per-rule statement has to talk about.
 
-Lemma1 : RTM → Set
-Lemma1 M = ∀ d c c′ σ
-         → d ∈ rules M
-         → Step M c c′
-         → HoldsConf c σ → Scratch-nil σ
-         → Σ[ σ′ ∈ Store ] Σ[ k ∈ ℕ ]
-             ( (ruleC (blank M) d ⊢ σ ⇒ σ′ ∣ k) × HoldsConf c′ σ′ × Scratch-nil σ′ )
+data StepBy (b : ℕ) : Rule → Conf → Conf → Set where
+  sb-sym : ∀ {q s s′ q′ l r}
+         → StepBy b (rsym q s s′ q′) (q , (l , s , r)) (q′ , (l , s′ , r))
+  sb-lft : ∀ {q q′ l x r}
+         → StepBy b (rmov q mvL q′) (q , (l , x , r)) (q′ , movel b (l , x , r))
+  sb-sty : ∀ {q q′ l x r}
+         → StepBy b (rmov q mvS q′) (q , (l , x , r)) (q′ , (l , x , r))
+  sb-rgt : ∀ {q q′ l x r l′ x′ r′}
+         → movel b (l′ , x′ , r′) ≡ (l , x , r)
+         → StepBy b (rmov q mvR q′) (q , (l , x , r)) (q′ , (l′ , x′ , r′))
 
+step-splits : ∀ {M c c′} → Step M c c′
+            → Σ[ d ∈ Rule ] ((d ∈ rules M) × StepBy (blank M) d c c′)
+step-splits (st-sym mem)   = _ , mem , sb-sym
+step-splits (st-lft mem)   = _ , mem , sb-lft
+step-splits (st-sty mem)   = _ , mem , sb-sty
+step-splits (st-rgt mem e) = _ , mem , sb-rgt e
+
+-- Both half-tapes are canonical.  Required on the configuration BEFORE and
+-- AFTER the step: a right move is stated by the converse of movel, so the
+-- successor's left half-tape is not determined by the predecessor's.
+TapeOK : ℕ → Tape → Set
+TapeOK b (l , x , r) = NoTrailB b l × NoTrailB b r
+
+lemma1 : ∀ b d q t q′ t′ σ
+  → StepBy b d (q , t) (q′ , t′)
+  → TapeOK b t → TapeOK b t′
+  → HoldsConf (q , t) σ → Scratch-nil σ
+  → Σ[ σ′ ∈ Store ] Σ[ k ∈ ℕ ]
+      ( (ruleC b d ⊢ σ ⇒ σ′ ∣ k) × HoldsConf (q′ , t′) σ′ × Scratch-nil σ′ )
+
+lemma1 b _ q _ q′ _ σ (sb-sym {s = s} {s′ = s′} {l = l} {r = r}) _ _ (hQ , hT) sn
+  with rule-sym-sound b q s s′ q′ σ l r hQ hT sn
+... | σ′ , k , d , gQ , gT , sn′ = σ′ , k , d , (gQ , gT) , sn′
+
+lemma1 b _ q _ q′ _ σ (sb-lft {l = l} {x = x} {r = r}) (ntl , _) _ (hQ , hT) sn
+  with rule-left-sound b q q′ σ l x r ntl hQ hT sn
+... | σ′ , k , d , gQ , gT , sn′ = σ′ , k , d , (gQ , gT) , sn′
+
+lemma1 b _ q _ q′ _ σ sb-sty _ _ (hQ , hT) sn
+  with rule-stay-sound b q q′ σ _ hQ hT sn
+... | σ′ , k , d , gQ , gT , sn′ = σ′ , k , d , (gQ , gT) , sn′
+
+lemma1 b _ q _ q′ _ σ (sb-rgt {l = l} {x = x} {r = r} {l′} {x′} {r′} em)
+       (_ , ntr) (ntl′ , _) (hQ , hT) sn
+  with rule-right-sound b q q′ σ l x r ntr hQ hT sn
+... | σ′ , k , d , gQ , gT , sn′ , _ =
+  σ′ , k , d , (gQ , subst (λ z → get σ′ vT ≡ encT z) t′-is gT) , sn′
+  where
+  -- the successor tape is exactly what MOVER computed: apply mover to the
+  -- step's own equation and use that mover undoes movel on canonical tapes.
+  t′-is : mover b (l , x , r) ≡ (l′ , x′ , r′)
+  t′-is = trans (sym (cong (mover b) em)) (mover-movel b l′ x′ r′ ntl′)
+
+------------------------------------------------------------------------
 ------------------------------------------------------------------------
 -- 11.  THEOREM 2 of the letter, as a statement: R-WHILE is r-Turing
 -- complete.
