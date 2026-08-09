@@ -267,6 +267,40 @@ fi
 after_rc=$?
 if [ $after_rc -eq 0 ]; then note "- ✓ 受入コマンドが通った"; else note "- ✗ 受入コマンドは通らなかった (rc=$after_rc)"; fi
 
+# 受入の変異検査（2026-08-10、指揮者セッションの指摘）。
+#
+# `creates` 課題では事前 FAIL 検査が空回りする。受入コマンドが
+# `./test-suite test <新設群>` なら、着手前は「群が無い」ので必ず落ち、着手後は
+# 「群を作った」だけで通りうる。**バグを直さなくても「前は落ちて後は通る」を満たせる。**
+# テストを書く人・通す人・採点する人が同一になっている。
+#
+# そこで **実装側の変更だけを退避して受入コマンドを再実行**する。ここで通ってしまったら、
+# そのテストは実装を検査していない＝受入不成立とする。Agda ゲートの変異注入と同じ発想。
+mutation_rc=0
+if [ $after_rc -eq 0 ]; then
+  impl_files="$(git -C "$WT" diff --name-only HEAD -- . ':(exclude)src/TestSuite.ml' 2>/dev/null || true)"
+  if [ -n "$impl_files" ]; then
+    # shellcheck disable=SC2086
+    if git -C "$WT" stash push -q -m accept-mutation -- $impl_files 2>/dev/null; then
+      (cd "$WT" && timeout 1800 bash -c "$ACCEPT") >"$REPORTS/$DATE-accept-mutated.log" 2>&1
+      mut_rc=$?
+      git -C "$WT" stash pop -q 2>/dev/null || note "- ⚠ stash pop に失敗。worktree を手で確認すること"
+      if [ $mut_rc -eq 0 ]; then
+        note "- ✗ **変異検査で受入が通ってしまった**（実装を戻しても緑）。"
+        note "  そのテストは実装を検査していない。受入は不成立とする"
+        mutation_rc=1
+      else
+        note "- ✓ 変異検査: 実装を戻すと受入が落ちる (rc=$mut_rc)＝テストは実装を検査している"
+      fi
+    else
+      note "- ⚠ 変異検査を実施できなかった（stash 失敗）。judge は参考値として読むこと"
+    fi
+  else
+    note "- ✗ **実装側の変更がゼロ**（テストだけが増えた）。受入は不成立とする"
+    mutation_rc=1
+  fi
+fi
+
 # `creates` の検算。宣言しただけで作られていなければ受入は不成立とする。
 # これが無いと `creates` は「静的検査を黙らせる呪文」になり、綴り間違いを宣言して
 # 素通りできてしまう（指揮者セッションの指摘、2026-08-10）。
@@ -312,10 +346,10 @@ else
 fi
 
 if [ $after_rc -eq 0 ] && [ $tests_rc -eq 0 ] && [ "$comp2_post" -ge 1 ] && [ "$probe_ok" = "1" ] \
-   && [ "$creates_rc" -eq 0 ] && [ "$progressed" -eq 1 ]; then
+   && [ "$creates_rc" -eq 0 ] && [ "$progressed" -eq 1 ] && [ "$mutation_rc" -eq 0 ]; then
   status="done"; verdict="緑: 受入通過・テスト緑・fp2 維持・プローブ生存。差分 $REV_BEFORE→$REV_AFTER"
 else
-  status="deferred"; verdict="要レビュー: accept=$after_rc tests=$tests_rc fp2=$comp2_post probe=$probe_ok creates=$creates_rc 差分=$progressed"
+  status="deferred"; verdict="要レビュー: accept=$after_rc tests=$tests_rc fp2=$comp2_post probe=$probe_ok creates=$creates_rc 差分=$progressed 変異=$mutation_rc"
 fi
 python3 "$AR/ledger.py" mark --id "$TID" --status "$status" --note "$DATE $TITLE / $verdict" >/dev/null 2>&1 || true
 
