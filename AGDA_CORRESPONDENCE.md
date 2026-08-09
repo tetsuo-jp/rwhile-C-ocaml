@@ -850,3 +850,124 @@ work はそのまま差し込める。`WorkModel` が `cost := progW` で `Crite
 
 `--safe`・**postulate 0・hole 0**。`check.sh` は **PASS=114 FAIL=0**（4 分 57 秒、
 最大 498 MB）。
+
+---
+
+## 可逆射影の代数的性質（`RWhileFutamuraAlg*` / `RWhileRevProjAlg*` 7 モジュール、2026-08-09）
+
+ロードマップ④の残件 (ii)「代数的性質（合成則・cogen の不動点性＝第4射影の退化）」。
+既存モジュールは**一切改変していない**（`RWhileFutamura2` / `RWhileFutamura3` /
+`RWhileRevProjPaper` を再オープンする加算的な層）。`--safe`・**postulate 0・hole 0**。
+
+| モジュール | 層 | 中身 |
+|---|---|---|
+| `RWhileFutamuraAlg` | 抽象（H1+H2） | 合成則・cogen のカリー化・第4射影の退化・**塔の n 段崩壊** |
+| `RWhileFutamuraAlgInst` | 具象（クロージャ模型） | 全法則を `refl` で再確認＋**誤った不動点読みの反証** |
+| `RWhileFutamuraAlgTag` | 実機の契約（`'S` タグ付き） | 同じ代数を `spec_av` の契約の形で。塔の n 段版は OCaml テストの ∀ 閉包 |
+| `RWhileRevProjAlg` | 可逆・**ゴミは本文の dead 枝**（`spec_av_rev`） | 退化はそのまま成立。ゴミは積み上がらない |
+| `RWhileRevProjAlgPP` | 可逆・**ゴミは出力の対** | 退化は**そのままでは不成立**（反証）。射影 1 回を挟めば成立 |
+| `RWhileRevProjAlgInst` | 上 2 つの具体模型 | 非空虚性＋**具体的な反例** |
+| `RWhileRevProjAlgSize` | コスト・サイズ | 塔はどの計量でも一定・登坂費用は線形・埋込は size で厳密に増える |
+
+### (A) 第4射影の退化は、可逆設定では **ゴミの置き場所で答えが変わる**
+
+古典（Glück, PEPM 2009）の「第4射影は無い」は、抽象層では
+`fp4 : run cogen specP ≡ cogen` であり、**`fp3 specP` そのもの＝1 行**である
+（`cogen` の定義が `spec specP specP` だから）。**自明**。ここは自明だと明記する。
+
+自明でないのはその先で、**可逆にすると答えが割れる**。可逆な特殊化器は単射でなければ
+ならず、静的入力を消せない（FINDINGS §4）。捨て場所は 2 通りあり、**代数が違う**。
+
+| 設計 | 実体 | `run cogen rspec ≡ cogen` | 定理 |
+|---|---|---|---|
+| ゴミを**残余の本文の dead 枝**へ | `examples/spec_av_rev.rwhile`（`EMBED-GARB`） | **そのまま成立** | `RWhileRevProjAlg.Embed.fp4-rev` |
+| ゴミを**出力の対**へ（入力保存） | 教科書的な「入力を捨てない」構成（`RWhileRevProjGen.input-preserving-inj`） | **不成立（反証）**。正しい形は `snd (run cogen rspec) ≡ cogen` | `RWhileRevProjAlgPP.fp4-fails` / `fp4-clean` |
+
+- **dead 枝の埋込は意味論的に透明**（`dead : run (emb g r) d ≡ run r d`）なので、
+  ゴミを抱えた特殊化器が論文の `def-spec` を**導出できる**（`Embed.def-spec`）。
+  したがって `RWhileRevProjPaper` の 3 射影も第4射影の退化も、**ゴミ込みのまま**
+  一字一句そのまま成り立つ。**横山案の dead-path 埋込は、単なる実装上の工夫ではなく
+  射影の代数を保存する設計だった**——これは主張になりうる。
+- **出力に対で持つ設計では退化は破れる**。`fp4-shape : run cogen rspec ≡ ⟨ γ rspec rspec , cogen ⟩`
+  であり、`fp4-fails` は**対が非巡回（`⟨a,b⟩ ≢ b`）でありさえすれば**反証になる
+  （模型固有の癖ではない。木の模型ならどれでも成り立つ。`RWhileRevProjAlgInst.OutPair.non-cyclic`
+  がノード数で実際に片付けている）。
+- **ただし「符号が入れ子に積み上がる」という懸念は当たらない**。ゴミは
+  **各段 1 層の平坦な層**で、その中身はその段の 2 引数だけで決まり、下の段のゴミを
+  含まない（`cleanup-once`）。塔をいくら高くしても**答えの符号の深さは 1**
+  （`answer-height-free : run … ≡ ⟨ src , ⟦src⟧ d ⟩`）。dead 枝設計でも同じで、
+  どの高さの成果物も `emb (γ rspec rspec) (mix rspec rspec)` という同一の 1 層項
+  （`Embed.tower-carries`）。
+
+### ロードマップ④の「cogen の不動点性」という表現は **演算子を書かないと偽になる**
+
+`fp4` が言っているのは **`Φ X = ⟦X⟧(specP)`（＝特殊化器の符号に適用する）の不動点**である。
+一方、素直に読めるもう一つの読み **`⟦cogen⟧(cogen) = cogen`（cogen を自分自身に食わせる）は偽**で、
+`RWhileFutamuraAlgInst.cogen-not-self-applicable` が模型で反証している
+（`⟦cogen⟧(cogen) = papp mkpapp cogen` はより大きい項。この模型は H1・H2 を満たすので、
+階層の仮定からこの命題は導けない）。可逆・出力ゴミ設計ではさらに、
+**`Φ X = snd (⟦X⟧(rspec))` と射影込みで書かないと不動点にならない**。
+
+> **和文での推奨表記**：「cogen は `X ↦ snd(⟦X⟧(specP))` の不動点である（射影を挟まない
+> 等式は、ゴミを出力に持つ可逆特殊化器では成り立たない）」。
+> 「cogen の不動点性」とだけ書くと、3 つの読みのうち 2 つが偽になる。
+
+### (B) 合成則
+
+| 定理 | 内容 | 自明さ |
+|---|---|---|
+| `spec-compose` | `⟦spec (spec p s) t⟧ d ≡ ⟦p⟧ ⟨s,⟨t,d⟩⟩`。**2 段特殊化＝入れ子の静的入力への 1 段特殊化**。H1 を 2 回使うだけで H2 は不要＝**自己適用できない特殊化器でも成り立つ** | 2 行 |
+| `spec-stage` | その n 引数版（静的入力のリストに対する帰納法）。`stage p [s₁…sₙ]` を走らせると `⟨s₁,⟨…⟨sₙ,d⟩…⟩⟩` に特殊化したのと同じ | 帰納法 1 本 |
+| `cogen-curry` | **`⟦⟦cogen⟧ p⟧ s ≡ spec p s`＝cogen は特殊化器のカリー化**。fp2（`p := int`）も 2 段合成もこれの特例 | 3 行。**以下の合成則はすべてこれの系** |
+| `cogen-target` / `cogen-run` | `⟦⟦cogen⟧ int⟧ src ≡ target src`、およびその先 `⟦…⟧ d ≡ ⟦int⟧ ⟨src,d⟩`（2 段） | 系 |
+| `cogen-target₃` | 3 段（`⟦⟦⟦cogen⟧ specP⟧ int⟧ src ≡ target src`） | `tower-curry 1` の特例 |
+| **`tower-collapse`** | `tower zero = cogen`, `tower (suc n) = Φ (tower n)` に対し **`∀ n → tower n ≡ cogen`** | 帰納法 1 本 |
+| **`tower-curry` / `tower-run`** | **どの高さの塔でも** `⟦⟦tower n⟧ p⟧ s ≡ spec p s`、`⟦⟦⟦tower n⟧ int⟧ src⟧ d ≡ ⟦int⟧ ⟨src,d⟩` | 系 |
+
+**n 段の一般化はできた。** ただし正直に言えば、一般化の中身は
+「塔が第 3 段で**プログラムとして同一**になる」ことであって、段ごとに新しい構造が
+出てくるのを帰納で押さえたわけではない。**それが「第4射影が無い」の形式的な内容**である
+（外延的に等価、ではなく、**同一のプログラム**）。可逆版も同じ形で成立する
+（`RWhileRevProjAlg.tower-proj`、`RWhileRevProjAlgPP.tower-proj`。後者は**各段に射影を
+挟んだときのみ**。挟まないと段 1 で既に破れ（`raw-1-fails`）、段 2 は仮定から決まりすらしない
+——対はプログラムではないので `run ⟨a,b⟩ d` を定める式が無い）。
+
+`RWhileFutamuraAlgTag` は同じ代数を**実機の契約**（`[[spec_av]((p.('S.s)))](d) = [p]((s.d))`）
+の上で述べ直したもの。`tower-run` は OCaml テスト `[[comp3]('S.ri_min)]('S.swap) == B` に
+**自己適用を何段前置しても成り立つ**という ∀ 閉包になっている。
+
+### (C) コストの側（`RWhileRevProjAlgSize`）
+
+**抽象層に限れば言える。実機の `-work` 層（`RWhileWork*`）とは繋がっていない**
+（抽象 U 層とタイムド核の橋渡しは④の既知の未解決項目のまま）。
+
+| 定理 | 内容 |
+|---|---|
+| `TowerMeter.meter-constant` | **どんな ℕ 値計量でも** `meter (tower n) ≡ meter cogen`。計量の性質は一切使わない（成果物が同一なのだから、その関数値も同一）。`-steps`・`-work`・ノード数・ゴミサイズすべてに一度に効く |
+| `Climb.climb-linear` | 高さ n の塔を**建てる**費用は `n × (1 段の費用)`。段ごとに同じ 1 段を買い直すため |
+| `Climb.climb-positive` | 1 段が 1 でも費用を持つなら、高さ n+1 は**厳密に正の費用で、成果物は cogen のまま**。「第4射影は無い」は「何も新しく無い」だけでなく「聞き続けた分だけ線形に払う」 |
+| `Growth.emb-strictly-bigger` | dead 枝の埋込は `run` には無料だが **size には無料でない**：`\|emb g r\| = 1 + \|g\| + \|r\| > \|r\|`。実測 103 → 1739 ノード（FINDINGS §6）の法則版 |
+| `DeadCodeSize` / `OutPairSize` | 具体模型で数値化。dead 枝模型では成果物 7 ノード（clean 残余は 3）だが**高さに依らず 7**。出力ゴミ模型では成果物は 3 と小さいが、**各段が捨てる対は成果物より大きい**（7） |
+
+### 自明／非自明の率直な内訳（査読で先に言われる前に）
+
+- **自明**（1〜3 行、内容は文の側にある）：`fp4`（＝`fp3 specP`）、`cogen-fixpoint`、
+  `cogen-target`、`meter-constant`、`tower-collapse`（帰納 1 本）、`climb-linear`。
+- **やや非自明**：`cogen-curry`（fp2/fp3 を系に持つ形にまとめた点）、`spec-stage`。
+- **非自明で、主張になりうるもの**：
+  1. **dead 枝埋込が `def-spec` を導出する**（`Embed.def-spec`）＝ゴミを本文に隠す設計は
+     射影の代数を保存する。`spec_av_rev` の設計判断への事後的な正当化。
+  2. **出力に対でゴミを持つ設計では第4射影の退化が破れる**（`fp4-fails`）。しかも
+     模型依存でなく**対の非巡回性だけ**から出る。古典との差はここに局在する。
+  3. **義務は積み上がらない**（`tower-carries` / `answer-height-free`）。段ごとに 1 層で、
+     答えの符号の深さは塔の高さに依らず 1。「射影を重ねると符号が入れ子になる」という
+     予想は**否定された**。
+
+### この層が言っていないこと
+
+- 実機 `spec_av_rev` が `dead` / `out` / `mix-eq` を**全入力で**満たすことは未証明
+  （`RWhileFutamura3` の契約と同じ立場。ここで示したのは「代数はその契約の外に
+  追加の証明義務を生まない」ということ）。
+- `-work` / `-steps` の**具体**コストとの接続は無い。(C) は抽象計量に対する言明のみ。
+- 塔の各段の費用が実機でいくらかは測っていない（`climb-linear` は「段ごとに同じ」を
+  言うだけで、その値は与えない）。
