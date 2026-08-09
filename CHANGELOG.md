@@ -114,6 +114,53 @@
   （どの被験も条件文を含まないか、comp2 は `ri_min` 経由のため）。テストは 278 件のまま。
 - **残る同型の穴**：ループの脱出条件は `ri.rwhile`・`ri_fp3.rwhile` とも生の値で比較している。
 
+### `-work` 指標のコストモデルを Agda 化（同日）
+
+測定は `-work`、証明は `-steps` と土台が分かれていた。**基準（p⁺）の側について、両者を同じ
+コストモデルの上に載せた。**
+
+- 新規 6 モジュール（`RWhileWorkV` / `RWhileWork` / `RWhileWorkDet` / `RWhileProgPresWork` /
+  `RWhileProgWork` / `RWhileJonesRevWork`、計 1193 行、すべて `--safe`・**postulate ゼロ**）。
+  **`RWhileTime.agda` は 1 文字も変更していない**（work は既存の `∣ k` を置き換えず
+  `c ⊢ s ⇒ t ∣ k ∥ w` として加算的に足す。`⇒w-steps` で work を忘れると元の関係に戻る）。
+  `./check.sh` は 108 → **114 モジュール PASS**（5 分 24 秒・499 MB）。
+- **費用モデルが定義から読み取れる形になった**：課金の producer は `expW`（`=?` のみ。他 5 形は
+  定義がリテラルに `0`）と `rupdW` の 2 つだけ。短絡（`short-circuit`：先頭不一致なら残りの
+  大きさに依らず 2）、`rupdate` の nil 判定が無課金（`rupdW`）も定理。
+  既存の `eqV` との一致は `eqVW-≡` で証明（`-work` は既存の真偽判定を変えていない）。
+- **p⁺ の work コストは定数ではない**（`-steps` の `+8` と対照的）：
+
+  **`work(p⁺ on d) = work(p on d) + |⌜p⌝| + 1`**
+
+  払う場所は予想と違った。`self ^= con pd` は**空きスロットへの書き込みなので無課金**
+  （`rupdate` は `vy = VNil` を先に見る）。`|⌜p⌝|` を払うのは `evalProgram` 末尾の
+  `write` の clearing test で、`res` の代わりに `⟨⌜p⌝, res⟩` を歩くため。
+  平坦核（`^=` 4 本のモデル）では別の場所で払い `+|⌜p⌝|+|⟦p⟧d|` になるが、
+  `pp-progW` が emit の課金をパラメタに取るので一本化してある（**モデルの差であって実装の差ではない**）。
+- **実測 11 行と誤差ゼロで一致**（`measured-law` が `refl` で照合）。`wk_p⁺` が
+  23→25→38→57→72 と増えるのは **`|⌜p⌝|+1` という定理の値**である、と書ける。
+
+  | 被験 | wk_dir | \|⌜p⌝\| | 予言 = 実測 |
+  |---|---:|---:|---:|
+  | id / id2 / id3 / rep | 3/3/4/3 | 19/21/33/21 | 23/25/38/25 |
+  | swap / sx_splitjoin / sx_three | 3/3/6 | 53/53/65 | 57/57/72 |
+  | loop_static2 / loop_static3 | 16/26 | 87/91 | 104/118 |
+  | reverse / dyncond3 | 11/6 | 91/71 | 103/78 |
+
+- **可逆版 Jones 最適性を work で述べ直せた**。`RWhileJonesRev.Criterion` は `cost` を
+  パラメタに取るので `residual-pp`・`pp-unique`・`basis-adequate` 等はそのまま成立。
+  新規は `⁺-cost`・`⁺-mono`（`classical⇒rev` の側条件を仮定でなく**証明**で供給）・
+  `rev-unfold`（基準を展開すると `work(残余) ≤ work(p) + |⌜p⌝| + 1`。`-steps` の絶対定数 `+8`
+  との違いはここに集約）。判定結果も Agda に固定：閉じた 9 被験は成立、
+  **動的制御の 2 本（reverse 17.2×・dyncond3 5.5×）は不成立**、古典的基準は 9 被験すべて不成立。
+- **正直な範囲**（`AGDA_CORRESPONDENCE.md` に明記）：
+  (a) 課金③（リテラルパターン `PVal`）は未モデル（タイムド核に `<=` が無いため。実測が合うのは
+  どの被験もリテラルパターンを走らせていないから）、
+  (b) **`wk_res`（残余の work）は測定値のまま**＝証明したのは基準の側で、
+  **「残余の最適性を証明した」とは書けない**、
+  (c) 抽象層と具象層の橋渡しは依然未着手、
+  (d) プログラム層の初期ストアは `set [] x d` で近似。
+
 ### 文献・CI（同日）
 
 - `RELATED_WORK.md` §1.5：Jones 最適性の定義を**原典で確認**（JGS 1993 の 6 章 6.4 節
