@@ -11,6 +11,12 @@
       "status": "rejected",
       "note": "受入コマンドが着手前から通る: cd proofs/agda && agda --safe RWhileJonesRevTimedWork.agda && test -f _build/2.8.0/agda/RWhileJonesRevTimedWork.agdai",
       "date": ""
+    },
+    {
+      "id": "f393cb66bfc1",
+      "status": "deferred",
+      "note": "2026-08-09 self-clear `X ^= X` バグを修正し、3 つの pin を閉じる / 要レビュー: accept=1 tests=0 fp2=1 probe=1",
+      "date": ""
     }
   ],
   "rounds": []

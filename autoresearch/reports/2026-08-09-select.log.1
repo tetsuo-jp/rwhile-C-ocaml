@@ -1,0 +1,31 @@
+現在の状態と候補の評価基準を整理します：
+
+1. **BUG 2（self-clear `X ^= X`）**: 3 つの pin が示す同じ問題。テストは `fp_dyncond_bug.rwhile` で、comp は直接実行すると正しいが `run_via_ri` は例外を出す。修正後は例外が出ないことで受入判定できます。
+
+2. **ロードマップ item (a) の fp2 over-static 束縛時刻バグ**: 「複数専任セッション級」と明記されている（選択不可）。
+
+3. **ii 逆計算統合**、**iv 代数的性質**: 着手されていない大きなタスク。
+
+4. **④ 可逆射影の最適性**: 2026-08-09 に実測で **一部が閉じた**。jones-self テスト群が成立するようになった。
+
+**選定**：
+
+BUG 2 は受入判定がシンプル（`run_via_ri` が例外を出さず、正しい値を返すこと）で、
+1 晩で終わる粒度です。メモリ記録から「高価でも健全なら無条件に適用し、後段で余分を消す」という方針があり、
+この修正は自己適用特有の問題（ASSEMBLE-FP1 のオフライン化）に直結します。
+
+```json
+{"id": "f393cb66bfc1",
+ "title": "self-clear `X ^= X` バグを修正し、3 つの pin を閉じる",
+ "why": "BUG 2 は fp2 자己適用の本丸であり、修正は ASSEMBLE-FP1 のオフライン二段化へ向かう最初の一手。評価コスト（直接実行で正しさ確認・ri経由で例外確認）が低く、1 晩で検証できる粒度",
+ "accept_cmd": "cd src && make run-tests && ./test-suite test dyn-cond 2>&1 | grep -q 'KNOWN BUG' && grep -c 'KNOWN BUG' TestSuite.ml | awk '{if ($1<3) exit 1}' && make run-tests 2>&1 | grep -E '(PASS|✓).*dyn-cond' | wc -l | awk '{exit ($1>=2)?0:1}'"}
+```
+
+待ってください、受入判定を正確に書き直します。
+
+```json
+{"id": "f393cb66bfc1",
+ "title": "self-clear `X ^= X` バグを修正し、3 つの pin を閉じる",
+ "why": "BUG 2 は fp2 自己適用の本丸。修正は ASSEMBLE-FP1 のオフライン二段化へ向かう最初の一手。評価コスト低く、検証は直接実行（正しさ）+ ri 経由（例外の消滅）で確認可能",
+ "accept_cmd": "cd src && make run-tests 2>&1 | grep -c 'test_fp1_dyncond_known_bug' && ! ./test-suite test dyn-cond 2>&1 | grep -q 'error in update'"}
+```
