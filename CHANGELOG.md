@@ -161,6 +161,46 @@
   (c) 抽象層と具象層の橋渡しは依然未着手、
   (d) プログラム層の初期ストアは `set [] x d` で近似。
 
+### 射影の代数と、第 4 射影の退化を実機で測った（同日、ロードマップ④(ii)）
+
+- 新規 7 モジュール（`RWhileFutamuraAlg` / `AlgInst` / `AlgTag` / `RWhileRevProjAlg` /
+  `AlgInst` / `AlgPP` / `AlgSize`、計 1256 行、すべて `--safe`・**postulate ゼロ**）。
+  既存モジュールは**一切改変せず**、再オープンで積む加算的な層。`./check.sh` は
+  114 → **121 モジュール PASS**（5 分 34 秒・529 MB）。
+- **第 4 射影の退化は、ゴミの置き場所で答えが割れる**（これが今回の主結果）。
+
+  | 設計 | `run cogen rspec ≡ cogen` | 定理 |
+  |---|---|---|
+  | ゴミを**残余の dead 枝**へ（`spec_av_rev` の `EMBED-GARB`） | **そのまま成立** | `RWhileRevProjAlg.Embed.fp4-rev` |
+  | ゴミを**出力の対**へ（入力保存の教科書的構成） | **不成立（反証）**。正しい形は `snd (run cogen rspec) ≡ cogen` | `RWhileRevProjAlgPP.fp4-fails` |
+
+  反証は**対の非巡回性（`⟨a,b⟩ ≢ b`）だけ**から出る＝模型固有の癖ではない。
+  → **dead 枝埋込は実装上の工夫ではなく、射影の代数を保存する設計だった**
+  （`Embed.def-spec`：埋込が意味論的に透明なので、ゴミを抱えた特殊化器が論文の `def-spec` を満たす）。
+- **実機で測った（新規テスト 2 件、`測定 ≠ 模型` を潰すため）**：
+  - `fp4`：`[comp3](('S.spec_av))` は **`comp3` とバイト一致**（20 秒）
+  - `fp4-rev`：`[comp3_rev](('S.spec_av_rev))` も **`comp3_rev` とバイト一致**（24 秒）
+  - **退化はサンプル入力での一致ではなくプログラムの同一性**として確認した。
+    Agda の予言（dead 枝は厳密に退化する）が実機で満たされている。
+- **「符号が入れ子に積み上がる」という懸念は否定された**：ゴミは各段 1 層の平坦な層で、
+  その中身はその段の 2 引数だけで決まる。塔をいくら高くしても答えの符号の深さは 1
+  （`answer-height-free`・`Embed.tower-carries`）。
+- **合成則**：`spec-compose`（H1 のみ・H2 不要＝自己適用できない特殊化器でも成立）、
+  その n 引数版 `spec-stage`、**`cogen-curry`（cogen は特殊化器のカリー化。fp2 も 2 段合成もこれの系）**、
+  **`tower-collapse : ∀ n → tower n ≡ cogen`**。n 段一般化の中身は「第 3 段以降が外延的に等価なのではなく
+  **同一のプログラムになる**」ことで、それが「第 4 射影が無い」の形式的内容。
+- **ロードマップ④の「cogen の不動点性」という表現は、演算子を書かないと偽**。
+  `fp4` が言うのは `Φ X = ⟦X⟧(specP)` の不動点であって、`⟦cogen⟧(cogen) ≡ cogen` は**偽**
+  （`RWhileFutamuraAlgInst.cogen-not-self-applicable` で反証）。
+- **自明／非自明の内訳**（先に自分で言う）：`fp4`・`cogen-fixpoint`・`tower-collapse`・
+  `meter-constant`・`climb-linear` は 1〜3 行で出る**自明**。主張になりうるのは
+  ①`Embed.def-spec` ②`fp4-fails` ③`tower-carries`/`answer-height-free` の 3 つ。
+- コスト（抽象層のみ）：`meter-constant`（どんな ℕ 計量でも塔は cogen と同じ）、
+  `climb-linear`（建てる費用は段数に線形＝「何も新しく無い」だけでなく「聞いた分だけ払う」）、
+  `Growth.emb-strictly-bigger`（dead 枝埋込は `run` には無料だが size には無料でない。
+  実測 103→1739 ノードの法則版）。**`RWhileWork*` の具体コスト層とは未接続**。
+- テスト総数 278 → **280 件**。
+
 ### 文献・CI（同日）
 
 - `RELATED_WORK.md` §1.5：Jones 最適性の定義を**原典で確認**（JGS 1993 の 6 章 6.4 節

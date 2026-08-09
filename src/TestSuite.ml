@@ -2740,6 +2740,39 @@ let test_fp3_rev_cogen () =
   check_op "'swap";
   check_op "'id"
 
+(* THE FOURTH PROJECTION, measured (2026-08-09).
+ *
+ * Classically the fourth projection degenerates: applying the cogen to the
+ * specialiser gives the cogen back.  Here that is [comp3](('S.spec_av)), and
+ * by fp3 it must be [spec_av]((spec_av.('S.spec_av))) = comp3 itself.  The
+ * point of running it is that the DEGENERACY IS AN EQUALITY OF PROGRAMS, not
+ * merely of behaviours: nothing is gained by asking again, and the check is
+ * byte-identity of the encoded residual, not agreement on sample inputs.
+ *
+ * The Agda side (RWhileFutamuraAlg.fp4, RWhileRevProjAlg.Embed.fp4-rev) proves
+ * this from H1+H2 alone, and RWhileRevProjAlgPP.fp4-fails shows it FAILS for a
+ * reversible specialiser that carries its garbage in the OUTPUT PAIR rather
+ * than in a dead branch.  These two tests are the machine-checked prediction
+ * met by the machine: spec_av (garbage dropped) and spec_av_rev (garbage in a
+ * dead branch) must both degenerate exactly. *)
+let test_fp4_degenerate () =
+  let spec_av = parse_file_program (examples_dir ^ "/spec_av.rwhile") in
+  let inner = Program2DataRwhile.program2data spec_av in
+  let comp3 = EvalRwhile.evalProgram spec_av (spec_in inner inner) in
+  let comp4 = run_comp_direct comp3 (VCons (atom "'S", inner)) in
+  Alcotest.(check valT_testable)
+    "fp4: [comp3](('S.spec_av)) IS comp3 -- asking a fourth time gains nothing"
+    comp3 comp4
+
+let test_fp4_rev_degenerate () =
+  let rev = parse_file_program (examples_dir ^ "/spec_av_rev.rwhile") in
+  let inner = Program2DataRwhile.program2data rev in
+  let comp3 = EvalRwhile.evalProgram rev (spec_in inner inner) in
+  let comp4 = run_comp_direct comp3 (VCons (atom "'S", inner)) in
+  Alcotest.(check valT_testable)
+    "fp4-rev: dead-branch garbage keeps the degeneracy exact"
+    comp3 comp4
+
 (* Reversible specializer prototype (examples/spec_av_rev.rwhile): CLEAR pushes the
  * discarded value onto a garbage stack GARB instead of X^=X, and main embeds GARB
  * into the residual's DEAD (constant-true) else-branch (EMBED-GARB).  This makes
@@ -3882,11 +3915,13 @@ let () =
        * specializes spec_av by self-application); skipped under `./test-suite -q`. *)
       Alcotest.test_case "fp2 GREEN: [spec_av]((spec_av.ri_min)) compiles ri_min (comp==B)" `Slow test_fp2_second_projection;
       Alcotest.test_case "fp3 GREEN: [spec_av]((spec_av.spec_av)) = cogen ([comp3]('S.ri_min)=comp2)" `Slow test_fp3_cogen;
+      Alcotest.test_case "fp4 degenerates: [comp3]('S.spec_av) IS comp3 (byte-identical)" `Slow test_fp4_degenerate;
     ];
     "reversible-spec", [
       Alcotest.test_case "spec_av_rev: clean-store run, [comp] correct, INV round-trips input" `Slow test_rev_spec_dead_garbage;
       Alcotest.test_case "fp2-rev: [spec_av_rev]((spec_av_rev.ri_min)) compiles ri_min (comp==B)" `Slow test_fp2_rev_second_projection;
       Alcotest.test_case "fp3-rev: [spec_av_rev]((spec_av_rev.spec_av_rev)) = reversible cogen" `Slow test_fp3_rev_cogen;
+      Alcotest.test_case "fp4-rev degenerates: dead-branch garbage keeps it exact" `Slow test_fp4_rev_degenerate;
     ];
     "refactor-gate", [
       Alcotest.test_case "spec_av_clean == spec_av (fp1 residuals identical)" `Quick test_clean_equiv_spec_av;
