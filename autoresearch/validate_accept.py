@@ -50,12 +50,23 @@ def main() -> int:
         problems.append("accept_cmd が空")
 
     # 1. 存在しないテスト群を指していないか
+    #
+    #    ただし **これから作る群** は正当（open-pin を閉じる課題の基本形は
+    #    「新しい検査を作り、それが通ることを受入条件にする」）。両者を区別するため、
+    #    課題 JSON の "creates" に群名を宣言してもらう。宣言が無い未知の群は綴り間違い
+    #    として弾く（2026-08-09 の 'dyn-cond'（正: dyn-control）がその型）。
     known = groups(repo)
+    declared = task.get("creates") or []
+    if isinstance(declared, str):
+        declared = [declared]
+    declared = set(declared)
     for g in re.findall(r"test-suite\s+test\s+([A-Za-z0-9_-]+)", cmd):
-        if known and g not in known:
+        if known and g not in known and g not in declared:
             near = [k for k in known if k.startswith(g[:4])]
             hint = f"（近いもの: {', '.join(sorted(near)[:3])}）" if near else ""
-            problems.append(f"テスト群 '{g}' は存在しない{hint}")
+            problems.append(
+                f"テスト群 '{g}' は存在しない{hint}。"
+                f"これから作る群なら課題 JSON に \"creates\": [\"{g}\"] を入れること")
 
     # 2. OCaml の識別子をテスト出力から grep していないか（出力には現れない）
     idents = ocaml_idents(repo)

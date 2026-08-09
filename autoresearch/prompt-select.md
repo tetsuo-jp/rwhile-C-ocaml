@@ -24,7 +24,8 @@
 {"id": "候補の id をそのまま",
  "title": "何をするか（1 行）",
  "why": "なぜ今夜これか（1〜2 行）",
- "accept_cmd": "受入判定のシェルコマンド 1 行"}
+ "accept_cmd": "受入判定のシェルコマンド 1 行",
+ "creates": ["これから新しく作るテスト群の名前（無ければ空配列）"]}
 ```
 
 ## `accept_cmd` の掟（ここが最重要）
@@ -64,7 +65,7 @@ harness は静的検査（`validate_accept.py`）でこれらを弾き、**そ�
 
 | 候補の種類 | 受入コマンドの作り方 |
 |---|---|
-| `open-pin`（穴が pin されている） | **これから作る新しい群**を指す。例: `cd src && make run-tests && ./test-suite test selfclear-fixed`。その群は今は存在しないので必ず失敗し、あなたがテストを書いて実装を直せば通る |
+| `open-pin`（穴が pin されている） | **これから作る新しい群**を指し、**その名前を `creates` に必ず入れる**。例: `accept_cmd` が `cd src && make run-tests && ./test-suite test selfclear-fixed` なら `"creates": ["selfclear-fixed"]`。宣言が無いと**綴り間違いと区別できず却下される** |
 | `agda-postulate` | `cd proofs/agda && agda --safe <M>.agda && ! grep -qE '^\s*postulate' <M>.agda` |
 | `metric-regress` | 閾値つきの数値判定。例: `cd src && ./measure_proj jones-self \| awk '$1=="id2"{exit ($(NF-1)+0 <= 1.0)?0:1}'` |
 
