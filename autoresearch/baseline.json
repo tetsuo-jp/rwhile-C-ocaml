@@ -1,0 +1,13 @@
+{
+  "generated_by": "autoresearch/metrics.sh",
+  "tests": { "total": 285, "ran_clean": true, "skipped": 0 },
+  "fp2": { "comp2_eq_B": "true", "comp2_ratio": 0.959, "spec_av_nodes": 470385 },
+  "jones_self": [{"subject":"id","jr_work":1.00},{"subject":"id2","jr_work":1.00},{"subject":"id3","jr_work":0.97},{"subject":"rep","jr_work":1.00},{"subject":"swap","jr_work":1.00},{"subject":"sx_splitjoin","jr_work":1.00},{"subject":"sx_three","jr_work":0.99},{"subject":"loop_static2","jr_work":0.91},{"subject":"loop_static3","jr_work":0.86},{"subject":"reverse","jr_work":17.17},{"subject":"dyncond3","jr_work":5.49}],
+  "dyncontrol": [{"subject":"reverse","jr_work":0.17},{"subject":"length","jr_work":0.14},{"subject":"length2","jr_work":0.13}],
+  "agda": {
+    "modules": 125,
+    "files_with_postulate": 0,
+    "files_without_safe": 2,
+    "never_checked": 0
+  }
+}
