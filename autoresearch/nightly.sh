@@ -27,7 +27,11 @@ REPORTS="$AR/reports"
 WORKLOG_PY="$HOME/dev/notion/worklog.py"
 WORKLOG_VENV="$HOME/dev/notion/.venv/bin/python"
 
-MODEL="${MODEL:-claude-fable-5}"
+# 既定は Opus 5（~/.claude/rules/performance.md:「既定は Opus 5。Fable 5 はユーザーが
+# 明示的に求めたときだけ使う」）。2026-08-10 の初回 run は fable-5 を指定していたため
+# "Fable 5 requires usage credits" で選定が 3 回とも即死し、解くフェーズが一度も
+# 走らなかった。ゲートは全部緑だったので systemd 的には成功に見えた。
+MODEL="${MODEL:-claude-opus-5}"
 MAX_TURNS="${MAX_TURNS:-400}"
 CLAUDE_TIMEOUT="${CLAUDE_TIMEOUT:-14400}"   # 4h（systemd 側 RuntimeMaxSec=5h）
 SMOKE="${SMOKE:-0}"
@@ -187,6 +191,17 @@ $(cat "$CANDS")"
     python3 "$AR/extract_task.py" "$SEL_LOG.$attempt" "$TASK" || true
   fi
   if [ ! -s "$TASK" ]; then
+    # モデルが使えない・認証が切れている類は「選定の失敗」ではないので、
+    # 3 回繰り返しても同じ結果にしかならない。理由を出して即座に止める。
+    if grep -qiE "usage credits|/usage-credits|not authenticated|please run .?login|invalid api key|rate limit" \
+         "$SEL_LOG.$attempt" 2>/dev/null; then
+      note "- ✗ **モデルが使えない**（選定の失敗ではない）。$MODEL の手当てが要る:"
+      printf '    %s\n' "$(head -2 "$SEL_LOG.$attempt")" >>"$REPORT"
+      worklog "モデル不在で中止: $MODEL（$SEL_LOG.$attempt）"
+      note ""
+      note "**中止**: モデル $MODEL が使えないため、選定も解くフェーズも走っていない"
+      exit 1
+    fi
     note "- ✗ 試行 $attempt: 課題の選定に失敗（$SEL_LOG.$attempt）"
     continue
   fi
