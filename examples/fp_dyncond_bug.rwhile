@@ -17,18 +17,21 @@
  *     equal TRUTHINESS (here entry `if D` value 'q vs assertion (=? R 'one)
  *     value (nil.nil)).  compare.rwhile etc. were unaffected (same predicate
  *     for test and assertion).
- *   BUG 2 (OPEN, dominant): the reversible self-clear `X ^= X` (this program's
- *     `D ^= D`) is mis-self-interpreted.  'ass does EVAL-EXP(E); DUPDATE(K);
- *     INV-EVAL-EXP(E); when E reads K the DUPDATE changes the store, so the
- *     re-reading INV-EVAL-EXP cannot clear its temp -> "error in update".
- *     Minimal isolations: `A ^= A`; `Y ^= 'k; Y ^= Y`.  The fix needs EVAL-EXP
- *     to reverse store-reads via SAVED values, not re-reads.
+ *   BUG 2 (FIXED 2026-08-10; was the dominant one): the reversible self-clear
+ *     `X ^= X` (this program's `D ^= D`) was mis-self-interpreted.  'ass did
+ *     EVAL-EXP(E); DUPDATE(K); INV-EVAL-EXP(E); when E reads K the DUPDATE
+ *     changes the store, so the re-reading INV-EVAL-EXP could not clear its
+ *     temp -> "error in update".  Minimal isolations: `A ^= A`;
+ *     `Y ^= 'k; Y ^= Y`.  FIX (examples/ri.rwhile, 'ass): the SAVED-VALUE
+ *     method -- EVAL-EXP; save the value; INV-EVAL-EXP against the still
+ *     UNCHANGED store; DUPDATE last; discard the saved copy.  Pinned by the
+ *     `ri-selfclear` test group.
  *
- * Consequence: run_via_ri (the fp2 success criterion in HANDOFF_fp2.md) is
- * UNRELIABLE -- it can fail on a correct comp.  Evaluate residuals with
- * data2program+evalProgram instead.  Using that, the REAL fp2 spec_av bug is
- * separately visible: the fp2 comp is incomplete (leaves variables non-nil)
- * even under direct eval.
+ * Consequence, now closed: run_via_ri (the fp2 success criterion in
+ * HANDOFF_fp2.md) used to fail on a CORRECT comp.  It agrees with
+ * data2program+evalProgram on this program again.  The REAL fp2 spec_av bug is
+ * a separate one, visible under direct eval too: the fp2 comp is incomplete
+ * (leaves variables non-nil).
  *
  * See HANDOFF_fp2.md and memory second-futamura-projection-status. *)
 read X;
