@@ -1,4 +1,5 @@
 reports/*.log
 reports/*.jsonl
 reports/*-task.json
+reports/*.enum
 *.gate.*

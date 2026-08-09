@@ -68,7 +68,8 @@ def sig_open_pins(out: list) -> None:
         return
     for i, line in enumerate(ts.read_text(errors="replace").splitlines(), 1):
         # 「was a KNOWN BUG」は**直った印**（過去形）。候補にしない（2026-08-09 偽陽性）。
-        if re.search(r"\bOPEN\b|KNOWN BUG", line) and not re.search(r"was a KNOWN BUG|was an OPEN", line):
+        if re.search(r"\bOPEN\b|KNOWN BUG", line) and not re.search(
+                r"was a KNOWN BUG|was an OPEN|WAS A KNOWN BUG|FIXED", line, re.I):
             title = re.sub(r"\s+", " ", line.strip())[:120]
             cand(out, "open-pin", f"pin されている穴を塞ぐ: {title}",
                  f"src/TestSuite.ml:{i}: {title}",
