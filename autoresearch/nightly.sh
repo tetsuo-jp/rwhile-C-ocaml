@@ -267,6 +267,24 @@ fi
 after_rc=$?
 if [ $after_rc -eq 0 ]; then note "- ✓ 受入コマンドが通った"; else note "- ✗ 受入コマンドは通らなかった (rc=$after_rc)"; fi
 
+# `creates` の検算。宣言しただけで作られていなければ受入は不成立とする。
+# これが無いと `creates` は「静的検査を黙らせる呪文」になり、綴り間違いを宣言して
+# 素通りできてしまう（指揮者セッションの指摘、2026-08-10）。
+creates_rc=0
+CREATES="$(python3 -c 'import json,sys
+d=json.load(open(sys.argv[1])); c=d.get("creates") or []
+print(" ".join([c] if isinstance(c,str) else c))' "$TASK" 2>/dev/null || true)"
+if [ -n "$CREATES" ]; then
+  for g in $CREATES; do
+    if grep -qE "^[[:space:]]*\"$g\",[[:space:]]*\[" "$WT/src/TestSuite.ml" 2>/dev/null; then
+      note "- ✓ 宣言どおり群 '$g' が作られている"
+    else
+      note "- ✗ **creates に挙げた群 '$g' が存在しない**（宣言が果たされていない）"
+      creates_rc=1
+    fi
+  done
+fi
+
 gate tests_post "$WT/src" make run-tests; tests_rc=$?
 if [ $tests_rc -eq 0 ]; then note "- ✓ 事後 make run-tests 通過"; else note "- ✗ 事後 make run-tests 失敗 (rc=$tests_rc)"; fi
 comp2_post="$( (cd "$WT/src" && timeout 1800 ./measure_proj full 2>&1) | grep -c "\[comp2\]((.S.swap)) == B : true" || true)"
@@ -283,10 +301,21 @@ if [ -n "$(git -C "$WT" status --porcelain)" ]; then
 fi
 REV_AFTER="$(git -C "$WT" rev-parse --short HEAD)"
 
-if [ $after_rc -eq 0 ] && [ $tests_rc -eq 0 ] && [ "$comp2_post" -ge 1 ] && [ "$probe_ok" = "1" ]; then
+# 「run は成功したが本題は 1 行も進んでいない」を機械が判定する。
+# 今夜これを人が2回見つけた（モデル不在の空振り／静的検査が正しく弾いた空振り）。
+# どちらも systemd 的には成功で、レポート本文を開くまで分からなかった。
+if [ "$REV_BEFORE" = "$REV_AFTER" ]; then
+  note "- ⚠ **差分ゼロ: run は完了したが本題は 1 行も進んでいない**"
+  progressed=0
+else
+  progressed=1
+fi
+
+if [ $after_rc -eq 0 ] && [ $tests_rc -eq 0 ] && [ "$comp2_post" -ge 1 ] && [ "$probe_ok" = "1" ] \
+   && [ "$creates_rc" -eq 0 ] && [ "$progressed" -eq 1 ]; then
   status="done"; verdict="緑: 受入通過・テスト緑・fp2 維持・プローブ生存。差分 $REV_BEFORE→$REV_AFTER"
 else
-  status="deferred"; verdict="要レビュー: accept=$after_rc tests=$tests_rc fp2=$comp2_post probe=$probe_ok"
+  status="deferred"; verdict="要レビュー: accept=$after_rc tests=$tests_rc fp2=$comp2_post probe=$probe_ok creates=$creates_rc 差分=$progressed"
 fi
 python3 "$AR/ledger.py" mark --id "$TID" --status "$status" --note "$DATE $TITLE / $verdict" >/dev/null 2>&1 || true
 
