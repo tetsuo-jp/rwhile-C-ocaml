@@ -284,6 +284,10 @@ if [ $after_rc -eq 0 ]; then
   # 実装の修正は既存ファイルの変更として入る（ri.rwhile, spec_av.rwhile, src/*.ml）。
   impl_files="$(git -C "$WT" diff --name-only --diff-filter=M HEAD -- . ':(exclude)src/TestSuite.ml' 2>/dev/null || true)"
   if [ -n "$impl_files" ]; then
+    # 退避した一覧を残す。--diff-filter=M は「修正が新規ファイルの追加で入った」場合に
+    # 退避対象ゼロ→受入が緑のまま→「実装を戻しても緑」と読まれる偽陰性を持つ。
+    # 良い仕事を却下する側の誤りなので安全側だが、朝に理由が分かるよう一覧を出す。
+    note "- 変異検査で退避する実装ファイル: $(printf '%s' "$impl_files" | tr '\n' ' ')"
     # shellcheck disable=SC2086
     if git -C "$WT" stash push -q -m accept-mutation -- $impl_files 2>/dev/null; then
       (cd "$WT" && timeout 1800 bash -c "$ACCEPT") >"$REPORTS/$DATE-accept-mutated.log" 2>&1
@@ -315,6 +319,8 @@ if [ $after_rc -eq 0 ]; then
     fi
   else
     note "- ✗ **実装側の変更（既存ファイルの修正）がゼロ**。受入は不成立とする"
+    note "  （新規ファイルの追加だけで直した場合もここに来る。その場合は**偽陰性**なので、"
+    note "  git status --porcelain を worktree で見て人が判断すること）"
     mutation_rc=1
   fi
 fi
