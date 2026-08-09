@@ -1,0 +1,9 @@
+[Unit]
+Description=Nightly autoresearch: rwhile-C-ocaml (enumerate -> solve -> verify)
+
+[Service]
+Type=oneshot
+ExecStart=/home/a/dev/github.com/tetsuo-jp/rwhile-C-ocaml/autoresearch/nightly.sh
+TimeoutStartSec=18000
+MemoryMax=40G
+Nice=10
