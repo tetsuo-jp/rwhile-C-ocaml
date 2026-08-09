@@ -2641,17 +2641,18 @@ let run_comp_direct comp d =
  *   BUG 1 (FIXED): 'cond cleared the saved entry-test value W against the
  *     exit-assertion value V by bit-equality (`Arg ^= V`), but R-WHILE only
  *     requires equal TRUTHINESS.  Fixed via the CANON macro in ri.rwhile.
- *   BUG 2 (OPEN, dominant): the reversible self-clear `X ^= X` (and any
- *     `X ^= E` whose E reads X) is mis-interpreted.  'ass does
- *     EVAL-EXP(E); DUPDATE(K); INV-EVAL-EXP(E); the DUPDATE changes what E
- *     reads, so INV-EVAL-EXP (which re-reads the store) cannot clear its temp
- *     -> "error in update".  Minimal repros: `A ^= A`, `Y ^= 'k; Y ^= Y`.
- *     fp_dyncond_bug.rwhile uses `D ^= D`, so run_via_ri still raises.  Fixing
- *     it needs EVAL-EXP to reverse store-reads via saved values, not re-reads.
- * So run_via_ri (the fp2 success criterion) is unreliable; direct decode+eval
- * (run_comp_direct) is reliable.  This test pins BOTH facts (comp correct
- * directly; raises via run_via_ri).  Flip the check_raises to a value check
- * once BUG 2 is fixed.  See HANDOFF_fp2.md and the example header. *)
+ *   BUG 2 (FIXED 2026-08-10, was the dominant one): the reversible self-clear
+ *     `X ^= X` (and any `X ^= E` whose E reads X) was mis-interpreted.  'ass
+ *     did EVAL-EXP(E); DUPDATE(K); INV-EVAL-EXP(E); the DUPDATE changed what E
+ *     reads, so INV-EVAL-EXP (which re-reads the store) could not clear its
+ *     temp -> "error in update".  Minimal repros: `A ^= A`, `Y ^= 'k; Y ^= Y`.
+ *     fp_dyncond_bug.rwhile uses `D ^= D`, so run_via_ri raised on a CORRECT
+ *     comp.  Fixed in examples/ri.rwhile by the saved-value method: save the
+ *     value, invert EVAL-EXP against the still-unchanged store, update last.
+ * With both bugs closed run_via_ri agrees with direct decode+eval
+ * (run_comp_direct) here.  This test pins both readings of the same comp, so a
+ * regression in either route is caught.  The `ri-selfclear` group below carries
+ * the minimal repros.  See HANDOFF_fp2.md and the example header. *)
 let test_fp1_dyncond_known_bug () =
   let spec_av = parse_file_program (examples_dir ^ "/spec_av.rwhile") in
   let prog = Program2DataRwhile.program2data
@@ -2662,12 +2663,81 @@ let test_fp1_dyncond_known_bug () =
     (atom "'one") (run_comp_direct comp (atom "'q"));
   Alcotest.(check valT_testable) "dyn-cond comp correct directly: [comp](nil)='two"
     (atom "'two") (run_comp_direct comp VNil);
-  (* (2) KNOWN BUG 2 (self-clear `X ^= X`): the SAME correct comp still fails
-   *     through ri.rwhile (run_via_ri) -- the residual uses `D ^= D` *)
-  Alcotest.check_raises
-    "KNOWN BUG (ri.rwhile self-clear X^=X): correct comp fails via run_via_ri"
-    (Failure "error in update")
-    (fun () -> ignore (run_via_ri comp (atom "'q")))
+  (* (2) BUG 2 FIXED: the SAME comp now gives the same answers through
+   *     ri.rwhile (run_via_ri), even though the residual uses `D ^= D` *)
+  Alcotest.(check valT_testable) "dyn-cond comp correct via run_via_ri: [comp]('q)='one"
+    (atom "'one") (run_via_ri comp (atom "'q"));
+  Alcotest.(check valT_testable) "dyn-cond comp correct via run_via_ri: [comp](nil)='two"
+    (atom "'two") (run_via_ri comp VNil)
+
+(* ===== ri-selfclear: BUG 2, the reversible self-clear (2026-08-10) =====
+ *
+ * `X ^= E` here does NOT require X to be absent from E.  EvalRwhile.evalCom
+ * evaluates E in the store BEFORE rupdate writes, so `X ^= X` is a self-clear
+ * (the value is destroyed -- irreversible, and deliberately permitted: spec_av
+ * emits exactly this into its residuals, and examples/fp_dyncond_bug.rwhile is
+ * built from it).
+ *
+ * ri.rwhile's 'ass used to clear its temporaries by RE-READING the store after
+ * DUPDATE had already changed it, so every such command died with "error in
+ * update" -- which made run_via_ri, the fp2 success criterion in HANDOFF_fp2.md,
+ * report a failure on a CORRECT residual.  The fix (examples/ri.rwhile) saves
+ * the value, inverts EVAL-EXP against the unchanged store, and updates last.
+ *
+ * These are the minimal repros named in the bug report.  Each is judged against
+ * DIRECT evaluation, so the tests state the real obligation -- the
+ * self-interpreter computes what the interpreter computes -- rather than
+ * hard-coding an expected constant. *)
+let check_selfclear name src input =
+  let prog = parse_program src in
+  let direct = EvalRwhile.evalProgram prog input in
+  Alcotest.(check valT_testable) (name ^ ": via ri.rwhile = direct eval")
+    direct (run_via_ri (Program2DataRwhile.program2data prog) input)
+
+(* repro 1: the bare self-clear `A ^= A` on a scratch variable *)
+let test_selfclear_bare () =
+  let src = "read X; A ^= X; A ^= A; write X" in
+  check_selfclear "A ^= A (atom)" src (atom "'q");
+  check_selfclear "A ^= A (cons)" src (parse_val "('a . 'b)");
+  (* nil: the self-clear is the identity, so this passed even when broken --
+     kept so the fix is not read as "only the non-nil path matters" *)
+  check_selfclear "A ^= A (nil)" src VNil
+
+(* repro 2: `Y ^= 'k; Y ^= Y` -- set, then clear the same variable *)
+let test_selfclear_set_then_clear () =
+  check_selfclear "Y ^= 'k; Y ^= Y" "read X; Y ^= 'k; Y ^= Y; write X" (atom "'q");
+  (* the general shape of the bug is "E reads the variable being assigned", not
+     just the syntactic X^=X: here E is `tl Y`, whose value is nil, so the
+     update is the identity but INV-EVAL-EXP still has to reverse a read of Y *)
+  check_selfclear "Y ^= cons 'k nil; Y ^= tl Y; Y ^= Y"
+    "read X; Y ^= cons 'k nil; Y ^= tl Y; Y ^= Y; write X" (atom "'q")
+
+(* repro 3: the self-cleared slot is the DYNAMIC input variable, i.e. ri.rwhile's
+   DynIdx/DynVal path through DLOOKUP/DUPDATE rather than the Vl list walk *)
+let test_selfclear_dynamic_slot () =
+  let src = "read X; R ^= X; X ^= X; write R" in
+  check_selfclear "X ^= X on the input variable" src (atom "'q");
+  check_selfclear "X ^= X on the input variable (cons)" src (parse_val "('a . 'b)")
+
+(* repro 4: the route that actually mattered -- fp_dyncond_bug.rwhile (`Sv ^= Sv`
+   and `D ^= D`) and, through spec_av, the residual whose run_via_ri failure was
+   being misread as an fp2 defect.  Judged against direct decode+eval, which was
+   already known to be right. *)
+let test_selfclear_fp_dyncond_via_ri () =
+  let prog = Program2DataRwhile.program2data
+    (parse_file_program (examples_dir ^ "/fp_dyncond_bug.rwhile")) in
+  (* the source itself, self-interpreted; two self-clears on the second input *)
+  Alcotest.(check valT_testable) "[fp_dyncond_bug](('s.'q)) via ri.rwhile = 'one"
+    (atom "'one") (run_via_ri prog (VCons (atom "'s", atom "'q")));
+  Alcotest.(check valT_testable) "[fp_dyncond_bug]((nil.nil)) via ri.rwhile = 'two"
+    (atom "'two") (run_via_ri prog (VCons (VNil, VNil)));
+  (* and spec_av's residual for it: the two routes must now agree *)
+  let spec_av = parse_file_program (examples_dir ^ "/spec_av.rwhile") in
+  let comp = EvalRwhile.evalProgram spec_av (spec_in prog VNil) in
+  Alcotest.(check valT_testable) "comp: run_via_ri = run_comp_direct ('q)"
+    (run_comp_direct comp (atom "'q")) (run_via_ri comp (atom "'q"));
+  Alcotest.(check valT_testable) "comp: run_via_ri = run_comp_direct (nil)"
+    (run_comp_direct comp VNil) (run_via_ri comp VNil)
 
 (* Depth-general read-pattern residualization (PAT-READ-ITER).  After a dynamic
  * conditional (DYNAMICIZE-ALL), the output is assembled from a deeply nested
@@ -3967,7 +4037,7 @@ let () =
       Alcotest.test_case "fp1-via-ri_fp3: two-leaf patterns run (was a KNOWN BUG)" `Quick test_fp1_ri_fp3_two_leaf_patterns_run;
       Alcotest.test_case "ri_fp3 self-interprets (incl. a loop) correctly" `Quick test_ri_fp3_self_interprets;
       Alcotest.test_case "fp1-via-ri_fp3: nested pattern runs (was a KNOWN BUG)" `Quick test_fp1_ri_fp3_nested_pattern_runs;
-      Alcotest.test_case "dyn-cond comp correct directly; KNOWN ri.rwhile 'cond bug via run_via_ri" `Quick test_fp1_dyncond_known_bug;
+      Alcotest.test_case "dyn-cond comp correct both directly and via run_via_ri (was ri.rwhile BUG 2)" `Quick test_fp1_dyncond_known_bug;
       Alcotest.test_case "depth-general nested read residualizes (PAT-READ-ITER)" `Quick test_fp1_nested_read;
       Alcotest.test_case "fp1-via-ri_fp3: STEP tracks Result structurally (was a KNOWN BUG)" `Quick test_fp1_step_structural_result;
       Alcotest.test_case "PAT-WRITE-ITER nested split (was a KNOWN BUG)" `Quick test_pat_write_nested_split;
@@ -4082,6 +4152,16 @@ let () =
       Alcotest.test_case "[rint]((rle.input))=(rle.[rle](input))" `Slow test_ri_rle;
       Alcotest.test_case "[rint]((rint.(id.'a)))=(rint.(id.'a))" `Slow test_ri_ri_id;
       Alcotest.test_case "[rint]((rint.(rint.(id.'a))))=(rint.(rint.(id.'a)))" `Slow test_ri_ri_ri_id;
+    ];
+    (* BUG 2: ri.rwhile could not self-interpret the reversible self-clear
+       `X ^= X` (nor any `X ^= E` whose E reads X), which is what made
+       run_via_ri unreliable as the fp2 success criterion.  Fixed by the
+       saved-value method in examples/ri.rwhile. *)
+    "ri-selfclear", [
+      Alcotest.test_case "A ^= A (bare self-clear)" `Quick test_selfclear_bare;
+      Alcotest.test_case "Y ^= 'k; Y ^= Y (set, then clear)" `Quick test_selfclear_set_then_clear;
+      Alcotest.test_case "X ^= X on the dynamic input slot" `Quick test_selfclear_dynamic_slot;
+      Alcotest.test_case "fp_dyncond_bug and its spec_av residual via run_via_ri" `Quick test_selfclear_fp_dyncond_via_ri;
     ];
     (* Full-static spec tests removed: types don't match partial mode format.
      * Proper spec input is (p . ('partial . s)), not (p . s). *)

@@ -34,13 +34,18 @@
 
 ## 3. 検証基準の落とし穴（重要）
 
-- **`run_via_ri`（ri.rwhile 経由実行）は残余の判定に使えない**。ri.rwhile 自身にバグがあるため。
+- **`run_via_ri`（ri.rwhile 経由実行）は長らく残余の判定に使えなかった**。ri.rwhile 自身に 2 つのバグ。
   - **bug1（修正済）**：ri.rwhile の `'cond` が入口テスト値と出口表明値を**ビット一致**で比較していた
     （`Arg ^= V`）。R-WHILE は**真偽一致**のみ要求。involutive な `CANON` マクロで真偽正規化して修正。
-  - **bug2（本質的）**：可逆自己クリア `X ^= X` は**非可逆**（v→nil、逆も nil→nil）。ri.rwhile は
-    `X^=X` を逆解釈できない。spec_av の残余は自己クリアを含むため run_via_ri で落ちる。
+  - **bug2（2026-08-10 修正済）**：可逆自己クリア `X ^= X` は**非可逆**（v→nil、逆も nil→nil）。
+    ri.rwhile の `'ass` は `EVAL-EXP; DUPDATE; INV-EVAL-EXP` の順で、temp を**store の読み直し**で
+    消していた。E が代入先スロットを読むと DUPDATE 後の読み直し値が変わり `error in update`。
+    **修正＝保存値方式**：`EVAL-EXP; AssV ^= V; INV-EVAL-EXP;（store 未変更のうちに逆算）
+    DUPDATE(Vl,K,AssV); AssV ^= AssV`。回帰は `ri-selfclear` 群。
+    **代償**：`X^=X` を忠実に解釈する以上、ri.rwhile 自身が非可逆になる（§4 を参照）。
 - **正しい判定＝直接評価**：`data2program`（`Program2DataRwhile`）＋ツール `d2p` で残余を AST に復号して
-  `EvalRwhile.evalProgram` する。`comp == B`（byte 一致）で射影成立を判定。
+  `EvalRwhile.evalProgram` する。`comp == B`（byte 一致）で射影成立を判定。bug2 修正後は run_via_ri も
+  一致するが、自己解釈器を挟まない直接評価を引き続き正の判定基準とする（切り分けが素直なため）。
 
 ## 4. 可逆性の理論（spec_av を可逆にすると何が起きるか）
 
@@ -49,7 +54,16 @@
 - **非単射ゆえ入力は消せない**：`spec : (prog,src) → residual` は非単射（residual から prog/src を復元
   できない＝逆特殊化は不可能）。非単射関数の可逆実現は入力を区別する情報を必ず保持する（Landauer/Bennett）。
   ⇒ **可逆版は必ず入力（or 同等のゴミ）を抱える**。「可逆かつ入力を捨てた clean 出力」は原理的に不可能。
-- **整合**：可逆自己解釈器 `ri.rwhile` は出力を `(P . result)` にしてプログラムを保持しているからこそ可逆。
+- **整合、および 2026-08-10 の訂正**：`ri.rwhile` が出力を `(P . result)` にしてプログラムを保持するのは
+  可逆性の**必要条件**であって十分条件ではない。自己解釈器の計算する関数は被解釈プログラムの関数そのもの
+  だから、**被解釈側が非単射なら自己解釈器も非単射**である。`X^=X` を含むプログラム（spec_av の残余が
+  まさにそれ）を忠実に解釈するかぎり、ri.rwhile は可逆でありえない。
+  ⇒ bug2 の修正（§3）では**忠実さを採り**、非可逆性を `AssV ^= AssV` 一箇所に局在させた。
+  ri.rwhile は構文的には従来どおり R-WHILE プログラム（`InvRwhile` の対象、involution も不変）で、
+  失われるのは「`inv(ri)` が `ri` の意味的逆になる」ことだけ＝`X^=X` を含む任意のプログラムと同じ事情。
+  「自己解釈器は可逆」と書くときは **被解釈プログラムが `X^=X` を含まない場合に限る**という但し書きが要る。
+  なお `spec_av_rev`（§5）の遅延クリア／ゴミ退避を残余側で徹底すれば、ri を可逆に保ったまま残余を通す
+  道も残っている（両者は排他ではない）。
 
 ## 5. dead-path ゴミ埋め込み（可逆版プロトタイプ `spec_av_rev.rwhile`）
 

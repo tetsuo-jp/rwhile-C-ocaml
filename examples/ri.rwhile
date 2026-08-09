@@ -122,9 +122,28 @@ cons (cons Tag Arg) Cd <= Cd;
 (* Assignment *)
 if =? Tag 'ass then
   cons (cons 'var K) E <= Arg;
+  (* BUG 2 fix: the SAVED-VALUE method.  The order used to be
+   *     EVAL-EXP(E,V,H); DUPDATE(Vl,K,V); INV-EVAL-EXP(E,V,H)
+   * which clears the temporaries V and H by RE-READING the store.  That is
+   * sound only while E does not read the slot K.  R-WHILE as implemented here
+   * does NOT forbid `X ^= E` with X in E: rupdate evaluates E in the store
+   * BEFORE the write, so `X ^= X` is the everyday reversible self-clear (and
+   * spec_av emits it into its residuals).  For such a command DUPDATE has
+   * already changed what E reads, the re-read returns a different value, and
+   * the temp cannot be cancelled -> "error in update".
+   *
+   * So SAVE the value first, invert EVAL-EXP against the still-UNCHANGED
+   * store -- which always succeeds -- and only then update.  This is the same
+   * shape 'cond / 'l1E / 'l2E already use (EVAL-EXP; save; INV-EVAL-EXP).
+   *
+   * The saved copy is discarded by a self-clear, because it must be: when E
+   * reads K the interpreted command is itself irreversible, and an interpreter
+   * cannot be more reversible than the command it is running. *)
   EVAL-EXP(E,V,H);     (* Set the value of E to V, the garbage values to H *)
-  DUPDATE(Vl,K,V);        (* Reversible update of K-th elements of Vl (or DynVal) by V *)
-  INV-EVAL-EXP(E,V,H); (* Clear V and H *)
+  AssV ^= V;           (* Save the value BEFORE the store changes *)
+  INV-EVAL-EXP(E,V,H); (* Clear V and H against the UNCHANGED store *)
+  DUPDATE(Vl,K,AssV);  (* Reversible update of K-th elements of Vl (or DynVal) *)
+  AssV ^= AssV;        (* Discard the saved value *)
   Arg <= cons (cons 'var K) E
 else
  (* Replacement *)

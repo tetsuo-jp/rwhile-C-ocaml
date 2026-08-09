@@ -6,8 +6,10 @@
 **決め手＝`PAT-READ-ITER`**（深さ一般の読みパターン残余化。`PAT-READ-AV` は深さ1でネスト cons を静的
 リテラル化していた＝`ASSEMBLE-FP1` のネスト出力パターンで露呈）。fp1 不変・hygiene-clean。
 
-**判定は必ず `d2p`/`data2program` 直接評価**（`run_via_ri` は ri.rwhile bug2＝自己クリア `X^=X` 非可逆
-のため残余の判定に使えない）。`make d2p`、`./d2p comp.val [data.val]`。
+**判定は `d2p`/`data2program` 直接評価**（`make d2p`、`./d2p comp.val [data.val]`）。
+※ `run_via_ri` が使えなかった理由＝ri.rwhile bug2（自己クリア `X^=X`）は **2026-08-10 に修正済**
+（下記 §0f、新設 `ri-selfclear` 群）。両経路は一致するようになったが、判定基準は引き続き d2p を正とする
+（自己解釈器を挟まないぶん、失敗の切り分けが素直なため）。
 
 **再現**（4分）: `./ri -p2d examples/spec_av.rwhile >/tmp/inner.val`；outer=spec_av の FpN を 300 に；
 `fp2.val=(inner . ('S . rimin))`；`./ri outer.rwhile fp2.val >comp`；`./d2p comp <(echo "('S.'swap)")`。
@@ -92,19 +94,31 @@ naive 配線すると mw は通るが fp1 退行（PAT-WRITE-STRUCT の swap-via
 
 - **bug1 修正済(ffd9c8b)**：ri.rwhile 'cond の入口/出口値クリアを**ビット一致→真偽一致**に
   (involutive `CANON(V,B)` マクロ)。P9 で検証、reverse/compare/rint/全非rint群 green。
-- **bug2(未修正・支配的)**：可逆自己クリア `X ^= X`（E が X を読む `X ^= E`）を ri.rwhile が誤解釈。
+- **bug2（2026-08-10 修正済。旧記述は下の「本質」節と併せて読むこと）**：可逆自己クリア `X ^= X`
+  （E が X を読む `X ^= E`）を ri.rwhile が誤解釈していた。
   'ass=`EVAL-EXP(E); DUPDATE(K); INV-EVAL-EXP(E)`、DUPDATE が store を変え再読 INV が temp を消せず
   "error in update"。最小再現 `A ^= A` / `Y ^= 'k; Y ^= Y`。残余は自己クリア多用＝run_via_ri を壊す主因。
-  修正は EVAL-EXP の変数読みを**保存値で逆転**（再読でなく）する設計変更。fp_dyncond_bug は `D ^= D`
-  を含み run_via_ri は依然 raise（test_fp1_dyncond_known_bug は両事実を固定）。
-- **道具**：`make d2p`＋`Program2DataRwhile.data2program` で残余を直接評価（判定は run_via_ri でなく
-  これを使う）。
+  **修正＝EVAL-EXP の保存値方式**（`examples/ri.rwhile` 'ass）：
+  `EVAL-EXP(E,V,H); AssV ^= V; INV-EVAL-EXP(E,V,H); DUPDATE(Vl,K,AssV); AssV ^= AssV`。
+  INV-EVAL-EXP を **store が未変更のうち**に走らせるので必ず消える。'cond/'l1E/'l2E が既に採っていた
+  「EVAL-EXP → 保存 → INV-EVAL-EXP」と同じ形。回帰は新設 `ri-selfclear` 群、および
+  `test_fp1_dyncond_known_bug`（check_raises を正答比較に反転済）。
+- **道具**：`make d2p`＋`Program2DataRwhile.data2program` で残余を直接評価（run_via_ri と d2p が
+  一致することを ri-selfclear 群が固定するが、判定基準としては d2p が引き続き素直）。
 
-**bug2 本質(2026-06-17(7))**：`X^=X` は**非可逆**(forward v→nil、逆も nil→nil)。rupdate は第2引数のみ
-involutive。⇒ 可逆自己解釈器 ri.rwhile は原理的に `X^=X` を逆クリアできず、局所パッチ不可。検証：
-遅延クリア `C^=A; A^=C`(SC3)は ri で通る／自己クリア `A^=A`(SC1)は落ちる。ri_min 残余が通るのは
-自己クリアを含まない(CRep move)から。修正筋：(a) spec_av を遅延クリア化(大規模・原理的)、
-(b) ri を前方のみ忠実化(可逆性犠牲・ハック、不採用)、(c) **判定を direct eval(d2p) に**(採用済)。
+**bug2 本質(2026-06-17(7)、2026-08-10 に結論を更新)**：`X^=X` は**非可逆**(forward v→nil、逆も
+nil→nil)。rupdate は第2引数のみ involutive。当時の結論は「可逆自己解釈器 ri.rwhile は原理的に
+`X^=X` を逆クリアできず局所パッチ不可」で、修正筋 (a) spec_av 遅延クリア化 / (b) ri を前方のみ
+忠実化(可逆性犠牲) / (c) 判定を direct eval に、のうち (c) を採っていた。
+**更新**：前半の観察は正しいが、そこから出る帰結は「局所パッチ不可」ではなく
+**「`X^=X` を含むプログラムを忠実に解釈する自己解釈器は、必然的に非可逆になる」**である
+（自己解釈器の関数＝被解釈プログラムの関数であり、後者が単射でない以上、前者も単射でない）。
+つまり (b) は**ハックではなく強制**であり、忠実さと可逆性はここで両立しない。今回は忠実さを
+採り、非可逆性を `AssV ^= AssV` **一箇所**に局在させた（ri.rwhile は構文的には従来どおり
+R-WHILE プログラムで、`InvRwhile` の対象・involution テストも不変。失われるのは
+「inv(ri) が ri の意味的逆になる」ことだけで、それは `X^=X` を含む任意のプログラムと同じ事情）。
+なお (a)（spec_av を遅延クリア `C^=A; A^=C` 化）は依然、**ri を可逆に保ったまま**残余を通す道として
+有効で、両者は排他ではない。検証：遅延クリア(SC3)は修正前の ri でも通る／自己クリア(SC1)は落ちた。
 
 **fp2 comp 未完の具体局在(2026-06-17(8))**：d2p 直接評価で fp2 comp(3MB)を実行＝"variables not nil"。
 read var≈index36、**write var=v5**。**v5(出力)=nil**のまま、B の部品が v3(=('seq.('rep…))=B body)・
