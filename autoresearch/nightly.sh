@@ -17,13 +17,15 @@
 #   4. 却下・完了は台帳に載せ、二度と提案させない
 set -u
 
-REPO="/home/a/dev/github.com/tetsuo-jp/rwhile-C-ocaml"
-WT="/home/a/dev/github.com/tetsuo-jp/rwhile-C-ocaml-autoresearch"
+# パスはスクリプトの位置から導く。機械ごとにホームが違う（owari=/home/a、
+# s3=/home/tetsuo）ので、絶対パスを焼き込むと移設のたびに黙って壊れる。
+AR="$(cd "$(dirname "$0")" && pwd)"
+REPO="$(cd "$AR/.." && pwd)"
+WT="${AUTORESEARCH_WT:-${REPO}-autoresearch}"
 BRANCH="autoresearch/nightly"
-AR="$REPO/autoresearch"
 REPORTS="$AR/reports"
-WORKLOG_PY="/home/a/dev/notion/worklog.py"
-WORKLOG_VENV="/home/a/dev/notion/.venv/bin/python"
+WORKLOG_PY="$HOME/dev/notion/worklog.py"
+WORKLOG_VENV="$HOME/dev/notion/.venv/bin/python"
 
 MODEL="${MODEL:-claude-fable-5}"
 MAX_TURNS="${MAX_TURNS:-400}"
@@ -41,7 +43,7 @@ SEL_LOG="$REPORTS/$DATE-select.log"
 SOLVE_LOG="$REPORTS/$DATE-solve.log"
 TASK="$REPORTS/$DATE-task.json"
 
-LOCK="/tmp/autoresearch-rwhile.lock"
+LOCK="/tmp/autoresearch-rwhile-$(id -u).lock"
 exec 9>"$LOCK"
 flock -n 9 || { echo "既に走っている ($LOCK)"; exit 1; }
 
