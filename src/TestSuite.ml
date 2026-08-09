@@ -2474,37 +2474,38 @@ let dc_check_via_ri_fp3 name inputs =
     inputs
 
 (* Both branches of the dynamic conditional, so the residual cannot be one that
-   baked a branch in.  The inputs are the CANONICAL booleans (nil.nil) and nil
-   because ri_fp3 itself cannot interpret dyncond3 on any other truthy value --
-   see test_dyncontrol_ri_fp3_truthiness_gap, which pins that this is the
-   INTERPRETER's limit and that the residual reproduces it faithfully. *)
+   baked a branch in.  'q is a NON-canonical truthy value: it needs ri_fp3's
+   CANON-FP3 (2026-08-09) to be interpreted at all, and it is kept here so this
+   test fails if that fix is ever lost.  See
+   test_dyncontrol_ri_fp3_truthiness_gap, which checks the interpreter and the
+   residual against each other on that same value. *)
 let test_dyncontrol_dyncond3_via_ri_fp3 () =
-  dc_check_via_ri_fp3 "dyncond3" [ parse_val "(nil . nil)"; VNil ]
+  dc_check_via_ri_fp3 "dyncond3" [ parse_val "(nil . nil)"; VNil; atom "'q" ]
 
 (* ri.rwhile BUG 1 (truthiness vs bit-equality in the 'cond exit assertion) was
- * fixed there via the CANON macro; ri_fp3.rwhile still has the unfixed form
- * `Arg ^= Ve`, so a conditional whose entry test evaluates to a truthy value
- * that is not the canonical (nil.nil) cannot be self-interpreted at all.
- * dyncond3's test is the bare input variable, so 'q trips it.
+ * fixed there via the CANON macro.  ri_fp3.rwhile got the same fix on
+ * 2026-08-09 (CANON-FP3), replacing the raw `W ^= Ve` / `Arg ^= Ve` pair, so a
+ * conditional whose entry test evaluates to a truthy value that is NOT the
+ * canonical (nil.nil) is now self-interpreted correctly.  dyncond3's test is
+ * the bare input variable, so 'q exercises exactly that path.
  *
- * This is pinned for two reasons.  (1) It is NOT a specialiser bug: it is the
- * subject-level interpreter's.  (2) The RESIDUAL fails in exactly the same way
- * on exactly the same input, which is evidence that the residual is faithful --
- * a residual that "worked" here would be computing something the interpreter
- * does not.  When ri_fp3 gets its CANON, both halves flip together. *)
+ * This test earns its keep in the fixed state too, for the reason it did in the
+ * broken one: the interpreter and the RESIDUAL are checked on the same input.
+ * Before the fix both raised `error in update`; now both must return the
+ * source's answer.  A residual that disagreed with the interpreter here -- in
+ * either direction -- would be computing something the interpreter does not.
+ * (Loops still compare raw values in both ri.rwhile and ri_fp3.rwhile.) *)
 let test_dyncontrol_ri_fp3_truthiness_gap () =
-  let (_, _, comp) = dc_fp1_via_ri_fp3 "dyncond3" in
+  let (src, pd, comp) = dc_fp1_via_ri_fp3 "dyncond3" in
   let sint = Lazy.force dc_ri_fp3 in
-  let pd = Program2DataRwhile.program2data
-      (parse_file_program (examples_dir ^ "/dyncond3.rwhile")) in
-  let bad = atom "'q" in
-  let err = Failure "error in update" in
-  Alcotest.check_raises
-    "OPEN (ri_fp3, not spec_av): a non-canonical truthy test value breaks 'cond"
-    err (fun () -> ignore (EvalRwhile.evalProgram sint (VCons (pd, bad))));
-  Alcotest.check_raises
-    "...and the residual reproduces the interpreter's failure exactly"
-    err (fun () -> ignore (EvalRwhile.evalProgram comp bad))
+  let noncanon = atom "'q" in
+  let expected = VCons (pd, EvalRwhile.evalProgram src noncanon) in
+  Alcotest.(check valT_testable)
+    "ri_fp3 self-interprets a NON-canonical truthy test value (CANON-FP3)"
+    expected (EvalRwhile.evalProgram sint (VCons (pd, noncanon)));
+  Alcotest.(check valT_testable)
+    "...and the residual agrees with the interpreter on that same input"
+    expected (EvalRwhile.evalProgram comp noncanon)
 
 let test_dyncontrol_reverse_via_ri_fp3 () =
   dc_check_via_ri_fp3 "reverse"
@@ -3805,7 +3806,7 @@ let () =
       Alcotest.test_case "reverse (data-dependent loop) via ri_fp3 residualises correctly" `Quick test_dyncontrol_reverse_via_ri_fp3;
       Alcotest.test_case "reverse/length/length2 specialised directly: correct, reversible, loop kept" `Quick test_dyncontrol_direct;
       Alcotest.test_case "a data-dependent loop stays a loop in the residual" `Quick test_dyncontrol_residual_keeps_the_loop;
-      Alcotest.test_case "OPEN (ri_fp3, not spec_av): non-canonical truthy test values" `Quick test_dyncontrol_ri_fp3_truthiness_gap;
+      Alcotest.test_case "non-canonical truthy test values (ri_fp3 CANON-FP3)" `Quick test_dyncontrol_ri_fp3_truthiness_gap;
     ];
     "work-meter", [
       Alcotest.test_case "equal values cost their size" `Quick test_work_equal_values_cost_their_size;

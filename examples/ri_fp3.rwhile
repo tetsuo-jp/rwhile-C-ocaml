@@ -30,6 +30,19 @@
  * are still open -- see examples/sx_three.rwhile and the note in spec_av.rwhile.
  *)
 
+(* CANON-FP3(V, B): set B (nil on entry) to the CANONICAL boolean of V's
+ * truthiness ((nil.nil) if V is non-nil, else nil), leaving V unchanged.
+ * Involutive: a second CANON-FP3(V,B) restores B to nil.  Ported from
+ * ri.rwhile's CANON (BUG 1) on 2026-08-09: the conditional must clear the saved
+ * entry-test value against the exit-assertion value by TRUTHINESS, not
+ * bit-equality -- R-WHILE conditionals only require matching truthiness, so a
+ * test `X` = 'q and an assertion `=? Z 'one` = (nil.nil) must agree.
+ * Loops still compare raw values here, exactly as in ri.rwhile. *)
+macro CANON-FP3(V, B)
+  CanT ^= =? V nil;
+  B ^= =? CanT nil;
+  CanT ^= =? V nil
+
 (* ===== Store access: named variable dispatch ===== *)
 
 (* LOOKUP-FP3(J, X): X ^= V[J], non-destructive read *)
@@ -236,7 +249,7 @@ else
      Tag ^= 'cond; Tag ^= 'condB;
      cons E (cons C (cons D (cons F nil))) <= Arg;
      EVAL-EXP-FP3(E,Ve,H);
-     W ^= Ve;
+     CANON-FP3(Ve,W);        (* W := canonical truthiness of the test (not raw Ve) *)
      INV-EVAL-EXP-FP3(E,Ve,H);
      if W then Cd1 ^= C else Cd1 ^= D fi W;
      Arg <= cons E (cons C (cons D (cons F nil)));
@@ -249,7 +262,9 @@ else
       C' <= cons E (cons C (cons D (cons F nil)));
       cons E (cons C (cons D (cons F nil))) <= C';
       EVAL-EXP-FP3(F,Ve,H);
-      Arg ^= Ve;
+      CANON-FP3(Ve,Wc);       (* Wc := canonical truthiness of the exit assertion *)
+      Arg ^= Wc;              (* clear Arg (= canon entry test) by truthiness match *)
+      CANON-FP3(Ve,Wc);       (* uncompute Wc (involution) *)
       INV-EVAL-EXP-FP3(F,Ve,H);
       Arg <= cons E (cons C (cons D (cons F nil)))
      else
