@@ -278,7 +278,11 @@ if [ $after_rc -eq 0 ]; then note "- ✓ 受入コマンドが通った"; else n
 # そのテストは実装を検査していない＝受入不成立とする。Agda ゲートの変異注入と同じ発想。
 mutation_rc=0
 if [ $after_rc -eq 0 ]; then
-  impl_files="$(git -C "$WT" diff --name-only HEAD -- . ':(exclude)src/TestSuite.ml' 2>/dev/null || true)"
+  # 退避するのは **既存ファイルの変更（M）だけ**。新規追加（A/untracked）は退避しない。
+  # 理由: テストの入力資産（examples/*.rwhile の最小再現など）は新規追加で入るので、
+  # これを退避すると **テストが走れなくなって rc≠0 になり、「✓ 検査している」と誤判定**する。
+  # 実装の修正は既存ファイルの変更として入る（ri.rwhile, spec_av.rwhile, src/*.ml）。
+  impl_files="$(git -C "$WT" diff --name-only --diff-filter=M HEAD -- . ':(exclude)src/TestSuite.ml' 2>/dev/null || true)"
   if [ -n "$impl_files" ]; then
     # shellcheck disable=SC2086
     if git -C "$WT" stash push -q -m accept-mutation -- $impl_files 2>/dev/null; then
@@ -289,14 +293,28 @@ if [ $after_rc -eq 0 ]; then
         note "- ✗ **変異検査で受入が通ってしまった**（実装を戻しても緑）。"
         note "  そのテストは実装を検査していない。受入は不成立とする"
         mutation_rc=1
+      elif grep -q '\[FAIL\]' "$REPORTS/$DATE-accept-mutated.log" 2>/dev/null; then
+        # rc≠0 には「テストが走って落ちた」と「そもそも走れなかった」の 2 通りがある。
+        # Alcotest の [FAIL] が出ていれば前者＝実装を検査している。
+        note "- ✓ 変異検査: 実装を戻すと群が**実行されて失敗**する (rc=$mut_rc, [FAIL] 検出)"
       else
-        note "- ✓ 変異検査: 実装を戻すと受入が落ちる (rc=$mut_rc)＝テストは実装を検査している"
+        note "- ⚠ **変異検査は判定不能**: 実装を戻すと rc=$mut_rc だが [FAIL] が出ていない。"
+        note "  テストが落ちたのか、そもそも走れなかったのかが区別できない。受入は不成立とする"
+        mutation_rc=1
+      fi
+      # 戻したあとに緑へ復帰することも確かめる（stash pop の失敗や副作用で木が
+      # 壊れたまま「緑だった」と報告する経路を塞ぐ）。
+      (cd "$WT" && timeout 1800 bash -c "$ACCEPT") >"$REPORTS/$DATE-accept-restored.log" 2>&1
+      restored_rc=$?
+      if [ $restored_rc -ne 0 ]; then
+        note "- ✗ **stash を戻したあと受入が緑に復帰しない** (rc=$restored_rc)。木が壊れている"
+        mutation_rc=1
       fi
     else
       note "- ⚠ 変異検査を実施できなかった（stash 失敗）。judge は参考値として読むこと"
     fi
   else
-    note "- ✗ **実装側の変更がゼロ**（テストだけが増えた）。受入は不成立とする"
+    note "- ✗ **実装側の変更（既存ファイルの修正）がゼロ**。受入は不成立とする"
     mutation_rc=1
   fi
 fi
