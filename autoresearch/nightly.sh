@@ -109,6 +109,11 @@ note "- ✓ ベースライン make run-tests 通過"
 comp2="$( (cd "$WT/src" && timeout 1800 ./measure_proj full 2>&1) | grep -c "\[comp2\]((.S.swap)) == B : true" || true)"
 [ "$comp2" -ge 1 ] || fail_out "ベースラインで fp2 が壊れている（[comp2] != B）"
 note "- ✓ ベースライン fp2（[comp2](('S.swap)) == B : true）"
+agda_base="$( (cd "$WT/proofs/agda" && timeout 3600 ./check.sh 2>&1) | tail -1 )"
+case "$agda_base" in
+  *"FAIL=0"*) note "- ✓ ベースライン Agda: $agda_base" ;;
+  *) note "- ✗ ベースライン Agda が緑でない: $agda_base"; fail_out "ベースラインの Agda 検査が失敗" ;;
+esac
 
 # ── 2. 変異注入: 検証器が本当に落とすか ──────────────
 probe_agda() {
@@ -145,52 +150,56 @@ if [ "$n_cand" -eq 0 ]; then
   exit 0
 fi
 
-if [ "$DRY" = "1" ]; then
-  # 配管試験用の既定課題: 先頭候補を、必ず失敗する受入コマンドで包む
-  head -1 "$CANDS" | python3 -c '
+ATTEMPTS="${ATTEMPTS:-3}"
+attempt=0
+task_ok=0
+while [ "$attempt" -lt "$ATTEMPTS" ]; do
+  attempt=$((attempt + 1))
+  if [ "$DRY" = "1" ]; then
+    head -1 "$CANDS" | python3 -c '
 import json,sys
 c = json.loads(sys.stdin.read())
-print(json.dumps({"id": c["id"], "title": c["title"],
-                  "why": "DRY run",
+print(json.dumps({"id": c["id"], "title": c["title"], "why": "DRY run",
                   "accept_cmd": "test -f /nonexistent-acceptance-probe"}, ensure_ascii=False))' >"$TASK"
-  note "- DRY: LLM を呼ばず既定課題を使う"
-else
-  sel_prompt="$(cat "$AR/prompt-select.md")
+    note "- DRY: LLM を呼ばず既定課題を使う"
+  else
+    sel_prompt="$(cat "$AR/prompt-select.md")
 $(printf '\n## 候補（JSONL）\n')
 $(cat "$CANDS")"
-  (cd "$WT" && timeout 1800 claude -p "$sel_prompt" --model "$MODEL" --max-turns 8 \
-      --permission-mode acceptEdits) >"$SEL_LOG" 2>&1
-  # 最後の JSON オブジェクトを取り出す
-  python3 - "$SEL_LOG" "$TASK" <<'EOF' || true
-import json, re, sys
-txt = open(sys.argv[1], errors="replace").read()
-best = None
-for m in re.finditer(r"\{[^{}]*\"accept_cmd\"[^{}]*\}", txt, re.S):
-    try:
-        best = json.loads(m.group(0))
-    except Exception:
-        pass
-if best:
-    json.dump(best, open(sys.argv[2], "w"), ensure_ascii=False)
-EOF
-fi
-[ -s "$TASK" ] || fail_out "課題の選定に失敗（$SEL_LOG を見ること）"
-ACCEPT="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["accept_cmd"])' "$TASK")"
-TITLE="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["title"])' "$TASK")"
-TID="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("id",""))' "$TASK")"
-note "- 課題: **$TITLE**"
-note "- 受入コマンド: \`$ACCEPT\`"
+    (cd "$WT" && timeout 1800 claude -p "$sel_prompt" --model "$MODEL" --max-turns 8 \
+        --permission-mode acceptEdits) >"$SEL_LOG.$attempt" 2>&1
+    python3 "$AR/extract_task.py" "$SEL_LOG.$attempt" "$TASK" || true
+  fi
+  if [ ! -s "$TASK" ]; then
+    note "- ✗ 試行 $attempt: 課題の選定に失敗（$SEL_LOG.$attempt）"
+    continue
+  fi
+  ACCEPT="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["accept_cmd"])' "$TASK")"
+  TITLE="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["title"])' "$TASK")"
+  TID="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("id",""))' "$TASK")"
+  note "- 試行 $attempt の課題: **$TITLE**"
+  note "  受入コマンド: \`$ACCEPT\`"
 
-# ── 4. 受入コマンドが「着手前に失敗する」ことの確認 ──
-(cd "$WT" && timeout 1800 bash -c "$ACCEPT") >"$REPORTS/$DATE-accept-before.log" 2>&1
-before_rc=$?
-if [ $before_rc -eq 0 ]; then
-  note "- ✗ 受入コマンドが**着手前から通っている**。課題として成立しない。中止"
-  python3 "$AR/ledger.py" mark --id "$TID" --status rejected \
+  # 受入コマンドが「着手前に失敗する」ことの確認（この掟が全体を支えている）
+  (cd "$WT" && timeout 1800 bash -c "$ACCEPT") >"$REPORTS/$DATE-accept-before.log" 2>&1
+  before_rc=$?
+  if [ $before_rc -ne 0 ]; then
+    note "  ✓ 着手前に失敗する (rc=$before_rc)＝解くべき課題である"
+    task_ok=1
+    break
+  fi
+  note "  ✗ **着手前から通っている**。課題として成立しないので却下し、次の候補へ"
+  python3 "$AR/ledger.py" mark --id "$TID" --status rejected --date "$DATE" \
     --note "受入コマンドが着手前から通る: $ACCEPT" >/dev/null 2>&1 || true
-  fail_out "受入コマンドが着手前に成功した（赤を先に見せていない）"
+  grep -v "\"id\": \"$TID\"" "$CANDS" >"$CANDS.tmp" && mv "$CANDS.tmp" "$CANDS"
+  : >"$TASK"
+done
+if [ "$task_ok" -ne 1 ]; then
+  note ""
+  note "- $ATTEMPTS 回とも課題を確定できなかった。今夜は解かない"
+  worklog "課題を確定できず（$ATTEMPTS 回とも事前 FAIL 検査で却下 or 選定失敗）"
+  exit 0
 fi
-note "- ✓ 受入コマンドは着手前に失敗する (rc=$before_rc)＝解くべき課題である"
 
 # ── 5. 解く（LLM その2） ─────────────────────────────
 if [ "$DRY" = "1" ]; then

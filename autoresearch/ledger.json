@@ -1,1 +1,17 @@
-{"entries": [], "rounds": []}
+{
+  "entries": [
+    {
+      "id": "f960dcaa763a",
+      "status": "deferred",
+      "note": "2026-08-09 pin されている穴を塞ぐ: (* WAS A KNOWN BUG, FIXED 2026-08-08. The bug was in STEP, not in lift/assemble: / 要レビュー: accept=1 tests=0 fp2=1 probe=1",
+      "date": ""
+    },
+    {
+      "id": "0b4003b6218c",
+      "status": "rejected",
+      "note": "受入コマンドが着手前から通る: cd proofs/agda && agda --safe RWhileJonesRevTimedWork.agda && test -f _build/2.8.0/agda/RWhileJonesRevTimedWork.agdai",
+      "date": ""
+    }
+  ],
+  "rounds": []
+}
