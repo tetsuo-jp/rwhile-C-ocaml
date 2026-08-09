@@ -22,8 +22,8 @@
 | `spec_av` の lift イディオム（`ASSEMBLE-FP1`） | `RWhileRevProj2Lift`：`idiom-ok`/`idiom-drift`/`fix-roundtrips`/`selfClear-masks` | **設計仕様を証明**（lift が operand 保存 ⇔ 成立） |
 | 可逆化ゴミ（`spec_av_rev`） | `RWhileRevProjGen`：`garbage-necessary`/`input-preserving-inj` | **抽象は証明**。実装は −57% を実測（`FINDINGS §6`） |
 | 反復ワークリスト（`PAT-READ-ITER`） | `RWhileIL`（flat-IL→R-WHILE 翻訳の意味保存・IL 可逆性） | **方法論は証明**（IL で証明し検証翻訳で移送）。`PAT-READ-ITER` 自体は未モデル |
-| `Simp.program_preserving`（p⁺ の構成）／`measure_proj jones-self` の判定基準 | `RWhileProgPres`(`pp-sem`/`pp-cost`/`pp-cost-exact`)・`RWhileProgPresRev`(`pp-rev`/`pp-injective`)・`RWhileProgPresMin`(`ext-not-classical`/`ext-lb`)・`RWhileJonesRev`(`residual-pp`/`pp-unique`)・`RWhileJonesRevCE`(`p⁺-not-minimal`) | **定義の側は証明**（p⁺ の意味論・定数オーバヘッド・可逆性・単射性、基準の含意関係）。**測定（7 被験の成否）は実機のまま**。下界は「p の拡張の中で」の形に限る（一般の最小性は**反証済み**） |
-| `EvalRwhile.eval_work`／`eq_work`（`./ri -work` の費用モデル、課金 3 か所） | `RWhileWorkV`(`eqW`/`eqVW-≡`/`eqW-refl`/`eqW-mismatch`/`rupdW`)・`RWhileWork`(`_⊢_⇒_∣_∥_`/`expW`/`⇒w-steps`/`wk-sound`)・`RWhileWorkDet`(`⇒w-det`)・`RWhileProgPresWork`(`pp-work`/`work-not-constant`)・`RWhileProgWork`(`pp-progW-ocaml`/`measured-law`)・`RWhileJonesRevWork`(`⁺-cost`/`rev-unfold`/`classical⇒rev-work`) | **証明**（費用モデル・短絡・決定性・p⁺ の work コスト `work(p)+\|⌜p⌝\|+1`）。**実測 11 行との一致は Agda 内で `refl` 照合済み**（`measured-law`）。残る隙間は下記「正直な範囲」 |
+| `Simp.program_preserving`（p⁺ の構成）／`measure_proj jones-self` の判定基準 | `RWhileProgPres`(`pp-sem`/`pp-cost`/`pp-cost-exact`)・`RWhileProgPresRev`(`pp-rev`/`pp-injective`)・`RWhileProgPresMin`(`ext-not-classical`/`ext-lb`)・`RWhileJonesRev`(`residual-pp`/`pp-unique`)・`RWhileJonesRevCE`(`p⁺-not-minimal`) | **定義の側は証明**（p⁺ の意味論・定数オーバヘッド・可逆性・単射性、基準の含意関係）。**2026-08-09 に抽象層と具象層を接続**：`RWhileJonesRevRel`（部分意味論の上での基準・全域版が特別な場合）・`RWhileProgPresBack`（p⁺ の走りを逆に読む）・`RWhileJonesRevTimed`(`⁺-PP`／`⁺-mono`)・`RWhileJonesRevTimedWork`(`⁺-costW`／`overhead-gap`)。**測定（被験ごとの成否）は実機のまま**。下界は「p の拡張の中で」の形に限る（一般の最小性は**反証済み**） |
+| `EvalRwhile.eval_work`／`eq_work`（`./ri -work` の費用モデル、課金 3 か所） | `RWhileWorkV`(`eqW`/`eqVW-≡`/`eqW-refl`/`eqW-mismatch`/`rupdW`)・`RWhileWork`(`_⊢_⇒_∣_∥_`/`expW`/`⇒w-steps`/`wk-sound`)・`RWhileWorkDet`(`⇒w-det`)・`RWhileProgPresWork`(`pp-work`/`work-not-constant`)・`RWhileProgWork`(`pp-progW-ocaml`/`measured-law`)・`RWhileJonesRevWork`(`⁺-cost`/`rev-unfold`/`classical⇒rev-work`) | **証明**（費用モデル・短絡・決定性・p⁺ の work コスト `work(p)+\|⌜p⌝\|+1`）。**実測 11 行との一致は Agda 内で `refl` 照合済み**（`measured-law`）。残る隙間は下記「正直な範囲」。**基準への接続は `RWhileJonesRevTimedWork`**（下節「抽象層と具象層の橋」） |
 | `spec_av` の過剰静的化解消＝オフライン BTA 設計図（`MKAV`／`SPEC-CMD-AV` の 'cond 動的経路／agenda `Cd`） | `RWhileOfflineBTA1`–`9`（9 段、`RWhileMain` 再エクスポート）：`over-commit-unsound`/`mkAV-dyn-nonstatic`/`fp2-eq`/`fp3-eq`/`fix-agrees-on-fp1`/`compbug-wrong`/`seq-flatten-ok`/`specOff-keeps-branches`/`specBug-wrong`/`specOff-injective`/`specBug-not-injective` | **設計図を証明**（修正の形・fp1 安全性・ディスパッチ保存・agenda 設計規則・可逆性=単射性）。実機 comp2 の live-trace 根本原因（`TRACE_comp2_root_cause.md`）に対応。実機改造は未着手 |
 
 ## 2. ギャップ（埋めるべき順）
@@ -419,16 +419,139 @@ emit の 4 命令はすべて XOR 代入＝自己逆なので追加コストは�
   実機 `-steps` は 4）。定理が主張しているのは**定数性**であって 8 ではない。
   `RWhileCaseCost` が置換をタイムド核へ翻訳した路線を使えばこの差は詰められるが、
   そこは未着手。
-- **抽象層と具象層は橋渡ししていない**。`Criterion` は全域の `⟦_⟧ : P → D → D` を
-  要求するのに対し、タイムド意味論は関係（部分的）である。Maybe 持ち上げは未。
-  したがって「R-WHILE の p⁺ が `Criterion` の `PP` を満たす」は**両層で別々に
-  述べてあるだけ**で、1 本の定理にはなっていない。
+- ~~**抽象層と具象層は橋渡ししていない**~~ **→ 2026-08-09 に架けた**（下節
+  「抽象層と具象層の橋」）。`Criterion` を**決定的な部分意味論**の上で述べ直し
+  （`RWhileJonesRevRel`）、タイムド核に**実際にインスタンス化**して
+  「R-WHILE の p⁺ が `PP` を満たす」を**1 本の定理**にした
+  （`RWhileJonesRevTimed.Ext.⁺-PP`、work 版は `RWhileJonesRevTimedWork.Ext.⁺-PP`）。
+  Maybe 持ち上げは**採らなかった**（理由は下節）。
 - ~~**測定は形式化していない**~~ **→ 2026-08-09 に `-work` 側を追加した**（下節
   「`-work` 指標のコストモデル」）。`RWhileTime` の ℕ が `-steps` の側なのは変わらず、
   work は**別の注釈として加算的に**足してある（`RWhileTime.agda` は無改変）。
 
 `--safe`・**postulate 0・hole 0**。`check.sh` は **PASS=108 FAIL=0**（5 分 00 秒、
 最大 532 MB）。**work 層 6 本を足して PASS=114**（下節）。
+
+## 抽象層と具象層の橋（`RWhileJonesRevRel` / `RWhileProgPresBack` / `RWhileJonesRevTimed{,Work}`、2026-08-09）
+
+上の「正直な範囲」で最大の穴だったもの——**基準（抽象）と p⁺（具象）が別々に
+述べられているだけ**——を塞いだ。既存モジュールは**一切改変していない**
+（`RWhileTime.agda` も無改変）。`--safe`・**postulate 0・hole 0**・穴 0。
+
+### 部分性の壁：関係で述べ直す（採った道）と、棄却した 2 つ
+
+`Criterion` は全域の `⟦_⟧ : P → D → D` を要求するが、タイムド意味論は関係
+`c ⊢ s ⇒ t ∣ k`（部分的）である。取りうる道は 3 つあった。
+
+| 道 | 判断 | 理由 |
+|---|---|---|
+| **(a-rel) 決定的な部分意味論＝関係の上で基準を述べ直す** | **採用** | タイムド核は**すでに関係**なので、インスタンス化に追加の証明義務が出ない。決定性（`⇒-det`／`⇒w-det`）は既にあるので、関係が関数の役を果たせる |
+| (a-Maybe) `⟦_⟧ : P → D → Maybe D` へ持ち上げる | 棄却 | **その関数は停止性を決定する全域計算可能関数**である。タイムド関係からは（`postulate` 無しには）定義できない。燃料添字にすると p と p⁺ が**同じ燃料で停止しない**ので Kleene 等式が壊れる。文書が「Maybe 持ち上げは未」と書いていた道だが、**未着手なのではなく通れない** |
+| (b) 停止性証明を型に持たせて全域化 | 棄却（主路線としては） | 通るが、`∀ d` の停止証明を要求するので **P が「全入力で停止する可逆プログラム」に縮む**。`measure_proj jones-self` の被験（`reverse` など）はその外にあり、`spec` が停止証明を保存する保証も無い。ただし**全域の場合が特別な場合であること**は `FromTotal` で証明した（下） |
+
+**Kleene 等式の綴り方**：`⟦q⟧ d ≡ ⌜p⌝ ⊗ ⟦p⟧ d` を 2 本の含意に割る。
+
+- `PP⇒ q p`：p が収束するところでは q が**対にした答え**へ収束する
+- `PP⇐ q p`：q は p が収束するところでしか収束しない
+
+コスト比較 `cost r d ≤ cost q d` も**定義域について単調な順序** `r ≼ q`
+（「q が費用 k で収束するところでは r が費用 j ≤ k で収束する」）に置き換える。
+反射的・推移的なので `classical⇒rev` は合成 1 本のままである。
+
+### `RWhileJonesRevRel`：部分版の基準
+
+| 定理 | 内容 |
+|---|---|
+| `pp-answer` | p の定義域上では、義務を負う**どのプログラムも** `⟨⌜p⌝, 答え⟩` を返す |
+| `pp-unique` | ゆえに義務を負う 2 本は一致する。**`PP⇐` が要る**（無ければ q は p の定義域外で何を計算してもよく、一意性は偽） |
+| `pp-dom⇒` / `pp-dom⇐` | 定義域が両向きに一致する |
+| `pp-injective` | `⊗` が右単射なら、p が単射のとき q も単射。ここでも `PP⇐` が本質的に効く |
+| `≼-refl` / `≼-trans` / `classical⇒rev` / `rev-mono` | コスト側。全域版と同じ形 |
+| `Fp1.residual-pp` ほか | 射影の 2 本の定義式（各々両向き）から、**fp1 残余が義務を継承する** |
+| `FromTotal.PP-total⇒rel` / `PP-rel⇒total` | **全域の `⟦_⟧` はその特別な場合**。義務が両向きに一致 |
+| `FromTotal.≼-total⇒rel` / `≼-rel⇒total` | コスト順序も両向きに一致 |
+| `FromTotal.rev-total⇒rel` / `rev-rel⇒total` | ゆえに 2 つの基準そのものが一致。**一般化は保守的**（既存の言明を強めも弱めもしない） |
+
+### `RWhileProgPresBack`：p⁺ を逆向きに走らせる
+
+橋の**難所はここだった**。`ppBody body = body ⨾ emit` を分解すれば p の走りは
+ただで出るが、**p が持つべきストア不変条件は出ない**。`^=` は XOR なので、
+`self` が既に ⌜p⌝ を持っていたら最初の代入は**消す**方向に働き、走り自体は存在する。
+これを排除するのは p⁺ 自身の `all_cleared`（終状態は出力スロット以外すべて nil）で、
+それを 4 本の代入を通して**後ろ向きに**押し込む:
+
+```
+self が nil で終わる → 3 本目が消した → self は ⌜p⌝ を持っていた
+                    → 1 本目が置いた → 開始時 nil
+y が nil で終わる   → 4 本目が消した → out は ⟨_ , 答え⟩ を持っていた
+                    → 2 本目が置いた → out も開始時 nil
+```
+
+| 定理 | 内容 |
+|---|---|
+| `rupd-clear` / `rupd-fix` / `rupd-cons` | `rupd` を逆に読む 3 つ。いずれも `RWhileTimeInv.rupd-invol`（`^=` を可逆にしている部分対合）の系。**後ろ向きに読めるのは言語が可逆だから**である |
+| `emit-clean` | emit の走りが p⁺ の `all_cleared` で終わるなら、**開始ストアでは 2 つの新スロットが nil だった** |
+| `pp-back` | ゆえに p⁺ の走りは**必ず**「p の走り＋emit」であり、中間ストアも答えも一致し、歩数はちょうど `k + 8` |
+| `Examples.back-ex` | 具体例で**型検査器の中で実行**して確認 |
+
+### `RWhileJonesRevTimed`：橋そのもの（`-steps`）
+
+`P = RWhileProgWork.Program`（`read X; body; write Y`）、走りは
+「入力スロットだけ `d`・他は nil のストアから始め、出力スロット以外すべて nil で終わる」
+タイムド導出、コストは歩数。符号化 ⌜·⌝ はモジュールパラメタ `code`
+（`Simp.program_preserving` が `program2data` を構成時に 1 度だけ呼ぶのと同じ扱い）。
+
+| 定理 | 内容 |
+|---|---|
+| `⇓-det` | プログラム層の決定性（`⇒-det` から）。関係が関数の役を果たす根拠 |
+| `⁺-run` | **順方向**：p が収束するところで p⁺ が `⟨⌜p⌝, 答え⟩` へ収束、費用 `+8`。新しいのは **p⁺ の `all_cleared` が生き残る**こと |
+| `back` | **逆方向**：p⁺ は p が収束するところでしか収束せず、そのとき費用はちょうど `cost(p)+8` |
+| **`⁺-PP`** | **`PP p⁺ p`。ギャップ 2 の解消**。タイムド核が実際に構成する p⁺ が、抽象層が定義する義務を満たす——1 本の定理 |
+| `⁺-mono` | `p ≼ p⁺`。`classical⇒rev` の側条件を**仮定でなく証明**で供給 |
+| `classical⇒rev-timed` | 古典版 ⇒ 可逆版を**具象層の上で** |
+| `rev-unfold` / `rev-fold` | 基準を展開すると「残余は p より 8 歩まで許され、それ以上は許されない」 |
+| `⁺-injective` | p が単射なら p⁺ も。`⊗-injectiveʳ` は `_∙_` で成り立つので**仮定を落とせる** |
+| `Example.*` | 具体例（1 命令の p）を型検査器の中で往復。`⁺-ex` が 9 歩、`back-ex` が p の走りを復元 |
+
+### `RWhileJonesRevTimedWork`：同じ橋を `-work` で
+
+`RWhileProgWork._▷_⇒_∥_` をそのまま基準に差し込む（`measured-law` が実測 11 行と
+突き合わせている、まさにその関係）。逆方向は**work を忘れて**歩数側で反転し、
+`wk-sound` で注釈を戻す（`⇒w-det` により注釈は一意なので正当）。
+
+| 定理 | 内容 |
+|---|---|
+| `▷-det` | work 層の決定性 |
+| `⁺-PP` | work 計量でも義務を満たす（両向き） |
+| `⁺-costW` | **`work(p⁺) = work(p) + (\|⌜p⌝\| + \|答え\|) + \|⌜p⌝\| + 1`**（平坦核 emit の厳密値） |
+| `⁺-mono` / `classical⇒rev-work` / `rev-unfold` | 側条件の充足と基準の展開 |
+| `overhead-gap` | **平坦核の法則 = 実機（OCaml）の法則 + (\|⌜p⌝\| + \|答え\|)**。`measured-law` が検証している `pp-progW-ocaml` との差を**散文でなく等式で**述べたもの。差は `CRep` がただで済ませている 2 つのクリアそのもの |
+| `Example.*` | 具体例。`Δ (atm 7) ≡ 4`（歩数の 8 でも実機の `\|⌜p⌝\|+1 = 2` でもない）を `refl` で |
+
+### 正直な範囲（この橋が言っていないこと）
+
+- **ギャップ 3 は残っている**。`RWhileJonesRevWork.WorkModel` は依然としてパラメタ化
+  されたモデルで、そこに R-WHILE のプログラム集合を代入したわけではない。本節が
+  代入したのは `RWhileJonesRev.Criterion` の**関係版**（`RWhileJonesRevRel.CriterionR`）
+  であって、`WorkModel` ではない。`WorkModel` の `⁺-sem`/`⁺-body` に対応する事実は
+  `RWhileJonesRevTimedWork` 側で独立に証明してあるが、**2 つのモジュールは繋がっていない**。
+- **残余は依然として構成していない**。`Fp1` の 4 本の定義式は仮定のままで、
+  R-WHILE の `spec_av` がそれを満たすことは示していない。したがって
+  `rev-unfold` は「基準が何を許すか」を具象層で述べるだけで、**実機の残余が
+  それを満たすか**（`jones-work-holds` の 9 行／`reverse`・`dyncond3` の 2 行）は
+  測定のままである。
+- **`code : Program → V` はパラメタ**。`Program2DataRwhile.program2data` の Agda 版
+  （`RWhileP2DProg`）と結んではいない。基準は符号化の中身を見ないので橋には不要だが、
+  「⌜·⌝ が単射」といった性質を使う言明はここからは出ない。
+- **停止性の扱い**。関係版は「収束するところで比べる」を採ったので、
+  **p が発散する入力について何も言わない**。可逆言語では発散に加えて
+  「表明の失敗」でも走りが存在しないが、両者を区別していない（どちらも「走りが無い」）。
+- **モデル差（`CRep` vs 平坦 `^=` 4 本）は消えていない**。`overhead-gap` はそれを
+  等式にしただけで、詰めたわけではない。詰めるには `RWhileCaseCost` の路線で
+  emit を置換として書き直す必要がある。
+
+`--safe`・**postulate 0・hole 0**。`check.sh` は **PASS=125 FAIL=0**（6 分 00 秒、
+最大 507 MB）。
 
 ## `case` のコストを腕本体まで（`RWhileCaseCost.agda`、2026-08-09）
 
@@ -939,7 +1062,8 @@ work はそのまま差し込める。`WorkModel` が `cost := progW` で `Crite
 ### (C) コストの側（`RWhileRevProjAlgSize`）
 
 **抽象層に限れば言える。実機の `-work` 層（`RWhileWork*`）とは繋がっていない**
-（抽象 U 層とタイムド核の橋渡しは④の既知の未解決項目のまま）。
+（**射影の代数**の U 層とタイムド核の橋渡しは④の未解決項目のまま。2026-08-09 に架けた橋は
+**Jones 基準の側**であって、この代数の側ではない——下節「抽象層と具象層の橋」）。
 
 | 定理 | 内容 |
 |---|---|
