@@ -9,6 +9,12 @@
  *   ./measure_proj jones      fp1 residual vs the INTERPRETER it came from (gain)
  *   ./measure_proj jones-self Jones optimality proper: fp1 residual of the
  *                             SELF-interpreter ri_fp3 vs p+ (fast)
+ *   ./measure_proj jones-attr [name...]
+ *                             WHERE those residuals spend their nodes and
+ *                             commands: constructor histogram, nodes under
+ *                             loops, encoding breakdown, unfused moves, and the
+ *                             spec_av-temp / interpreter-slot split.  See
+ *                             FINDINGS_reversible_projections.md sec 11.
  *
  * Uses direct evaluation (Program2DataRwhile + EvalRwhile), matching the test
  * suite's judgement method. *)
@@ -531,6 +537,139 @@ let gate spec_file =
   if s_ok && i_ok then (Printf.printf "GATE PASS (meaning + reversibility)\n"; exit 0)
   else (Printf.printf "GATE FAIL\n"; exit 1)
 
+(* jones-attr: WHERE does the ri_fp3-route residual spend its nodes/commands?
+ * (2026-08-09, roadmap (iii)+(iv)).
+ *
+ * FINDINGS sec 10.6 explains the 46k-node `reverse` residual as "the
+ * interpreter's dynamic core remains".  That is an explanation, not a
+ * measurement.  This subcommand attributes the residual with the machinery that
+ * ALREADY exists, so the explanation can be confirmed or replaced by numbers:
+ *
+ *   report_hist / loop_nodes   which command constructors, and how many p2d
+ *                              nodes sit inside CLoop bodies
+ *   Encoding.breakdown         var_index / const / *_struct split of the p2d
+ *   Simp.copyprop_report       how many moves exist and how many fuse
+ *   collect_loops              the entry/exit tests of the loops that are kept
+ *
+ * plus ONE split that is specific to this question and needs no new metric:
+ * spec_av hands residual temporaries out of TmpCtr, initialised to 100
+ * (TEMP-IDX / TMP-ALLOC in spec_av.rwhile), and every interpreted program's own
+ * indices are below that.  So in the residual, variable index >= 100 is EXACTLY
+ * a capture-on-escape / swap-via-temp temporary and index < 100 is exactly one
+ * of ri_fp3's own store slots.  That separates hypothesis (a) "the excess is
+ * capture-on-escape temporaries" from (b) "the excess is ri_fp3's stack
+ * machine" by counting, not by guessing.
+ *
+ * The residual is dumped to /tmp/jones_attr_<name>.rwhile so that two subjects
+ * can be diffed: whatever is IDENTICAL between two different subjects is
+ * subject-independent, i.e. interpreter, not specialised program. *)
+let idx_split (r : Encoding.report) =
+  List.fold_left (fun (to_, tn, co, cno) (idx, occs, nodes) ->
+      if idx >= 100 then (to_ + occs, tn + nodes, co, cno)
+      else (to_, tn, co + occs, cno + nodes))
+    (0, 0, 0, 0) (Encoding.index_cost r)
+
+let print_idx_split name r =
+  let (t_occ, t_nod, c_occ, c_nod) = idx_split r in
+  Printf.printf "  [%s] var_index by origin: temps(idx>=100) %d occ / %d nodes ; \
+                 interpreter slots(idx<100) %d occ / %d nodes\n"
+    name t_occ t_nod c_occ c_nod
+
+(* CAREFUL: program2data RENUMBERS (Optimize.var_order / varProgram), so the
+ * index >= 100 signal only survives in the value spec_av actually emitted.  On
+ * an AST the same split is available by NAME instead: data2program names
+ * variable index k "k" (a decimal string), so a name that parses as >= 100 is a
+ * spec_av temporary.  Occurrences are counted with Simp.occ_com, the same
+ * counter copy propagation gates on. *)
+let temp_names prog =
+  EvalRwhile.varProgram prog
+  |> List.filter (fun (RIdent s) ->
+         match int_of_string_opt s with Some k -> k >= 100 | None -> false)
+
+let print_name_split label prog =
+  let body = match prog with Prog (_, _, b, _) -> b in
+  let all = EvalRwhile.varProgram prog in
+  let temps = temp_names prog in
+  let occ vs = List.fold_left (fun a v -> a + Simp.occ_com v body) 0 vs in
+  Printf.printf "  [%s] variables: %d total (%d spec_av temps, idx>=100); \
+                 occurrences: %d total, %d in temps\n"
+    label (List.length all) (List.length temps) (occ all) (occ temps)
+
+(* The structural walks (count_loops / report_hist / loop_nodes) look at an AST,
+ * and loop_nodes re-encodes a sub-body with an EMPTY macro list, so a source
+ * program must be desugared and macro-expanded first -- exactly what
+ * program2data does internally before encoding. *)
+let attr_one label prog =
+  let pd = Program2DataRwhile.program2data prog in
+  let body = match MacroRwhile.expMacProgram (Desugar.desugar_program prog) with
+    | Prog (_, _, b, _) -> b in
+  Printf.printf "  [%s] %d nodes, %d CLoop, %d p2d-nodes inside CLoop bodies\n"
+    label (cn pd) (count_loops body) (loop_nodes body);
+  report_hist label body;
+  let r = Encoding.breakdown pd in
+  Encoding.print_report label r;
+  print_idx_split label r
+
+let jones_attr spec_av names =
+  let sint = parse_prog (dir ^ "/ri_fp3.rwhile") in
+  let pd_sint = Program2DataRwhile.program2data sint in
+  Printf.printf "=== the self-interpreter itself (the thing the residual is a specialisation OF) ===\n";
+  attr_one "ri_fp3" sint;
+  List.iter (fun name ->
+      Printf.printf "\n=== %s ===\n" name;
+      let srcp = parse_prog (dir ^ "/" ^ name ^ ".rwhile") in
+      let pd = Program2DataRwhile.program2data srcp in
+      attr_one (name ^ ":p") srcp;
+      attr_one (name ^ ":p+") (Simp.program_preserving srcp);
+      match (try Ok (EvalRwhile.evalProgram spec_av (spec_in pd_sint pd))
+             with Failure m -> Error m) with
+      | Error m -> Printf.printf "  [%s] specialisation failed: %s\n" name m
+      | Ok comp ->
+        let raw = Program2DataRwhile.data2program comp in
+        let cpp = Simp.copyprop_program raw in
+        (* the value as EMITTED: its indices are spec_av's own, so the temp
+         * split is exact here and only here *)
+        Printf.printf "  [%s:emitted] %d nodes (spec_av's own numbering)\n" name (cn comp);
+        let re = Encoding.breakdown comp in
+        Encoding.print_report (name ^ ":emitted") re;
+        print_idx_split (name ^ ":emitted") re;
+        Encoding.print_index_cost (name ^ ":emitted") re 8;
+        attr_one (name ^ ":raw") raw;
+        print_name_split (name ^ ":raw") raw;
+        attr_one (name ^ ":cp") cpp;
+        print_name_split (name ^ ":cp") cpp;
+        (* moves = CRep (PVar, PVar), i.e. pure slot-to-slot traffic.  On the
+         * COPY-PROPAGATED residual this is the excess that survived fusion --
+         * ri_fp3's store <-> work-register traffic.  Printed for p+ too, so the
+         * comparison is against the obligation, not against zero. *)
+        let rpt lbl p =
+          let r = Simp.copyprop_report p in
+          Printf.printf "  [%s] copyprop moves=%d fused=%d multi_occ=%d no_use=%d not_consuming=%d src_clobbered=%d\n"
+            lbl r.Simp.moves r.Simp.fused r.Simp.multi_occ r.Simp.no_use
+            r.Simp.not_consuming r.Simp.src_clobbered in
+        rpt (name ^ ":p+") (Simp.program_preserving srcp);
+        rpt (name ^ ":raw") raw;
+        rpt (name ^ ":cp") cpp;
+        (let f = "/tmp/jones_attr_" ^ name ^ ".rwhile" in
+         let oc = open_out f in
+         output_string oc (PrintRwhile.printTree PrintRwhile.prtProgram cpp);
+         close_out oc;
+         Printf.printf "  [%s] residual (copyprop) dumped to %s\n" name f);
+        let body = match cpp with Prog (_, _, b, _) -> b in
+        let loops = List.rev (collect_loops [] body) in
+        if loops <> [] then begin
+          let tbl = Hashtbl.create 16 in
+          List.iter (fun (en, ex) ->
+              let key = "from " ^ exp_str en ^ "  until " ^ exp_str ex in
+              Hashtbl.replace tbl key (1 + (try Hashtbl.find tbl key with Not_found -> 0)))
+            loops;
+          Printf.printf "  [%s] %d CLoop(s), entry/exit shapes:\n" name (List.length loops);
+          Hashtbl.fold (fun k c acc -> (c, k) :: acc) tbl []
+          |> List.sort (fun (a, _) (b, _) -> compare b a)
+          |> List.iter (fun (c, k) -> Printf.printf "  [%s]   [x%d]  %s\n" name c k)
+        end)
+    names
+
 (* encoding: attribute the nodes of the p2d encodings we care about.  comp2 is a
  * residual, but the QUESTION -- what is the encoding spending its nodes on --
  * is answered just as well by the programs comp2 is made of, and those encode in
@@ -546,6 +685,12 @@ let encoding () =
 
 let () =
   if Array.length Sys.argv >= 2 && Sys.argv.(1) = "encoding" then (encoding (); exit 0);
+  if Array.length Sys.argv >= 2 && Sys.argv.(1) = "jones-attr" then begin
+    let names = match Array.to_list Sys.argv with
+      | _ :: _ :: (_ :: _ as ns) -> ns
+      | _ -> [ "swap"; "sx_three"; "loop_static2"; "dyncond3"; "reverse" ] in
+    jones_attr (parse_prog (dir ^ "/spec_av.rwhile")) names; exit 0
+  end;
   if Array.length Sys.argv >= 2 && Sys.argv.(1) = "storewalk" then storewalk ();
   if Array.length Sys.argv >= 3 && Sys.argv.(1) = "gate" then gate Sys.argv.(2);
   if Array.length Sys.argv >= 3 && Sys.argv.(1) = "dyncond" then (dyncond Sys.argv.(2); exit 0);
