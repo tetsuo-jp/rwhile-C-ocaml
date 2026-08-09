@@ -11,4 +11,4 @@ TimeoutStartSec=18000
 MemoryMax=10G
 Nice=19
 # systemd --user は brew の PATH を失う。明示しないとソルバや agda が rc=127 で黙って死ぬ。
-Environment=PATH=/home/linuxbrew/.linuxbrew/bin:/usr/local/bin:/usr/bin:/bin
+Environment=PATH=%h/.local/bin:/home/linuxbrew/.linuxbrew/bin:/usr/local/bin:/usr/bin:/bin

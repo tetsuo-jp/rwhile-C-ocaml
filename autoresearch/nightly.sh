@@ -36,6 +36,18 @@ if [ "$SMOKE" = "1" ]; then
   MODEL="claude-haiku-4-5"; MAX_TURNS=6; CLAUDE_TIMEOUT=900
 fi
 
+# systemd --user は対話シェルの PATH を持たない。brew・opam・claude の場所を
+# 自力で足す（unit の Environment だけでは switch 名が機械ごとに違って書けない）。
+# 実測 2026-08-09: これが無いと ocamlfind も claude も見つからず rc=127 で黙って死ぬ。
+eval "$(opam env 2>/dev/null)" || true
+for d in "$HOME/.local/bin" /home/linuxbrew/.linuxbrew/bin; do
+  case ":$PATH:" in *":$d:"*) ;; *) [ -d "$d" ] && PATH="$d:$PATH" ;; esac
+done
+export PATH
+for c in claude agda make git python3; do
+  command -v "$c" >/dev/null || { echo "必須コマンドが無い: $c (PATH=$PATH)" >&2; exit 1; }
+done
+
 DATE="$(date +%F)"
 mkdir -p "$REPORTS"
 REPORT="$REPORTS/$DATE.md"
