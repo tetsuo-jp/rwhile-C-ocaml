@@ -774,3 +774,72 @@ input — it is a self-*interpreter*, not a consumer.
 Scope: expressions are flat and `<=` is not in the object language, so the
 constant is larger than the real `ri.rwhile` (measured a-rev ≈ 364); the
 design — agenda, reassembly, tag algebra, compute–use–uncompute — is the same.
+
+## The `-work` meter (2026-08-09)
+
+`RWhileTime`'s ℕ is `./ri -steps`: one unit per executed COMMAND node, blind
+to the SIZE of the values a command touches.  The repository's reversible
+Jones-optimality claim, however, is measured with the OTHER meter,
+`./ri -work` — value nodes examined by structural comparison.  Six modules put
+the two on one footing.  `RWhileTime.agda` is **unchanged**: work is a SECOND
+annotation, and `⇒w-steps` forgets it, so everything that speaks about `∣ k`
+is untouched.
+
+- `RWhileWorkV.agda` — the meter on values.  `eqW` is `src/EvalRwhile.ml`'s
+  `eq_work` (one unit per pair of nodes examined, stopping at the first
+  mismatch); `eqVW` computes the boolean and the cost in ONE traversal and
+  `eqVW-≡` proves its boolean half is RWhileTime's existing `eqV`.  Two facts
+  make the meter say something: `eqW-refl : eqW v v ≡ nodes v` (comparing a
+  value with itself walks all of it — what the reversible increment pays every
+  iteration) and `eqW-mismatch` / `short-circuit` (a leading mismatch costs 2
+  units however large the tails are — without which the meter would be
+  `nodes` in disguise).  `rupdW` is `rupdate`'s clearing test: **free when the
+  slot is nil**, since `rupdate` tests `vy = VNil` first and that test is not
+  charged.
+
+- `RWhileWork.agda` — the cost relation `c ⊢ s ⇒ t ∣ k ∥ w`.  Only two
+  producers of work, and they are the two charged sites of the implementation
+  that exist in the flat core: `expW` (which is literally `0` on every
+  expression form but `eqE`) and `rupdW`.  `⇒w-steps` forgets the work,
+  `wk` / `wk-sound` show every existing derivation carries one.
+  `skip-free` / `one-step-much-work` prove the two meters are independent: a
+  run can execute commands at zero work, and ONE command can do arbitrarily
+  much of it — so a cost claim has to say which meter it is made on.
+
+- `RWhileWorkDet.agda` — `⇒w-det`: store, steps AND work are determined.
+  Needed to state p⁺'s work as an equation rather than a bound.
+
+- `RWhileProgPresWork.agda` — **p⁺'s work in the flat core**.  On the step
+  meter `RWhileProgPres.pp-cost` gives the constant `+8`; on the work meter
+  the constant is gone: the emit's first two commands write FRESH slots (free)
+  and its last two are clearing tests against ⌜p⌝ and against the answer, so
+  `pp-work : work(p⁺) = work(p) + |⌜p⌝| + |⟦p⟧d|`, exact by `pp-work-exact`.
+  `work-not-constant` proves no constant can replace it.
+
+- `RWhileProgWork.agda` — the same accounting at the level of a PROGRAM
+  (`read X; body; write Y`), where `evalProgram`'s closing `rupdate (y, res)`
+  charges the answer's node count.  The OCaml emit (`CAss` into a fresh slot +
+  `CRep` on variable patterns) charges nothing, so the |⌜p⌝| appears one step
+  later, at `write`: `pp-progW-ocaml : work(p⁺) = work(p) + |⌜p⌝| + 1`.
+  `measured-law` checks that against **all eleven rows** of
+  `./measure_proj jones-self` (with |⌜p⌝| counted from `./ri -p2d`) — every
+  row exact, by `refl`.  `jones-work-holds` pins the nine closed subjects
+  (`wk_res ≤ wk_p+`); `reverse-not-work-optimal` / `dyncond3-not-work-optimal`
+  pin the two dynamic-control subjects where it FAILS, and `classical-fails`
+  pins that the classical criterion fails on the work meter too.
+
+- `RWhileJonesRevWork.agda` — reversible Jones optimality restated at the work
+  meter.  `RWhileJonesRev.Criterion` never inspects its cost parameter, so all
+  of `residual-pp` / `pp-unique` / `pp-injective` / `classical⇒rev` /
+  `basis-adequate` carry over verbatim; what is new is `⁺-cost` (the law
+  above), `⁺-mono` (which DISCHARGES `classical⇒rev`'s side condition instead
+  of assuming it) and `rev-unfold`: the criterion reads
+  `work(residual) ≤ work(p) + |⌜p⌝| + 1`.  `Model` is a concrete instance so
+  none of it is vacuous.
+
+Honest scope: the third charged site of the cost model — a LITERAL pattern in
+`inv_evalPat` — has no counterpart here, because the timed core has no `<=`.
+And `wk_res` is a measured number pinned in Agda, not a proved one: what is
+proved is the BASIS side (p⁺'s work), which is what the criterion needs.
+
+`--safe`, no postulates, no holes.  `./check.sh` PASS=114 FAIL=0.

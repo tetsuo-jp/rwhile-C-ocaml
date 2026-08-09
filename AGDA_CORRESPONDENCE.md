@@ -23,6 +23,7 @@
 | 可逆化ゴミ（`spec_av_rev`） | `RWhileRevProjGen`：`garbage-necessary`/`input-preserving-inj` | **抽象は証明**。実装は −57% を実測（`FINDINGS §6`） |
 | 反復ワークリスト（`PAT-READ-ITER`） | `RWhileIL`（flat-IL→R-WHILE 翻訳の意味保存・IL 可逆性） | **方法論は証明**（IL で証明し検証翻訳で移送）。`PAT-READ-ITER` 自体は未モデル |
 | `Simp.program_preserving`（p⁺ の構成）／`measure_proj jones-self` の判定基準 | `RWhileProgPres`(`pp-sem`/`pp-cost`/`pp-cost-exact`)・`RWhileProgPresRev`(`pp-rev`/`pp-injective`)・`RWhileProgPresMin`(`ext-not-classical`/`ext-lb`)・`RWhileJonesRev`(`residual-pp`/`pp-unique`)・`RWhileJonesRevCE`(`p⁺-not-minimal`) | **定義の側は証明**（p⁺ の意味論・定数オーバヘッド・可逆性・単射性、基準の含意関係）。**測定（7 被験の成否）は実機のまま**。下界は「p の拡張の中で」の形に限る（一般の最小性は**反証済み**） |
+| `EvalRwhile.eval_work`／`eq_work`（`./ri -work` の費用モデル、課金 3 か所） | `RWhileWorkV`(`eqW`/`eqVW-≡`/`eqW-refl`/`eqW-mismatch`/`rupdW`)・`RWhileWork`(`_⊢_⇒_∣_∥_`/`expW`/`⇒w-steps`/`wk-sound`)・`RWhileWorkDet`(`⇒w-det`)・`RWhileProgPresWork`(`pp-work`/`work-not-constant`)・`RWhileProgWork`(`pp-progW-ocaml`/`measured-law`)・`RWhileJonesRevWork`(`⁺-cost`/`rev-unfold`/`classical⇒rev-work`) | **証明**（費用モデル・短絡・決定性・p⁺ の work コスト `work(p)+\|⌜p⌝\|+1`）。**実測 11 行との一致は Agda 内で `refl` 照合済み**（`measured-law`）。残る隙間は下記「正直な範囲」 |
 | `spec_av` の過剰静的化解消＝オフライン BTA 設計図（`MKAV`／`SPEC-CMD-AV` の 'cond 動的経路／agenda `Cd`） | `RWhileOfflineBTA1`–`9`（9 段、`RWhileMain` 再エクスポート）：`over-commit-unsound`/`mkAV-dyn-nonstatic`/`fp2-eq`/`fp3-eq`/`fix-agrees-on-fp1`/`compbug-wrong`/`seq-flatten-ok`/`specOff-keeps-branches`/`specBug-wrong`/`specOff-injective`/`specBug-not-injective` | **設計図を証明**（修正の形・fp1 安全性・ディスパッチ保存・agenda 設計規則・可逆性=単射性）。実機 comp2 の live-trace 根本原因（`TRACE_comp2_root_cause.md`）に対応。実機改造は未着手 |
 
 ## 2. ギャップ（埋めるべき順）
@@ -422,12 +423,12 @@ emit の 4 命令はすべて XOR 代入＝自己逆なので追加コストは�
   要求するのに対し、タイムド意味論は関係（部分的）である。Maybe 持ち上げは未。
   したがって「R-WHILE の p⁺ が `Criterion` の `PP` を満たす」は**両層で別々に
   述べてあるだけ**で、1 本の定理にはなっていない。
-- **測定は形式化していない**。work 指標で 7/7、steps 指標で `id` 以外不成立という
-  実測は `./measure_proj jones-self` のまま。`-work` 指標に対応するコストモデルは
-  Agda 側にまだ無い（`RWhileTime` の ℕ は `-steps` の側）。
+- ~~**測定は形式化していない**~~ **→ 2026-08-09 に `-work` 側を追加した**（下節
+  「`-work` 指標のコストモデル」）。`RWhileTime` の ℕ が `-steps` の側なのは変わらず、
+  work は**別の注釈として加算的に**足してある（`RWhileTime.agda` は無改変）。
 
 `--safe`・**postulate 0・hole 0**。`check.sh` は **PASS=108 FAIL=0**（5 分 00 秒、
-最大 532 MB）。
+最大 532 MB）。**work 層 6 本を足して PASS=114**（下節）。
 
 ## `case` のコストを腕本体まで（`RWhileCaseCost.agda`、2026-08-09）
 
@@ -710,3 +711,142 @@ rupd (a ∙ b) v = if eqV (a ∙ b) v then just nil
 | `RWhileExecConcrete.agda` | `rupdF` を 3 分岐に。`rupdF-sound`・`rupdF-complete` に 1 節ずつ追加 |
 
 `Extract.agda` は `rupdF` を呼ぶだけなので変更なし。`--safe`・postulate 0 は維持。
+
+## `-work` 指標のコストモデル（`RWhileWork*` / `RWhileProgPresWork` / `RWhileProgWork` / `RWhileJonesRevWork`、2026-08-09）
+
+このリポジトリの可逆版 Jones 最適性の主張は **`-work` 指標で測って**いる
+（`./measure_proj jones-self` の `wk_p+` / `wk_res` 列）。ところが Agda 側の
+コストモデルは `-steps`（実行した命令ノード数）しか無く、**測定と証明が別の
+土台に載っていた**。ここを埋めた 6 モジュールである。
+
+`RWhileTime.agda` は**無改変**。work は `∣ k` を置き換えるのではなく、
+**第 2 の注釈として加算**してある（`⇒w-steps` で忘れると元の関係に戻るので、
+`∣ k` に依存する既存 100 本以上のモジュールは一切影響を受けない）。
+
+### 費用モデルの明文 ↔ Agda（`RWhileWorkV` / `RWhileWork`）
+
+`src/EvalRwhile.ml` 冒頭 30〜75 行の宣言をそのまま定義に落とした。
+
+| OCaml | Agda | 内容 |
+|---|---|---|
+| `eq_work a b`（`incr eval_work` ＋ `&&` の短絡） | `RWhileWorkV.eqW` | 構造比較で調べた**値ノード対**を 1 つ 1 単位。`&&` が短絡なので不一致で止まる |
+| （`eq_work` は bool と counter を同時に返す） | `eqVW` ＋ **`eqVW-≡`** | 1 回の走査で bool とコストを同時に出し、**bool の側が既存の `eqV` と等しいこと**を証明（`eqVW-bool` / `eqVW-cost`）。work 計量は既存の等値判定の**注釈**であって別物ではない |
+| `EEq (e1,e2) -> eq_work …`（課金①） | `RWhileWork.expW s (eqE a b)` | 式で課金されるのは `=?` **だけ**。他の 5 形は定義が**リテラルに `0`**（`expW-opd-free` … `expW-pair-free` に個別の補題として書き出してある） |
+| `rupdate` の `if vy = VNil then vx else if eq_work vx vy …`（課金②） | `RWhileWorkV.rupdW` | **現在値が nil なら 0**（nil 判定は無課金）。それ以外は `eqW`。`rupdW-fresh` / `rupdW-self` |
+| `inv_evalPat` の `PVal`（課金③） | **対応なし**（タイムド核に `<=` が無い） | 平坦核ではパターンが現れないので `PVal` も現れない。層の限界としてヘッダに明記 |
+| 無課金（nil 比較・`is_true`・hd/tl/cons・`pair?`・パターン変数） | 上の `expW` の `0` 節と `rupdW nil _ = 0` | 「課金しないもの」が定義から読み取れる形になっている |
+
+短絡の模型化は 2 本の定理で押さえてある。
+
+| 定理 | 内容 |
+|---|---|
+| `eqW-refl : eqW v v ≡ nodes v` | 自分自身との比較は**全ノードを歩く**（可逆増分が毎反復払う clearing test はこれ） |
+| `eqW-mismatch` / `short-circuit` | 先頭が食い違えば**残りの大きさに依らず定数**。`eqW (atm 0 ∙ b) (atm 1 ∙ d) ≡ 2` を任意の `b`/`d` で。これが無ければ work は単なるノード数 |
+| `eqW-≤-nodesˡ` | 比較は引数のノード数を超えない |
+
+### 走りに対するコスト関係（`RWhileWork` / `RWhileWorkDet`）
+
+`c ⊢ s ⇒ t ∣ k ∥ w` は `RWhileTime` の関係に第 2 カウンタ `w` を足したもの。
+
+| 定理 | 内容 |
+|---|---|
+| `⇒w-steps` / `RestW-Rest` | work を**忘れると `RWhileTime` の `∣ k` に戻る**（歩数は同一）。既存資産との互換性 |
+| `wk` / `wk-sound` / `⇒-has-work` | 逆に、**既存の任意の導出は work 注釈を持つ**。`wk` は導出上の再帰関数なので `exec-sound` で作った具体導出に対して**計算する** |
+| `⇒w-det` | 結果ストア・歩数・**work のすべてが一意**。上界でなく等式を言うために要る |
+| `skip-free` / `fresh-ass-free` | 命令をいくら実行しても work が 0 の走りがある |
+| `one-step-much-work` | 逆に **1 命令で任意に大きな work**（`x ^= =? A B` を等しい大きな値に）。**歩数は work を抑えない**＝どちらの指標で測ったかを言わないと主張が定まらない、の形式版 |
+
+### p⁺ の work コスト（**本題**）
+
+`-steps` では `cost(p)+8` の**定数**だった。**work では定数ではない**。
+
+- **平坦核の emit（`RWhileProgPresWork`）**: emit の 4 命令のうち、前 2 本は
+  **空きスロットへの書き込みなので 0**、3 本目 `self ^= con pd` は `self` が
+  `⌜p⌝` を持った状態での clearing test なので `|⌜p⌝|`、4 本目 `y ^= tl out` は
+  答えの clearing test なので `|⟦p⟧d|`。よって
+
+  **`pp-work` : `work(p⁺) = work(p) + |⌜p⌝| + |⟦p⟧d|`**（`pp-work-exact` で等式）。
+
+  `work-not-constant` が「どんな定数でも置き換えられない」ことを証明している
+  （1 ノードの `⌜p⌝` と 3 ノードの `⌜p⌝` でオーバヘッドが違う）。
+
+- **実機の emit（`RWhileProgWork`）**: OCaml の `program_preserving` は
+  `CAss (P-SELF, ⌜p⌝)` ＋ 置換 `CRep (OUT-PP, cons P-SELF Y)` の 2 本で、
+  **どちらもこの費用モデルでは 0**（前者は空きスロット、後者はパターン変数の
+  読み書き）。代わりに `|⌜p⌝|` は**1 命令あとに現れる**——`evalProgram` 末尾の
+  `rupdate (y, res)`（`write` の clearing test）が、`res` の代わりに
+  `⟨⌜p⌝, res⟩` を歩くからである。したがって
+
+  **`pp-progW-ocaml` : `work(p⁺) = work(p) + |⌜p⌝| + 1`**。
+
+  一般形は `pp-progW`（emit 自身の課金 `we` をパラメタに取る）で、`we = 0` が
+  実機、`we = |⌜p⌝| + |⟦p⟧d|` が平坦核。**両者の差はちょうど `CRep` がただで
+  済ませている 2 つの clearing test**。
+
+### 実測との突き合わせ（`RWhileProgWork.measured-law`）
+
+`./measure_proj jones-self` の `wk_dir` / `wk_p+` 列と、`./ri -p2d` が印字する
+`⌜p⌝` の `nodes` を Agda のリテラルとして書き、**定理の予言と `refl` で照合**した。
+**11 行すべて誤差ゼロで一致**する。
+
+| 被験 | `wk_dir` | `wk_p+` | `\|⌜p⌝\|` | `wk_dir + \|⌜p⌝\| + 1` |
+|---|---:|---:|---:|---:|
+| `id` | 3 | 23 | 19 | 23 |
+| `id2` | 3 | 25 | 21 | 25 |
+| `id3` | 4 | 38 | 33 | 38 |
+| `rep` | 3 | 25 | 21 | 25 |
+| `swap` | 3 | 57 | 53 | 57 |
+| `sx_splitjoin` | 3 | 57 | 53 | 57 |
+| `sx_three` | 6 | 72 | 65 | 72 |
+| `loop_static2` | 16 | 104 | 87 | 104 |
+| `loop_static3` | 26 | 118 | 91 | 118 |
+| `reverse` | 11 | 103 | 91 | 103 |
+| `dyncond3` | 6 | 78 | 71 | 78 |
+
+依頼時の予想「`wk_p+` は被験のサイズとともに増える（23→25→38→57→72）」は
+**当たっていた**が、**増分の出どころは予想と違った**。予想は
+「`self ^= con pd` の clearing test が ⌜p⌝ を比較する」だったが、実機ではその
+代入は**空きスロットへの書き込みで無課金**であり、`|⌜p⌝|` を払うのは
+`write` の clearing test である。平坦核のモデルでは予想どおりの場所で払う
+（そのぶん `|⟦p⟧d|` も余計に払う）。**モデルの差であって実装の差ではない**。
+
+`jones-work-holds` / `reverse-not-work-optimal` / `dyncond3-not-work-optimal` /
+`classical-fails` として、判定結果も Agda 内に固定してある: 閉じた 9 被験は
+`wk_res ≤ wk_p+` が成立、動的制御の 2 本（`reverse` 17.2×・`dyncond3` 5.5×）は
+**不成立**、古典的基準 `wk_res ≤ wk_dir` は 9 被験すべてで**不成立**
+（`RWhileProgPresMin.ext-not-classical` の予言どおり）。
+
+### 可逆版 Jones 最適性の work 版（`RWhileJonesRevWork`）
+
+`RWhileJonesRev.Criterion` は `cost` をパラメタに取り、**中身を一切覗かない**ので
+work はそのまま差し込める。`WorkModel` が `cost := progW` で `Criterion` を開き、
+
+| 定理 | 内容 |
+|---|---|
+| `⁺-PP` | p⁺ が義務 `PP` を満たす |
+| `⁺-cost` | **`work(p⁺ on d) = work(p on d) + \|⌜p⌝\| + 1`**（上の法則をモデル側で） |
+| `⁺-mono` | ゆえに基準は p 以上——`classical⇒rev` の側条件を**仮定でなく証明**で供給 |
+| `classical⇒rev-work` | 古典版 ⇒ 可逆版が work でも成立 |
+| `rev-unfold` / `rev-fold` | 基準を展開すると **`work(残余) ≤ work(p) + \|⌜p⌝\| + 1`**。`-steps` の `+8`（絶対定数）との違いはここに集約される |
+| `pp-injective-∙` | `⊗-injectiveʳ` は R-WHILE の対（`_∙_`）で**成り立つので仮定を落とせる** |
+| `Fp1Work.residual-pp` ほか | fp1 層は**そのまま再エクスポート**。コストを見ないので work でも無条件に成り立つ |
+| `Model.*` | 具体インスタンス（空虚でないことの確認）。`workOf 1 nil ≡ 7 = 3 + (3+1)` を `refl` で |
+
+### 正直な範囲（この work 層が言っていないこと）
+
+- **課金③（リテラルパターン）は入っていない。** タイムド核に `<=` が無いため。
+  `RWhileCaseCost` が平坦パターンの置換をタイムド核へ翻訳した路線を使えば
+  届くが、未着手。`measured-law` が合っているのは、被験のどれも `<=` の
+  **リテラル**パターンを走らせていないからである（変数パターンは無課金）。
+- **`_▷_⇒_∥_`（プログラム層）は入力ストアを `set [] x d` で近似**している。
+  実機は「全変数を nil で初期化してから `rupdate (x,d)`」だが、
+  `rupd nil d = just d` かつコスト 0 なので、値・コストとも一致する。
+  `all_cleared` は前提として明示してある。
+- **`wk_res`（残余の work）は測定値のまま**。残余を Agda で構成してはいないので、
+  `jones-work-holds` は「測った数を定理の形に固定した」ものであって、
+  残余の work の**証明**ではない。証明されたのは**基準の側**（p⁺ の work）である。
+- **`v ≡ nil`（答えが nil）は除外**している。そのとき `write` の clearing test は
+  無課金になり法則が 1 ずれる。R-WHILE のプログラムとしては退化した場合。
+
+`--safe`・**postulate 0・hole 0**。`check.sh` は **PASS=114 FAIL=0**（4 分 57 秒、
+最大 498 MB）。
