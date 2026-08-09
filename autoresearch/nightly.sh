@@ -180,6 +180,20 @@ $(cat "$CANDS")"
   note "- 試行 $attempt の課題: **$TITLE**"
   note "  受入コマンド: \`$ACCEPT\`"
 
+  # 受入コマンドが「そもそも通り得る」かの静的検査。
+  # 事前 FAIL 検査は「いま落ちる」しか見ないので、壊れたコマンドも通してしまう。
+  val_out="$(python3 "$AR/validate_accept.py" "$TASK" "$WT" 2>&1)"; val_rc=$?
+  if [ $val_rc -ne 0 ]; then
+    note "  ✗ 受入コマンドが不正:"
+    printf '%s\n' "$val_out" | sed 's/^/    /' >>"$REPORT"
+    python3 "$AR/ledger.py" mark --id "$TID" --status rejected --date "$DATE" \
+      --note "受入コマンドが不正: $val_out" >/dev/null 2>&1 || true
+    grep -v "\"id\": \"$TID\"" "$CANDS" >"$CANDS.tmp" && mv "$CANDS.tmp" "$CANDS"
+    : >"$TASK"
+    continue
+  fi
+  note "  ✓ 受入コマンドの静的検査を通過"
+
   # 受入コマンドが「着手前に失敗する」ことの確認（この掟が全体を支えている）
   (cd "$WT" && timeout 1800 bash -c "$ACCEPT") >"$REPORTS/$DATE-accept-before.log" 2>&1
   before_rc=$?
