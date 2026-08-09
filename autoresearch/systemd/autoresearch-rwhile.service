@@ -6,9 +6,18 @@ Type=oneshot
 # ExecStart は導入時に機械ごとのパスへ書き換える（owari=/home/a、s3=/home/tetsuo）。
 ExecStart=%h/dev/github.com/tetsuo-jp/rwhile-C-ocaml/autoresearch/nightly.sh
 TimeoutStartSec=18000
-# Agda の「冷たい」検査は単一モジュールで実測 6.3GB 要る（2026-08-09、owari で計測）。
+# Agda の「冷たい」検査は単一モジュールで **実測 9.8GB**（2026-08-09、s3 で完走したときの
+# ピーク RSS。owari 7.6GB では 6.99GB まで伸びたところで枯渇して完走できなかった）。
 # キャッシュが効いていれば 0.5GB だが、夜間ループはモジュールを書き換えるので毎晩踏みうる。
-MemoryMax=10G
+#
+# 上限は 13G。9.8G ちょうどに寄せない理由が 2 つある:
+#   (1) 実測はピークであって最大ではない（モジュールが増えれば伸びる）
+#   (2) 同じ機械で **systemd の記録が peak 2.2G なのに MemoryMax=6G で oom-kill された**
+#       事象が報告されている（cgroup の計上のずれか、ホスト全体の逼迫か未特定）。
+#       上限ぎりぎりに置くと、この型のずれで理由の分からない死に方をする。
+# **落ちたときは MemoryMax の値を根拠にメモリ不足と即断せず、まず
+#   `journalctl --user -u autoresearch-rwhile` で oom-kill か否かを確かめること。**
+MemoryMax=13G
 Nice=19
 # systemd --user は brew の PATH を失う。明示しないとソルバや agda が rc=127 で黙って死ぬ。
 Environment=PATH=%h/.local/bin:/home/linuxbrew/.linuxbrew/bin:/usr/local/bin:/usr/bin:/bin
