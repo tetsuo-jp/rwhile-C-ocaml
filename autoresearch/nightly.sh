@@ -180,7 +180,9 @@ print(json.dumps({"id": c["id"], "title": c["title"], "why": "DRY run",
     sel_prompt="$(cat "$AR/prompt-select.md")
 $(printf '\n## 候補（JSONL）\n')
 $(cat "$CANDS")"
-    (cd "$WT" && timeout 1800 claude -p "$sel_prompt" --model "$MODEL" --max-turns 8 \
+    # 選定に 8 ターンは足りない（2026-08-09 実測: haiku がファイルを読み回って上限に達し、
+    # JSON を出さないまま終わった）。選定は 1 ターンあたりが安いので厚めに取る。
+    (cd "$WT" && timeout 1800 claude -p "$sel_prompt" --model "$MODEL" --max-turns "${SELECT_TURNS:-30}" \
         --permission-mode acceptEdits) >"$SEL_LOG.$attempt" 2>&1
     python3 "$AR/extract_task.py" "$SEL_LOG.$attempt" "$TASK" || true
   fi
