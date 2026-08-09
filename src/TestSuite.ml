@@ -689,6 +689,65 @@ let test_copyprop_is_identity_without_moves () =
   Alcotest.(check string) "no single-use temp moves: unchanged"
     (same src) (cp src)
 
+(* ===== identity commands (2026-08-09, roadmap (iii)) =====
+ *
+ * MEASURED FIRST, then fixed.  `./measure_proj jones-attr` attributes the
+ * ri_fp3-route residuals command by command, and the straight-line subjects turn
+ * out to contain commands that are the identity on EVERY store:
+ *
+ *   [id]   read 15; 15 <= 15; 15 <= cons <p2d id> 15; write 15
+ *   [id2]  read 15; 15 <= 15; 6 <= 15; 6 <= 6; 15 <= cons <...> 6; write 15
+ *   [sx_three]  ... 18 ^= nil; ...
+ *
+ * `x <= x` reads x (clearing it) and writes the same value back, so it can
+ * neither fail nor change the store (EvalRwhile.evalPat then inv_evalPat).
+ * `x ^= nil` is the third case of rupdate (`vx = VNil -> vy`), i.e. the
+ * identity -- matching RWhileTime.agda's three-case `rupd`.  Both are their own
+ * syntactic inverses, so dropping them commutes with InvRwhile.
+ *
+ * NOT to be confused with the reversible CLEAR `x ^= x` (CAss (x, EVar x)),
+ * which sets x to nil and must survive; the last test pins that. *)
+
+let test_noop_self_rep_dropped () =
+  Alcotest.(check string) "T <= T is the identity and is removed"
+    (same "read K; X <= K; write X")
+    (cp   "read K; T <= T; X <= K; write X")
+
+let test_noop_assign_nil_dropped () =
+  Alcotest.(check string) "T ^= nil is the identity and is removed"
+    (same "read K; X <= K; write X")
+    (cp   "read K; T ^= nil; X <= K; write X")
+
+let test_noop_clear_is_not_dropped () =
+  (* x ^= x CLEARS x; it is not an identity and must survive *)
+  let src = "read K; X ^= K; K ^= X; X ^= X; write K" in
+  Alcotest.(check string) "X ^= X (the reversible clear) survives"
+    (same src) (cp src)
+
+let test_noop_preserves_semantics_and_inversion () =
+  let src = "read K; T <= T; cons A B <= K; U ^= nil; X <= cons B A; write X" in
+  let p = parse_program src in
+  let p' = Simp.copyprop_program p in
+  let d = VCons (atom "'a", atom "'b") in
+  Alcotest.(check valT_testable) "dropping identities preserves the answer"
+    (EvalRwhile.evalProgram p d) (EvalRwhile.evalProgram p' d);
+  Alcotest.(check valT_testable) "…and the inverse still round-trips"
+    d (EvalRwhile.evalProgram (InvRwhile.invProgram p')
+         (EvalRwhile.evalProgram p' d))
+
+(* A body that is ENTIRELY identities must not become an empty command: the
+ * result still has to be an encodable R-WHILE program (Program2DataRwhile
+ * refuses surface sugar, so `rebuild []`'s CSkip would break p2d). *)
+let test_noop_all_identities_keeps_a_command () =
+  let p = parse_program "read K; K <= K; K ^= nil; write K" in
+  let p' = Simp.copyprop_program p in
+  let d = atom "'a" in
+  Alcotest.(check valT_testable) "an all-identity body still computes the identity"
+    d (EvalRwhile.evalProgram p' d);
+  Alcotest.(check valT_testable) "…and it is still p2d-encodable and decodable"
+    d (EvalRwhile.evalProgram
+         (Program2DataRwhile.data2program (Program2DataRwhile.program2data p')) d)
+
 (* ===== -work: the cost -steps does not count =====
  * RWHILE_S.md has said since 2026-08-06 that `-steps` counts command nodes and
  * not the SIZE of the values touched, so "二次の仕事は =? の中に隠れる".  These
@@ -2114,14 +2173,18 @@ let test_fp1_ri_fp3_nested_pattern_runs () =
  * MEASURED (./measure_proj jones-self; steps = command nodes, work = value nodes
  * examined by comparison; residual = after Simp.copyprop_program):
  *
+ * (re-measured 2026-08-09 after Simp dropped the identity commands `x <= x` and
+ * `x ^= nil` -- see the "identity commands" note in Simp.ml.  Previous st_res
+ * were id 3, id2 7, id3 11, rep 7, sx_splitjoin 23, sx_three 35.)
+ *
  *   program       |resid| lp_p lp_r st_dir st_p+ st_si st_raw st_res  wk_p+ wk_si wk_res
- *   id                53     0    0      1     5     89     11      3     23    64     23
- *   id2               87     0    0      1     5     90     19      7     25    75     25
- *   id3              139     0    0      1     5    184     27     11     38   150     37
- *   rep               87     0    0      1     5     90     19      7     25    75     25
+ *   id                41     0    0      1     5     89     11      1     23    64     23
+ *   id2               43     0    0      1     5     90     19      1     25    75     25
+ *   id3               55     0    0      1     5    184     27      1     38   150     37
+ *   rep               43     0    0      1     5     90     19      1     25    75     25
  *   swap             379     0    0      3     7    260     41     25     57   234     57
- *   sx_splitjoin     343     0    0      3     7    260     41     23     57   234     57
- *   sx_three         543     0    0      3     7    354     51     35     72   311     71
+ *   sx_splitjoin     251     0    0      3     7    260     41     17     57   234     57
+ *   sx_three         525     0    0      3     7    354     51     33     72   311     71
  *   loop_static2     121     1    0      6    10   1240     15      1    104  1164     95
  *   loop_static3     131     1    0      8    12   1852     15      1    118  1723    101
  *
@@ -2132,12 +2195,17 @@ let test_fp1_ri_fp3_nested_pattern_runs () =
  *       (and strictly below on id3/sx_three and on both loop subjects).  The
  *       residual examines no more value nodes than the program-preserving
  *       baseline.
- *   (2) On the STEPS meter it FAILS for the STRAIGHT-LINE subjects: 1.4x-5.0x
- *       of p+ (only `id` is under, at 0.6x).  The residual pays extra COMMANDS
- *       -- the interpreter's data staging, made explicit -- while touching the
- *       same amount of data.  This is the same metric-dependence RWHILE_S.md
- *       already records for the op-language interpreters, now at the
- *       self-interpreter.
+ *   (2) On the STEPS meter it FAILS for the three PATTERN-BUILDING straight-line
+ *       subjects (swap 3.6x, sx_splitjoin 2.4x, sx_three 4.7x of p+); the four
+ *       whose residual is a single command (id, id2, id3, rep) are at 0.2x.
+ *       The three that fail pay extra COMMANDS -- ri_fp3's store <-> work
+ *       register traffic, made explicit -- while touching the same amount of
+ *       data.  This is the same metric-dependence RWHILE_S.md already records
+ *       for the op-language interpreters, now at the self-interpreter.
+ *       ATTRIBUTED 2026-08-09 (`./measure_proj jones-attr`): all of the excess
+ *       is variable-to-variable moves that copy propagation's write-once /
+ *       read-once gate rejects as multi_occ (swap 11 of 13 commands are moves;
+ *       spec_av's capture-on-escape temps are already gone by then).
  *   (2') ...and it HOLDS for the LOOP subjects, by a wide margin (0.1x of p+):
  *       there the specialiser has something to remove.  loop_static2/3 have a
  *       statically-controlled loop over a dynamic body; unrolling collapses the
@@ -2252,7 +2320,11 @@ let test_jones_self_work_optimal () =
  * the specialiser -- or a regression on the loop subjects -- shows up as a
  * failing test rather than as a stale claim in RWHILE_S.md. *)
 let test_jones_self_steps_not_optimal () =
-  let under_pp = ["id"; "loop_static2"; "loop_static3"] in
+  (* 2026-08-09: id2/id3/rep moved from "over p+" to "at or under" when Simp
+     started dropping the identity commands `x <= x` / `x ^= nil`; their
+     residuals are now a single command.  What is left over p+ is exactly the
+     three subjects whose residual still carries ri_fp3's slot-to-slot moves. *)
+  let under_pp = ["id"; "id2"; "id3"; "rep"; "loop_static2"; "loop_static3"] in
   List.iter (fun r ->
       let expect_over = not (List.mem r.jname under_pp) in
       Alcotest.(check bool)
@@ -3806,6 +3878,11 @@ let () =
       Alcotest.test_case "fuses inside a conditional branch" `Quick test_copyprop_inside_conditional;
       Alcotest.test_case "loop body: preserves semantics" `Quick test_copyprop_inside_loop_semantics;
       Alcotest.test_case "identity without single-use temps" `Quick test_copyprop_is_identity_without_moves;
+      Alcotest.test_case "drops x <= x" `Quick test_noop_self_rep_dropped;
+      Alcotest.test_case "drops x ^= nil" `Quick test_noop_assign_nil_dropped;
+      Alcotest.test_case "keeps the reversible clear x ^= x" `Quick test_noop_clear_is_not_dropped;
+      Alcotest.test_case "dropping identities preserves meaning and inversion" `Quick test_noop_preserves_semantics_and_inversion;
+      Alcotest.test_case "an all-identity body stays encodable" `Quick test_noop_all_identities_keeps_a_command;
     ];
     "simp-cli", [
       Alcotest.test_case "preserves answers on the examples" `Quick test_opt_preserves_answers;

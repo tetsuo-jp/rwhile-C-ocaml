@@ -200,6 +200,46 @@ let copyprop_com (whole : com) (c : com) : com =
   done;
   rebuild !kept
 
+(* ===== identity commands (2026-08-09) =====
+ *
+ * Attributing the ri_fp3-route residuals command by command (`./measure_proj
+ * jones-attr`) showed that the straight-line subjects spend part of their step
+ * count on commands that are the IDENTITY on every store:
+ *
+ *   x <= x     evalPat reads x and clears it, inv_evalPat writes the same value
+ *              back into the now-nil x.  It cannot fail (the write-conflict
+ *              check is satisfied by the read that precedes it) and it cannot
+ *              change the store.  Unconditionally the identity.
+ *   x ^= nil   rupdate's third case (`vx = VNil -> vy`), matching the
+ *              three-case `rupd` of proofs/agda/RWhileTime.agda.  Also
+ *              unconditionally the identity.
+ *
+ * Both are their OWN syntactic inverses (InvRwhile swaps a CRep's patterns and
+ * leaves a CAss alone), so removing them commutes with program inversion, and
+ * neither removes a failure case -- which is why only these two shapes are
+ * removed and, e.g., an adjacent pair `x <= y; y <= x` is NOT (that one is the
+ * identity too, but only when y was already nil, so dropping it would turn an
+ * erroring program into a succeeding one).
+ *
+ * `x ^= x` -- the reversible CLEAR -- is a different command and must survive.
+ *
+ * Measured effect on `./measure_proj jones-self` (steps of the residual):
+ * id 3->1, id2 7->3, id3 11->7, rep 7->3, sx_splitjoin 23->21, sx_three 35->33;
+ * id2 and rep thereby move from "above p+" to "at or below p+". *)
+let is_noop_com = function
+  | CRep (PVar (Var x), PVar (Var y)) -> x = y
+  | CAss (_, EVal v) -> EvalRwhile.desugar_val v = VNil
+  | _ -> false
+
+(* Drop the identities on one CSeq spine.  Never returns an empty command: a
+ * body of nothing but identities keeps one of them, because `rebuild []` is
+ * CSkip and CSkip is surface sugar that Program2DataRwhile refuses to encode. *)
+let drop_noops_spine (c : com) : com =
+  let cmds = spine c in
+  match List.filter (fun x -> not (is_noop_com x)) cmds with
+  | [] -> (match cmds with [] -> c | x :: _ -> x)
+  | kept -> rebuild kept
+
 (* Fuse on this spine, then recurse into every nested block.  comp2 keeps the
  * overwhelming majority of its nodes inside loop bodies, so a spine-only pass
  * cannot reach the part that matters.  Soundness is unchanged: the whole-program
@@ -231,7 +271,10 @@ let copyprop_com (whole : com) (c : com) : com =
  * 91.9% is the UNARY VARIABLE NUMERALS.  The two levers on that, with their
  * closed-form limits, are in RWHILE_S.md ("符号化のノードはどこへ行っているか"). *)
 let rec copyprop_blocks whole c =
-  let c = copyprop_com whole c in
+  (* Identity removal runs in the same fixpoint: fusing a move can expose an
+   * `x <= x`, and removing one lowers an occurrence count by two, which can in
+   * turn let the write-once/read-once gate accept a move it had rejected. *)
+  let c = drop_noops_spine (copyprop_com whole c) in
   let rec go = function
     | CSeq (a, b) -> CSeq (go a, go b)
     | CCond (e, th, el, f) ->
