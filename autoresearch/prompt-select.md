@@ -60,6 +60,17 @@ harness は静的検査（`validate_accept.py`）でこれらを弾き、**そ�
 **いちばん安全な形は、群の exit code をそのまま使うこと**:
 `cd src && make run-tests && ./test-suite test <群>`
 
+**ただし既に緑の群を指すと「着手前から通っている」で却下されます。** 両立させる書き方:
+
+| 候補の種類 | 受入コマンドの作り方 |
+|---|---|
+| `open-pin`（穴が pin されている） | **これから作る新しい群**を指す。例: `cd src && make run-tests && ./test-suite test selfclear-fixed`。その群は今は存在しないので必ず失敗し、あなたがテストを書いて実装を直せば通る |
+| `agda-postulate` | `cd proofs/agda && agda --safe <M>.agda && ! grep -qE '^\s*postulate' <M>.agda` |
+| `metric-regress` | 閾値つきの数値判定。例: `cd src && ./measure_proj jones-self \| awk '$1=="id2"{exit ($(NF-1)+0 <= 1.0)?0:1}'` |
+
+つまり **「新しい検査を作り、それが通ることを受入条件にする」** のが基本形です。
+既存ゲート（`make run-tests`）との `&&` 合成も忘れずに。
+
 **自問**：そのコマンドは、課題が完全に解けた世界で本当に exit 0 になりますか。
 ならないなら書き直してください。
 
