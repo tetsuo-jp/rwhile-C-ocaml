@@ -65,13 +65,30 @@ def main() -> int:
         elif lit.startswith("test_"):
             problems.append(f"'{lit}' は関数名らしき文字列。テスト出力を grep しても当たらない")
 
-    # 3. 危ないもの
+    # 3. テストの「人間向け出力」を grep して判定していないか
+    #    Alcotest が出すのは `[OK]` / `[FAIL]` / `Test Successful in ...` であって
+    #    `PASS` ではない。2026-08-09 に `grep -c "....*PASS"` を書かれ、これは
+    #    課題を解いても永久に 0 件になる。判定は exit code で取ること。
+    ALCOTEST_MARKERS = ("[FAIL]", "[OK]", "Test Successful", "failure", "error in update")
+    pipes_test_output = re.search(r"(test-suite|make\s+run-tests)[^|]*\|[^|]*grep", cmd)
+    if pipes_test_output:
+        pats = re.findall(r"grep[^|;&]*?['\"]([^'\"]+)['\"]", cmd)
+        for lit in pats:
+            if not any(m in lit for m in ALCOTEST_MARKERS):
+                problems.append(
+                    f"テスト出力を grep して '{lit}' を探している。Alcotest の出力は "
+                    f"[OK]/[FAIL]/Test Successful であって PASS ではない。exit code で判定すること")
+    if re.search(r"grep\s+-c\b", cmd):
+        problems.append("grep -c は 0 件のとき非ゼロ終了する。"
+                        "「無いことの確認」と「コマンドの失敗」が区別できないので使わない")
+
+    # 4. 危ないもの
     for bad, why in (("git push", "外部へ反映する"), ("rm -rf", "破壊的"),
                      ("curl", "ネットワークを使う"), ("wget", "ネットワークを使う")):
         if bad in cmd:
             problems.append(f"'{bad}' を含む（{why}）")
 
-    # 4. 常設ゲートに合成しているか（新しい検査だけで合格させない）
+    # 5. 常設ゲートに合成しているか（新しい検査だけで合格させない）
     if "make run-tests" not in cmd and "check.sh" not in cmd and "measure_proj" not in cmd \
             and "test-suite" not in cmd and "agda" not in cmd:
         problems.append("既存のゲート（make run-tests / test-suite / check.sh / measure_proj / agda）"
