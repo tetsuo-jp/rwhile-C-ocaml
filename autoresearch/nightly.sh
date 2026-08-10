@@ -53,11 +53,14 @@ for c in claude agda make git python3; do
 done
 
 DATE="$(date +%F)"
+# 同じ日に複数回まわすとレポートが上書きされる。RUN_TAG で分ける
+# （例: RUN_TAG=r2 → reports/2026-08-10-r2.md）。連続運転のときは必ず付けること。
+DATE_TAG="$DATE${RUN_TAG:+-$RUN_TAG}"
 mkdir -p "$REPORTS"
-REPORT="$REPORTS/$DATE.md"
-SEL_LOG="$REPORTS/$DATE-select.log"
-SOLVE_LOG="$REPORTS/$DATE-solve.log"
-TASK="$REPORTS/$DATE-task.json"
+REPORT="$REPORTS/$DATE_TAG.md"
+SEL_LOG="$REPORTS/$DATE_TAG-select.log"
+SOLVE_LOG="$REPORTS/$DATE_TAG-solve.log"
+TASK="$REPORTS/$DATE_TAG-task.json"
 
 LOCK="/tmp/autoresearch-rwhile-$(id -u).lock"
 exec 9>"$LOCK"
@@ -155,7 +158,7 @@ fi
 note "- ✓ Agda の変異注入を検出（型検査器は生きている）"
 
 # ── 3. 洗い出し（決定的）＋ 課題の選定（LLM その1） ──
-CANDS="$REPORTS/$DATE-candidates.jsonl"
+CANDS="$REPORTS/$DATE_TAG-candidates.jsonl"
 [ -x "$WT/autoresearch/enumerate.py" ] \
   || fail_out "worktree に autoresearch/enumerate.py が無い（本体でコミットして worktree にマージすること）"
 (cd "$WT" && timeout 2400 ./autoresearch/enumerate.py >"$CANDS") 2>>"$REPORT.enum" || true
@@ -226,7 +229,7 @@ $(cat "$CANDS")"
   note "  ✓ 受入コマンドの静的検査を通過"
 
   # 受入コマンドが「着手前に失敗する」ことの確認（この掟が全体を支えている）
-  (cd "$WT" && timeout 1800 bash -c "$ACCEPT") >"$REPORTS/$DATE-accept-before.log" 2>&1
+  (cd "$WT" && timeout 1800 bash -c "$ACCEPT") >"$REPORTS/$DATE_TAG-accept-before.log" 2>&1
   before_rc=$?
   if [ $before_rc -ne 0 ]; then
     note "  ✓ 着手前に失敗する (rc=$before_rc)＝解くべき課題である"
@@ -263,7 +266,7 @@ $(cat "$TASK")"
 fi
 
 # ── 6. 事後検証（申告とは independently 判定する） ───
-(cd "$WT" && timeout 1800 bash -c "$ACCEPT") >"$REPORTS/$DATE-accept-after.log" 2>&1
+(cd "$WT" && timeout 1800 bash -c "$ACCEPT") >"$REPORTS/$DATE_TAG-accept-after.log" 2>&1
 after_rc=$?
 if [ $after_rc -eq 0 ]; then note "- ✓ 受入コマンドが通った"; else note "- ✗ 受入コマンドは通らなかった (rc=$after_rc)"; fi
 
@@ -290,14 +293,14 @@ if [ $after_rc -eq 0 ]; then
     note "- 変異検査で退避する実装ファイル: $(printf '%s' "$impl_files" | tr '\n' ' ')"
     # shellcheck disable=SC2086
     if git -C "$WT" stash push -q -m accept-mutation -- $impl_files 2>/dev/null; then
-      (cd "$WT" && timeout 1800 bash -c "$ACCEPT") >"$REPORTS/$DATE-accept-mutated.log" 2>&1
+      (cd "$WT" && timeout 1800 bash -c "$ACCEPT") >"$REPORTS/$DATE_TAG-accept-mutated.log" 2>&1
       mut_rc=$?
       git -C "$WT" stash pop -q 2>/dev/null || note "- ⚠ stash pop に失敗。worktree を手で確認すること"
       if [ $mut_rc -eq 0 ]; then
         note "- ✗ **変異検査で受入が通ってしまった**（実装を戻しても緑）。"
         note "  そのテストは実装を検査していない。受入は不成立とする"
         mutation_rc=1
-      elif grep -q '\[FAIL\]' "$REPORTS/$DATE-accept-mutated.log" 2>/dev/null; then
+      elif grep -q '\[FAIL\]' "$REPORTS/$DATE_TAG-accept-mutated.log" 2>/dev/null; then
         # rc≠0 には「テストが走って落ちた」と「そもそも走れなかった」の 2 通りがある。
         # Alcotest の [FAIL] が出ていれば前者＝実装を検査している。
         note "- ✓ 変異検査: 実装を戻すと群が**実行されて失敗**する (rc=$mut_rc, [FAIL] 検出)"
@@ -308,7 +311,7 @@ if [ $after_rc -eq 0 ]; then
       fi
       # 戻したあとに緑へ復帰することも確かめる（stash pop の失敗や副作用で木が
       # 壊れたまま「緑だった」と報告する経路を塞ぐ）。
-      (cd "$WT" && timeout 1800 bash -c "$ACCEPT") >"$REPORTS/$DATE-accept-restored.log" 2>&1
+      (cd "$WT" && timeout 1800 bash -c "$ACCEPT") >"$REPORTS/$DATE_TAG-accept-restored.log" 2>&1
       restored_rc=$?
       if [ $restored_rc -ne 0 ]; then
         note "- ✗ **stash を戻したあと受入が緑に復帰しない** (rc=$restored_rc)。木が壊れている"
