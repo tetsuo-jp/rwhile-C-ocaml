@@ -196,7 +196,10 @@ $(cat "$CANDS")"
   if [ ! -s "$TASK" ]; then
     # モデルが使えない・認証が切れている類は「選定の失敗」ではないので、
     # 3 回繰り返しても同じ結果にしかならない。理由を出して即座に止める。
-    if grep -qiE "usage credits|/usage-credits|not authenticated|please run .?login|invalid api key|rate limit" \
+    # 2026-08-12 追加: "You've hit your session limit" が漏れていて、r4〜r8 の
+    # 5 本が「選定に失敗」を 3 回ずつ繰り返して空振りした。モデルが使えないのに
+    # 15 回リトライしたことになる。**文言の列挙は漏れる**ので広めに取る。
+    if grep -qiE "usage credits|/usage-credits|session limit|usage limit|quota|not authenticated|please run .?login|invalid api key|rate limit|overloaded" \
          "$SEL_LOG.$attempt" 2>/dev/null; then
       note "- ✗ **モデルが使えない**（選定の失敗ではない）。$MODEL の手当てが要る:"
       printf '    %s\n' "$(head -2 "$SEL_LOG.$attempt")" >>"$REPORT"
