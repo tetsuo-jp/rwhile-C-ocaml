@@ -102,6 +102,21 @@ else
 fi
 REV_BEFORE="$(git -C "$WT" rev-parse --short HEAD)"
 
+# ── 0.2. モデルの生存確認（**いちばん先に**やる） ────
+# 検査の順序は「安くて、外れたら全部が無駄になるもの」から。モデルが使えるかは
+# 5 秒で分かるのに、これを最後に置いていたせいで 2026-08-10 に
+# **19 分のゲートを 5 回払ってから**「モデルが使えない」と分かった（r4〜r8）。
+if [ "$DRY" != "1" ]; then
+  if ! (cd "$REPO" && timeout 180 claude -p "reply with the single word OK" \
+        --model "$MODEL" --max-turns 1 2>&1 | grep -qi "ok"); then
+    note "- ✗ **モデル $MODEL が応答しない**。ゲートを回す前に中止する"
+    note "  （5 秒で分かることに 19 分のゲートを払わない）"
+    worklog "モデル $MODEL が応答しないため中止（事前確認）"
+    exit 1
+  fi
+  note "- ✓ モデル $MODEL の生存確認"
+fi
+
 # ── 0.5. worktree を実行可能にする ───────────────────
 # 新しい worktree にはビルド成果物も Agda のキャッシュも無い。Agda は内容ハッシュで
 # 判定するので、本体の _build をコピーすれば 121 モジュールの再検査を払わずに済む。
@@ -194,6 +209,18 @@ $(cat "$CANDS")"
     python3 "$AR/extract_task.py" "$SEL_LOG.$attempt" "$TASK" || true
   fi
   if [ ! -s "$TASK" ]; then
+    # **失敗の文言を列挙しない。** 開いた世界に閉じたリストを当てると必ず漏れる
+    # （2026-08-10: "usage credits" は入れたが "session limit" が漏れ、5 本が空振りした）。
+    # 代わりに **成功の兆候**を要求する: モデルが実際に考えたログは大きい。
+    # 実測（2026-08-09〜12 の全ログ）: インフラ障害 15〜60 バイト / 実際の応答 1879〜2986 バイト。
+    # 2 桁離れているので、閾値の置き場所に神経を使う必要がない。
+    sel_size="$(stat -c%s "$SEL_LOG.$attempt" 2>/dev/null || echo 0)"
+    if [ "$sel_size" -lt 400 ]; then
+      note "- ✗ **モデルが応答していない**（選定ログ ${sel_size} バイト）。リトライしても同じなので中止:"
+      printf '    %s\n' "$(head -2 "$SEL_LOG.$attempt" 2>/dev/null)" >>"$REPORT"
+      worklog "モデルが応答せず中止（選定ログ ${sel_size} バイト）"
+      exit 1
+    fi
     # モデルが使えない・認証が切れている類は「選定の失敗」ではないので、
     # 3 回繰り返しても同じ結果にしかならない。理由を出して即座に止める。
     # 2026-08-12 追加: "You've hit your session limit" が漏れていて、r4〜r8 の
