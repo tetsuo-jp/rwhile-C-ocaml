@@ -1,0 +1,124 @@
+%% 第8節 関連研究（ロードマップ④の論文 / IPSJ PRO 和文）
+%% 下書き。Overleaf プロジェクト作成後に本体へ取り込む。
+%% 表記規則。和文で全角コロン・全角セミコロン・em ダッシュを使わない。
+
+\section{関連研究}
+\label{sec:related}
+
+\subsection{古典的な Jones 最適性}
+\label{sec:related-classical}
+
+部分評価器の良し悪しを機械独立に測る基準として、Jones らは自己インタプリタへの
+特殊化を用いる定式化を与えた。Jones-Gomard-Sestoft の教科書\cite{JGS1993}では
+第6章「Efficiency, Speedup, and Optimality」の 6.4 節において、自己インタプリタ
+$\mathit{sint}$ と $p' = \llbracket \mathit{mix} \rrbracket\, \mathit{sint}\; p$ に対し、
+すべての $p$ と $d \in D$ について $t_{p'}(d) \le t_p(d)$ が成り立つとき
+$\mathit{mix}$ は最適である、と定義されている（Definition 6.4）。
+
+この定義について本稿が前提とする点を三つ挙げる。第一に、測る量は
+\emph{時間} $t$ であってプログラムのサイズではない。本稿の測定が実行時に踏んだ
+命令ノード数と比較で調べた値ノード数で報告され、残余プログラムのサイズを
+主指標にしていないのはこの定義に合わせたためである。第二に、比較の対象は
+\emph{素の} $p$ である。第三に、Jones らはこの定義が「騙されうる」ことを
+自ら明記している。$\mathit{mix}$ が第1引数が $\mathit{sint}$ に等しいときだけ
+第2引数をそのまま返し、他では自明な部分評価を行うように作られていれば、
+mix 方程式を保ったまま定義上は最適と判定される。最適性の定義は当初から
+このような限界をもつものとして扱われてきた。
+
+用語の来歴を整理する。問題提起は Jones\cite{Jones1988}であり、
+「Jones 最適性」という名称を与えたのは Makholm\cite{Makholm2000}である。
+Gl\"{u}ck\cite{Gluck2002,Gluck2008}はこれを、どの特殊化器がどこまで強いかを
+表す階層として精密化した。Jones\cite{Jones2004}はインタプリタ特殊化の側から
+この基準を再検討している。いずれも非可逆な設定である。
+
+\subsection{可逆部分評価の先行研究}
+\label{sec:related-reversible}
+
+可逆言語に対する部分評価は、Mogensen\cite{Mogensen2011}が可逆言語 Janus
+（手続き呼出しを除く）の部分評価器を与えたのが最初である。Janus から
+可逆フローチャートへ変換し、polyvariant な特殊化を行ったうえで構造化された
+プログラムへ戻す構成であり、第1射影すなわち解釈オーバヘッドの除去を示している。
+Normann と Gl\"{u}ck\cite{Normann2024}は可逆フローチャート言語の部分評価を
+体系的かつ形式的に展開し、対称暗号と Bennett の可逆チューリング機械の
+解釈器を特殊化する実験を与えた。さらに同じ著者らは、可逆チューリング機械の
+解釈器において第1射影と反転射影が機能的にのみならず字面的にも一致しうることを
+示している\cite{Gluck2024}。
+
+\paragraph{本稿との差分。}
+これら三件はいずれも\emph{最適性の基準を述べていない}。本稿の主張の土台となる
+事実であるため、三件すべての本文を入手し、機械的に検査した。結果を
+表\ref{tab:novelty}に示す。検査は本文を平文へ変換したうえで語 optimal の
+出現を数える方法によった。"Jones optimality" も "optimality criterion" も
+文字列として optimal を含むため、出現が零であれば当該の議論は存在しない。
+
+\begin{table}[tb]
+  \caption{先行研究における最適性の基準の不在（全文を機械検査）}
+  \label{tab:novelty}
+  \begin{center}
+  \begin{tabular}{lrr}
+    \hline
+    文献 & 総語数 & optimal の出現 \\
+    \hline
+    Mogensen \cite{Mogensen2011} & 全文 & 0 \\
+    Normann と Gl\"{u}ck \cite{Normann2024} & 12{,}997 & 0 \\
+    Gl\"{u}ck と Normann \cite{Gluck2024} & 7{,}270 & 0 \\
+    \hline
+  \end{tabular}
+  \end{center}
+\end{table}
+
+評価の軸についても同様である。Mogensen\cite{Mogensen2011}は benchmark および
+measure の語をもたず、size と overhead への定性的な言及にとどまる。
+Normann と Gl\"{u}ck\cite{Normann2024}は experiment が 18 回、speedup が 4 回
+現れる一方で、どこまで速ければ十分かを定める基準は与えていない。
+すなわち、速度を\emph{測っている}ことと、基準を\emph{立てている}ことは別である。
+
+したがって本稿の位置づけは、既存の基準に対する改良ではなく、
+可逆設定において最適性の基準を最初に定式化することにある。
+先行研究が基準を置いていない以上、\ref{sec:criterion}節で述べる問題提起、
+すなわち素の $p$ を基準に据えると射影の定義そのものを測ってしまうという指摘が、
+そのまま本稿の差分となる。
+
+\subsection{可逆言語基盤と可逆メタ言語}
+\label{sec:related-foundation}
+
+本稿が立つ基盤は、履歴を持たない可逆自己解釈器の存在\cite{YokoyamaGluck2007}と、
+可逆メタプログラミングの一般論\cite{GKY2022,GY2023}である。これらは基盤であって
+射影そのものではない。可逆フローチャート言語の理論的性質\cite{YAG2016}も
+同様に前提として用いる。
+
+\subsection{第4射影と cogen}
+\label{sec:related-fourth}
+
+古典的な設定では、cogen の力学と第4射影の退化が論じられている
+\cite{Gluck2009,Gluck2012}。本稿の\ref{sec:algebra}節は、この退化が
+可逆設定でも成り立つかを問う。結論を先に述べると、成り立つかどうかは
+可逆化に伴うゴミをどこに置くかに依存する。ゴミを残余プログラムの
+dead 枝へ埋め込む設計では古典と同じ形で退化するが、出力の対として
+保持する設計では退化しない。この差は対の非巡回性のみから従う。
+
+%% 必要な bib エントリ（すべて一次情報源で確認済み）
+%% JGS1993      Jones, Gomard, Sestoft. Partial Evaluation and Automatic Program
+%%              Generation. Prentice Hall, 1993. dblp:books/daglib/0072559
+%% Jones1988    Jones. Challenging Problems in Partial Evaluation and Mixed
+%%              Computation. New Generation Computing 6, pp.291-302, 1988.
+%%              doi:10.1007/BF03037143
+%% Makholm2000  Makholm. On Jones-Optimal Specialization for Strongly Typed
+%%              Languages. SAIG 2000. doi:10.1007/3-540-45350-4_11
+%% Gluck2002    Gluck. Jones optimality, binding-time improvements, and the
+%%              strength of program specializers. ASIA-PEPM 2002.
+%%              doi:10.1145/568173.568175
+%% Gluck2008    Gluck. An investigation of Jones optimality and BTI-universal
+%%              specializers. HOSC, 2008. doi:10.1007/s10990-008-9033-5
+%% Jones2004    Jones. Transformation by interpreter specialisation. SCP, 2004.
+%%              doi:10.1016/j.scico.2004.03.010
+%% Mogensen2011 Mogensen. Partial evaluation of the reversible language Janus.
+%%              PEPM 2011. doi:10.1145/1929501.1929506
+%% Normann2024  Normann, Gluck. Partial Evaluation of Reversible Flowchart
+%%              Programs. PEPM 2024. doi:10.1145/3635800.3636967
+%% Gluck2024    Gluck, Normann. Inversion by Partial Evaluation. arXiv:2412.03122
+%% Gluck2009    Gluck. Is there a fourth Futamura projection? PEPM 2009.
+%%              doi:10.1145/1480945.1480954
+%% YokoyamaGluck2007  Yokoyama, Gluck. A reversible programming language and its
+%%              invertible self-interpreter. PEPM 2007. doi:10.1145/1244381.1244404
+%% GKY2022 / GY2023 / YAG2016 / Gluck2012 は既存原稿の bib から流用する
