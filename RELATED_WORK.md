@@ -141,23 +141,27 @@ p⁺ への置き換えは、**JGS の cheat 耐性を上げるものではな�
 
 本研究の新規性の土台なので、**全文を機械的に検査した**。
 
+**3 件とも全文で確定した（本文未入手のものは無い）。**
+
 | 文献 | 確認の範囲 | `optimal` の出現 | 判定 |
 |---|---|---:|---|
-| **Mogensen, PEPM 2011**（最も近い先行研究） | **全文**（PDF） | **0 回** | 最適性の基準を**置いていない** |
-| **Glück & Normann 2024**（arXiv:2412.03122） | **全文** 7270 語 | **0 回** | 同上 |
-| **PEPM 2024**（Reversible Flowchart PE） | **要旨のみ**（ACM DL・本文未入手） | 要旨に言及なし | **要確認** |
+| **Mogensen, PEPM 2011**（最も近い先行研究） | 全文 | **0 回** | 最適性の基準を**置いていない** |
+| **Normann & Glück, PEPM 2024**（Reversible Flowchart PE） | 全文 12,997 語 | **0 回** | 同上 |
+| **Glück & Normann 2024**（arXiv:2412.03122） | 全文 7,270 語 | **0 回** | 同上 |
 
-Mogensen 2011 は評価軸も定量的でない（`benchmark` 0 回・`measure` 0 回・`experiment` 1 回。
-言及があるのは `size` 5 回・`overhead` 4 回で、いずれも定性的）。PEPM 2024 の要旨も
-「traditional partial evaluation と consistent な効果を示す」という定性的な言い方で、
-実験は対称暗号と Bennett RTM 解釈器の特殊化である。
+`Jones` は PEPM 2024 に 10 回出るが**すべて参考文献欄**（本文での言及はゼロ）。
+評価軸も基準としては立てていない: Mogensen 2011 は `benchmark` 0・`measure` 0・`experiment` 1 で
+定性的（`size` 5・`overhead` 4）。PEPM 2024 は `experiment` 18・`speedup` 4 と実験は豊富だが、
+**speedup を報告するだけで「どこまで速ければ十分か」の基準を定義していない**。
 
 → **「既に別の基準を置いていて比較が要る」ではなく、「基準がそもそも述べられていない」**。
-本研究の差分は「可逆設定で最適性の基準を**初めて定式化した**」ことになり、
-問題提起はそのまま差分になる。
+本研究の差分は「**可逆設定で最適性の基準を初めて定式化した**」ことであり、
+問題提起がそのまま貢献になる。
 
-> **残る宿題**: PEPM 2024 の本文。要旨に無くても本文で基準を述べている可能性は消えていない。
-> ACM DL で本文を入手して `optimal` を検索すること。**これが済むまで「初めて」とは書かない。**
+> 検査は機械的（`pdftotext` → `grep -ci optimal`）。**"Jones optimality" は文字列として
+> `optimal` を含むので、0 回であれば議論は存在しない。** 3 件とも著者が Glück 系列
+> （Mogensen は DIKU、PEPM 2024 と arXiv 版は Normann & Glück の対）で、この分野の
+> 中心的な研究群が誰も基準を立てていない、という形になっている。
 
 ## 2. 可逆部分評価（最も近い先行研究）— fp1＋反転射影どまり
 
@@ -166,7 +170,7 @@ Mogensen 2011 は評価軸も定量的でない（`benchmark` 0 回・`measure` 
     構造化へ逆変換。**第1射影（解釈オーバヘッド除去＝コンパイル）**を示す。
   - **自己適用は扱わない**（fp2/fp3 なし）。PE 自体が可逆言語で書かれた自己適用可能器という
     主張ではない。最も近いが射影は1段。
-- **"Partial Evaluation of Reversible Flowchart Programs"（PEPM 2024）**
+- **Normann & Glück, "Partial Evaluation of Reversible Flowchart Programs"（PEPM 2024）**
   - 可逆フローチャート言語の PE を体系的・形式的に展開。**反転と PE の合成**の最初の実験
     （対称暗号、Bennett RTM 解釈器）。RTM 解釈器で**第1射影と反転射影が textually equivalent**な
     プログラムを生成しうることを示す。射影は fp1＋inversion 水準。
