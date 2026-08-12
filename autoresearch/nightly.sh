@@ -324,10 +324,43 @@ if [ $after_rc -eq 0 ]; then
       note "- ⚠ 変異検査を実施できなかった（stash 失敗）。judge は参考値として読むこと"
     fi
   else
-    note "- ✗ **実装側の変更（既存ファイルの修正）がゼロ**。受入は不成立とする"
-    note "  （新規ファイルの追加だけで直した場合もここに来る。その場合は**偽陰性**なので、"
-    note "  git status --porcelain を worktree で見て人が判断すること）"
-    mutation_rc=1
+    # 実装の変更（M）がゼロ。ここには 2 種類が来る:
+    #   (i) テストだけ増やした   → 不成立
+    #   (ii) **証明課題**（新しい Agda モジュールを足した）→ 変異検査は原理的に適用できない。
+    #        証明では「実装」と「検査」が同一の成果物なので、M/A の分離では検査できない。
+    #        2026-08-12 に 3 件連続で (ii) を不成立にしていた（成果物は本物だった）。
+    new_agda="$(git -C "$WT" status --porcelain -- 'proofs/agda/*.agda' 2>/dev/null | grep -E '^(\?\?|A )' | awk '{print $2}' || true)"
+    if [ -n "$new_agda" ]; then
+      note "- 証明課題と判定（新規 Agda モジュール: $(printf '%s' "$new_agda" | tr '\n' ' ')）"
+      note "  **変異検査は適用外**（証明では実装と検査が同一の成果物）。代わりに証明ゲートを掛ける"
+      proof_rc=0
+      for m in $new_agda; do
+        b="$(basename "$m")"
+        # (a) --safe で型検査が通るか（成果物 .agdai の生成で確かめる）
+        if (cd "$WT/proofs/agda" && timeout 3600 agda --safe "$b" >/dev/null 2>&1); then
+          ai="$(find "$WT/proofs/agda/_build" -name "${b%.agda}.agdai" 2>/dev/null | head -1)"
+          if [ -n "$ai" ]; then
+            note "  ✓ $b: --safe 通過・.agdai 生成"
+          else
+            note "  ✗ $b: --safe は通ったが .agdai が無い（沈黙を成功と読まない）"; proof_rc=1
+          fi
+        else
+          note "  ✗ $b: --safe で型検査が通らない"; proof_rc=1
+        fi
+        # (b) 穴がゼロか
+        holes="$(grep -cE '^[[:space:]]*postulate|TERMINATING|\{!' "$WT/proofs/agda/$b" 2>/dev/null || echo 0)"
+        if [ "$holes" -eq 0 ]; then note "  ✓ $b: postulate/TERMINATING/hole ゼロ"
+        else note "  ✗ $b: 穴が $holes 箇所"; proof_rc=1; fi
+        # (c) check.sh の対象に入るか（RWhile*.agda でないと常設ゲートから漏れる）
+        case "$b" in RWhile*.agda) note "  ✓ $b: check.sh の対象に入る" ;;
+          *) note "  ✗ $b: RWhile* で始まらないので check.sh から漏れる"; proof_rc=1 ;; esac
+      done
+      mutation_rc=$proof_rc
+      note "  ⚠ **証明の中身が非自明かは機械では見ていない。人が読むこと**"
+    else
+      note "- ✗ **実装側の変更がゼロで、新規 Agda モジュールも無い**（テストだけ増えた）。受入は不成立"
+      mutation_rc=1
+    fi
   fi
 fi
 
