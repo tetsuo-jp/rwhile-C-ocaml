@@ -4,6 +4,13 @@
 実行系（`src/*.ml`・`examples/*.rwhile`）の対応を棚卸しし、「機械検査済み」「差分テストのみ」
 「未接続」を区別して、コアと実装を厳密に結ぶための次手を特定する。
 
+> **Python 実装（PyRWhile）への接続は別文書**（2026-08-18 追加）:
+> `~/dev/github.com/yokoyama-lab/PyRWhile/docs/AGDA_CORRESPONDENCE_py.md`。
+> 本表の定理のうち 25 行分を PyRWhile の性質テスト（有界全数検査）に接続し、
+> `src/ri` との差分テスト 1003 件で不一致 0 を確認した。Python が本表の主張と異なる 3 点
+> （`p2d-injective` の空分岐衝突・ループ entry 検査が `assert`・`CRep` 書き込み順）も
+> そちらに記録してある。
+
 ## 1. 対応表（実装の各部品 ↔ Agda の結果 ↔ 強さ）
 
 | 実装の部品 | Agda 結果 | 強さ |
