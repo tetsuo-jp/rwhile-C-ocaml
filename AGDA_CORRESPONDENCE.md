@@ -11,6 +11,16 @@
 > （`p2d-injective` の空分岐衝突・ループ entry 検査が `assert`・`CRep` 書き込み順）も
 > そちらに記録してある。
 
+> **全数再検査（2026-08-19）**: 別コピーの空 `_build` で `agda --safe` を 130 本すべてに実行し
+> **全て rc=0**（`Extract*.agda` 5 本は仕様どおり `--guardedness`・`--safe` なしで、これも通過）。
+> `.agdai` 130 個を当該実行で生成。postulate / `{!` / TERMINATING / NON_TERMINATING / trustMe /
+> NO_POSITIVITY_CHECK の実構文は **全 130 本で 0 件**（テキスト上のヒットは全てコメント）。
+> 仮定は `funext` のみで、モジュール引数として受け取る 4 ファイル
+> （`RWhileCRepDet` / `RWhileMacroSubst` / `RWhileDetConcrete` / `RWhileExecConcrete`）に限られる。
+> 変異注入 3/3 検出（`RWhileSIComplete` / `RWhileGarbageBound` / `RWhileTimeDet` に偽命題を挿入し
+> いずれも rc=42。元リポは無変更を `git status` と md5sum で確認）。所要 10 分 15 秒・最大 11.4 GB。
+> **抽出プログラムの実行結果の正しさ（E2E）は未検査** — 対象は型検査のみ。
+
 ## 1. 対応表（実装の各部品 ↔ Agda の結果 ↔ 強さ）
 
 | 実装の部品 | Agda 結果 | 強さ |
